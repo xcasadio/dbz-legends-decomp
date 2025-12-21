@@ -8,6 +8,18 @@
 
 #include "types.h"
 
+/* Rectangle - must be defined first */
+typedef struct RECT {
+    s16 x, y;
+    s16 w, h;
+} RECT;
+
+/* DR_ENV */
+typedef struct DR_ENV {
+    u32 tag;
+    u32 code[15];
+} DR_ENV;
+
 /* Display environment */
 typedef struct DISPENV {
     RECT disp;          /* Display area */
@@ -29,18 +41,6 @@ typedef struct DRAWENV {
     u_char r0, g0, b0;  /* Background color */
     DR_ENV dr_env;      /* Primitive */
 } DRAWENV;
-
-/* Rectangle */
-typedef struct RECT {
-    s16 x, y;
-    s16 w, h;
-} RECT;
-
-/* DR_ENV */
-typedef struct DR_ENV {
-    u32 tag;
-    u32 code[15];
-} DR_ENV;
 
 /* Texture page info */
 typedef u16 TPage;

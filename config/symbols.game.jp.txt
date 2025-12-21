@@ -1,9 +1,20 @@
 # DBZ Legends (Japan) - GAME.EXE overlay symbols
 # Add symbols as they are discovered during decompilation
 
-# Game initialization
-GameInit = 0x800A0000;  # TODO: Find actual address
-GameMain = 0x800A0100;  # TODO: Find actual address
+# CD-ROM functions
+CdSeekAndRead = 0x80021574;
+CdRead2 = 0x80026D3C;
+
+# CD-ROM callbacks
+data_ready_callback = 0x8002AF88;
+StCdInterrupt = 0x8002A29C;
+
+# GPU functions
+LoadImage_ReturnTPageOrClutId = 0x80067178;
+
+# Global variables
+g_CdReadMode = 0x800B16B4;
+g_LoadImageRect = 0x8009ABA8;
 
 # Battle system
 # TODO: Add as discovered
