@@ -50,3 +50,5 @@ Thumbs.db
 
 # Reference folder (FF7 decomp reference)
 reference/
+data/
+ghidra/
