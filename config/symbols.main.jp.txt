@@ -1,0 +1,21 @@
+# DBZ Legends (Japan) - Main executable symbols
+# Format: symbol_name = address; [size] [type]
+#
+# Types:
+#   (no type) = function
+#   data = data symbol
+#   bss = uninitialized data
+#
+# This file contains known symbols for SLPS_003.55
+# Add symbols as they are discovered during decompilation
+
+# Entry point
+__main = 0x80010000;
+main = 0x80010800;  # TODO: Find actual main address
+
+# System initialization
+# TODO: Add discovered symbols here
+
+# Example format:
+# FunctionName = 0x800XXXXX;
+# g_GlobalVar = 0x800XXXXX; // data

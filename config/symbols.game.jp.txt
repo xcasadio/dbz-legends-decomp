@@ -1,0 +1,12 @@
+# DBZ Legends (Japan) - GAME.EXE overlay symbols
+# Add symbols as they are discovered during decompilation
+
+# Game initialization
+GameInit = 0x800A0000;  # TODO: Find actual address
+GameMain = 0x800A0100;  # TODO: Find actual address
+
+# Battle system
+# TODO: Add as discovered
+
+# Character management
+# TODO: Add as discovered

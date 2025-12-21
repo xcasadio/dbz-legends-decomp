@@ -1,0 +1,52 @@
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+
+# Virtual environment
+.venv/
+venv/
+
+# Generated directories
+asm/
+assets/
+build/
+report/
+
+# Disk images and extracted files
+disks/
+
+# Auto-generated symbol files
+sym_export.*.txt
+undefined_funcs_auto.*.txt
+undefined_syms_auto.*.txt
+
+# Ninja build files
+.ninja_log
+.ninja_lock
+.ninja_deps
+build.ninja
+objdiff.json
+
+# Permuter
+/permute*
+
+# Binaries (keep .gz.sha256)
+bin/cc1-psx-*
+!bin/*.sha256
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Reference folder (FF7 decomp reference)
+reference/

@@ -1,0 +1,23 @@
+# DBZ Legends (Japan) - External/shared symbols
+# Format: symbol_name = address;
+#
+# This file contains symbols that are shared across overlays
+# (typically BIOS/kernel functions and SDK functions)
+
+# BIOS functions (common PSX addresses)
+printf = 0x800037F0;  # TODO: Verify address
+
+# Memory card functions
+# TODO: Add as discovered
+
+# CD-ROM functions  
+# TODO: Add as discovered
+
+# GPU functions
+# TODO: Add as discovered
+
+# SPU functions
+# TODO: Add as discovered
+
+# Pad/Controller functions
+# TODO: Add as discovered

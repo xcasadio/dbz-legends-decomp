@@ -1,0 +1,5 @@
+# DBZ Legends (Japan) - SP.EXE overlay symbols
+# Add symbols as they are discovered during decompilation
+
+SPInit = 0x800A0000;  # TODO: Find actual address
+SPMain = 0x800A0100;  # TODO: Find actual address

@@ -1,0 +1,5 @@
+# DBZ Legends Decompilation - Go Workspace
+
+go 1.21
+
+use ./tools/builder

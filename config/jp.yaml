@@ -1,0 +1,131 @@
+# DBZ Legends (Japan) - SLPS-00355
+# Decompilation configuration
+
+version: jp
+build_path: build/jp
+asm_path: asm/jp
+asset_path: assets/jp
+src_path: src
+ld_script_path: build/jp
+generated_sym_path: build/jp
+align: 4
+
+overlays:
+  # Main executable - loaded at boot
+  - name: main
+    disk_path: disks/jp/SLPS_003.55
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: main
+    symbol_addrs_path:
+      - config/symbols.main.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x80010000  # Standard PSX load address
+    # gp_value: 0x80XXXXXX  # TODO: Find GP register value
+    segments:
+      - [0x800, c, main]  # TODO: Determine actual segment layout
+      # - [0xXXXX, data]
+      # - [0xXXXX, bss]
+
+  # Game main overlay
+  - name: game
+    disk_path: disks/jp/GAME.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: game
+    symbol_addrs_path:
+      - config/symbols.game.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, game]
+      # - [0xXXXX, data]
+      # - [0xXXXX, bss]
+
+  # Title screen overlay
+  - name: title
+    disk_path: disks/jp/TITLE.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: title
+    symbol_addrs_path:
+      - config/symbols.title.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, title]
+
+  # Character select overlay
+  - name: select
+    disk_path: disks/jp/SELECT.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: select
+    symbol_addrs_path:
+      - config/symbols.select.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, select]
+
+  # VS mode overlay
+  - name: vs
+    disk_path: disks/jp/VS.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: vs
+    symbol_addrs_path:
+      - config/symbols.vs.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, vs]
+
+  # Special mode overlay
+  - name: sp
+    disk_path: disks/jp/SP.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: sp
+    symbol_addrs_path:
+      - config/symbols.sp.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, sp]
+
+  # Demo overlay
+  - name: demo
+    disk_path: disks/jp/DEMO.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: demo
+    symbol_addrs_path:
+      - config/symbols.demo.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, demo]
+
+  # Movie player overlay
+  - name: movie
+    disk_path: disks/jp/MOVIE.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: movie
+    symbol_addrs_path:
+      - config/symbols.movie.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, movie]
+
+  # Ending overlay
+  - name: ending
+    disk_path: disks/jp/ENDING.EXE
+    sha1: # TODO: Calculate SHA1 hash
+    base_path: ending
+    symbol_addrs_path:
+      - config/symbols.ending.jp.txt
+      - config/sym_extern.jp.txt
+    vram_start: 0x800A0000  # TODO: Determine actual load address
+    segments:
+      - [0x0, c, ending]
+
+# Notes:
+# - vram_start values need to be determined by analyzing the executables
+# - Segment layouts need to be determined by analyzing section headers
+# - SHA1 hashes should be calculated from your game files
+# - GP register value needs to be found in the executable

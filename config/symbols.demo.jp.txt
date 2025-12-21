@@ -1,0 +1,5 @@
+# DBZ Legends (Japan) - DEMO.EXE overlay symbols
+# Add symbols as they are discovered during decompilation
+
+DemoInit = 0x800A0000;  # TODO: Find actual address
+DemoMain = 0x800A0100;  # TODO: Find actual address
