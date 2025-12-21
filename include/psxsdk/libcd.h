@@ -97,6 +97,7 @@ s32 CdPosToInt(CdlLOC* p);
 CdlCB CdReadCallback(CdlCB func);
 CdlCB CdReadyCallback(CdlCB func);
 CdlCB CdSyncCallback(CdlCB func);
+CdlCB CdDataCallback(CdlCB func);
 
 s32 CdGetSector(void* madr, s32 size);
 

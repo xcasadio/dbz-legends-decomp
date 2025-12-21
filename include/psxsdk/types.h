@@ -3,8 +3,10 @@
 
 /**
  * PSX SDK - Basic types
+ * Only define if not already defined by common.h
  */
 
+#ifndef COMMON_H
 typedef signed char s8;
 typedef unsigned char u8;
 typedef signed short s16;
@@ -13,6 +15,7 @@ typedef signed int s32;
 typedef unsigned int u32;
 typedef signed long long s64;
 typedef unsigned long long u64;
+#endif
 
 typedef u8 u_char;
 typedef u16 u_short;

@@ -1,141 +1,170 @@
 # DBZ Legends Decompilation Makefile
+# Supports building with Docker on Windows
 
-# Overlay list (Japan version)
-OVL_JP += SLPS_003.55
-OVL_JP += GAME.EXE
-OVL_JP += TITLE.EXE
-OVL_JP += SELECT.EXE
-OVL_JP += VS.EXE
-OVL_JP += SP.EXE
-OVL_JP += DEMO.EXE
-OVL_JP += MOVIE.EXE
-OVL_JP += ENDING.EXE
+#---------------------------------------------------------------------------
+# Configuration
+#---------------------------------------------------------------------------
 
 VERSION ?= jp
+OVERLAY ?= main
 BUILD_DIR := build/$(VERSION)
 ASM_DIR := asm/$(VERSION)
 SRC_DIR := src
-DISK_DIR := disks/$(VERSION)
+DATA_DIR := data
 
-# Tools
-CC := mipsel-linux-gnu-gcc
-AS := mipsel-linux-gnu-as
-LD := mipsel-linux-gnu-ld
-OBJCOPY := mipsel-linux-gnu-objcopy
-OBJDUMP := mipsel-linux-gnu-objdump
+# Docker configuration
+DOCKER_IMAGE := dbz-legends-build
+DOCKER_RUN := docker run --rm -v "$(CURDIR):/project" -w /project $(DOCKER_IMAGE)
 
-# Compiler flags
-CFLAGS := -O2 -G0 -mips1 -mabi=32 -mno-abicalls -fno-pic
-CFLAGS += -Wall -Wextra -Wno-unused-parameter
-CFLAGS += -Iinclude -Iinclude/psxsdk
-CFLAGS += -DUSE_INCLUDE_ASM
+# Cross-compiler tools (run in Docker)
+CC1_PSX := /usr/local/bin/cc1-psx-26
+CPP := mips-linux-gnu-cpp
+AS := mips-linux-gnu-as
+LD := mips-linux-gnu-ld
+OBJCOPY := mips-linux-gnu-objcopy
+OBJDUMP := mips-linux-gnu-objdump
 
-ASFLAGS := -march=mips1 -mabi=32 -Iinclude
+# Compiler flags for PSX (GCC 2.6)
+CC1_FLAGS := -O2 -G0 -quiet -mcpu=3000 -mgas -msoft-float
+CPP_FLAGS := -Iinclude -Iinclude/psxsdk -undef -D__GNUC__=2 -D__OPTIMIZE__ -DPSX
+AS_FLAGS := -march=r3000 -mabi=32 -Iinclude -no-pad-sections
 
-.PHONY: all
-all: extract build
+# Overlay-specific settings
+VRAM_START_main := 0x80020000
+VRAM_START_game := 0x80020000
+VRAM_START_title := 0x80020000
+VRAM_START_select := 0x80020000
+VRAM_START_vs := 0x80020000
+VRAM_START_sp := 0x80020000
+VRAM_START_demo := 0x80020000
+VRAM_START_movie := 0x80020000
+VRAM_START_ending := 0x80010000
 
-.PHONY: build
-build: bin/cc1-psx-26 bin/cc1-psx-272
-	@./mako.sh build
+VRAM_START := $(VRAM_START_$(OVERLAY))
 
-.PHONY: extract
-extract: disks/$(VERSION)
-	@echo "Game files extracted to disks/$(VERSION)"
+# Source files
+SRC_C := $(wildcard $(SRC_DIR)/$(OVERLAY)/*.c)
+SRC_S := $(wildcard $(ASM_DIR)/$(OVERLAY)/*.s)
+OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_C))
+OBJS += $(patsubst $(ASM_DIR)/%.s,$(BUILD_DIR)/asm/%.o,$(SRC_S))
 
-.PHONY: disks
-disks: disks/$(VERSION)
+#---------------------------------------------------------------------------
+# Main targets
+#---------------------------------------------------------------------------
 
-# Extract from BIN/CUE if available
-disks/%.iso:
-	bchunk "disks/$*.bin" "disks/$*.cue" "$@"
-	mv "disks/$*.iso01.iso" "$@"
+.PHONY: all build clean setup help
+.PHONY: docker-build docker-shell docker-image docker-asm
+.PHONY: diff context extract progress
 
-disks/jp: 
-	@if [ -f "disks/dbz-legends.bin" ]; then \
-		bchunk "disks/dbz-legends.bin" "disks/dbz-legends.cue" "disks/dbz-legends.iso"; \
-		mv "disks/dbz-legends.iso01.iso" "disks/dbz-legends.iso"; \
-		7z x "disks/dbz-legends.iso" -o$@; \
-	elif [ -d "data" ]; then \
-		mkdir -p $@; \
-		cp -r data/* $@/; \
-	else \
-		echo "Error: No game files found. Place disks/dbz-legends.bin+cue or copy files to data/"; \
-		exit 1; \
-	fi
+all: build
 
-.PHONY: clean
+# Build overlay
+build: setup
+	@echo "Building overlay: $(OVERLAY)"
+	@echo "Sources: $(SRC_C)"
+
+# Setup directories
+setup:
+	@mkdir -p $(BUILD_DIR)/$(OVERLAY)
+	@mkdir -p $(BUILD_DIR)/asm/$(OVERLAY)
+	@mkdir -p $(ASM_DIR)/$(OVERLAY)
+	@mkdir -p $(SRC_DIR)/$(OVERLAY)
+
+# Clean build artifacts
 clean:
-	@./mako.sh clean
-	rm -rf $(BUILD_DIR)
-	rm -rf $(ASM_DIR)
+	rm -rf build
 
-.PHONY: format
-format:
-	@./mako.sh format
+# Full clean
+distclean: clean
+	rm -rf asm expected
 
-.PHONY: rebuild
-rebuild:
-	@./mako.sh clean
-	@./mako.sh build
+#---------------------------------------------------------------------------
+# Docker targets
+#---------------------------------------------------------------------------
 
-.PHONY: report
-report: build
-	@./mako.sh report $(VERSION) build/report.json
+# Build Docker image
+docker-image:
+	docker build -t $(DOCKER_IMAGE) .
 
-.PHONY: requirements
-requirements:
-	python3 -m venv .venv
-	.venv/bin/pip3 install -r requirements.txt
+# Run shell in Docker
+docker-shell:
+	docker run --rm -it -v "$(CURDIR):/project" -w /project $(DOCKER_IMAGE) /bin/bash
 
-.PHONY: setup
-setup: requirements
-	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(ASM_DIR)
-	@mkdir -p config
-	@mkdir -p src/main src/game src/title src/select src/vs src/sp src/demo src/movie src/ending
-	@echo "Setup complete!"
+# Compile a single C file and show assembly
+docker-asm:
+ifndef FILE
+	$(error FILE is not set. Usage: make docker-asm OVERLAY=main FILE=cd)
+endif
+	$(DOCKER_RUN) /bin/bash -c " \
+		$(CPP) $(CPP_FLAGS) $(SRC_DIR)/$(OVERLAY)/$(FILE).c -o /tmp/$(FILE).i && \
+		$(CC1_PSX) $(CC1_FLAGS) /tmp/$(FILE).i -o -"
 
-# Object file rules
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Compile to object file
+docker-compile:
+ifndef FILE
+	$(error FILE is not set. Usage: make docker-compile OVERLAY=main FILE=cd)
+endif
+	@mkdir -p $(BUILD_DIR)/$(OVERLAY)
+	$(DOCKER_RUN) /bin/bash -c " \
+		$(CPP) $(CPP_FLAGS) $(SRC_DIR)/$(OVERLAY)/$(FILE).c -o /tmp/$(FILE).i && \
+		$(CC1_PSX) $(CC1_FLAGS) /tmp/$(FILE).i -o /tmp/$(FILE).s && \
+		$(AS) $(AS_FLAGS) /tmp/$(FILE).s -o $(BUILD_DIR)/$(OVERLAY)/$(FILE).o"
+	@echo "Compiled: $(BUILD_DIR)/$(OVERLAY)/$(FILE).o"
 
-$(BUILD_DIR)/%.o: $(ASM_DIR)/%.s
-	@mkdir -p $(dir $@)
-	$(AS) $(ASFLAGS) $< -o $@
+#---------------------------------------------------------------------------
+# Diff and analysis tools
+#---------------------------------------------------------------------------
 
-# Download PSX GCC compiler
-bin/cc1-psx-%: bin/cc1-psx-%.gz
-	sha256sum --check $<.sha256
-	gzip -kcd $< > $@
-	touch $@
-	chmod +x $@
-
-bin/cc1-psx-%.gz: bin/cc1-psx-%.gz.sha256
-	wget -O $@ https://github.com/Xeeynamo/ff7-decomp/releases/download/init/cc1-psx-$*.gz
-
-# Context generation for decomp.me
-.PHONY: context
-context:
-	@./tools/m2ctx.py $(OVERLAY)
-
-# Diff tool
-.PHONY: diff
+# Run asm-differ
 diff:
-	@python3 tools/asm-differ/diff.py -mwo $(FUNC)
+ifndef FUNC
+	$(error FUNC is not set. Usage: make diff OVERLAY=main FUNC=CdSeekAndRead)
+endif
+	$(DOCKER_RUN) python3 tools/asm-differ/diff.py -mwo --overlay $(OVERLAY) $(FUNC)
 
-.PHONY: help
+# Extract original assembly for a function
+extract:
+ifndef START
+	$(error START is not set. Usage: make extract OVERLAY=main START=0x80021574 END=0x800215c0)
+endif
+ifndef END
+	$(error END is not set. Usage: make extract OVERLAY=main START=0x80021574 END=0x800215c0)
+endif
+	$(DOCKER_RUN) python3 tools/extract_asm.py $(DATA_DIR)/SLPS_003.55 $(START) $(END) --overlay $(OVERLAY)
+
+# Generate context for decomp.me
+context:
+	$(DOCKER_RUN) python3 tools/m2ctx.py $(OVERLAY)
+
+# Decompile with m2c
+m2c:
+ifndef ASM_FILE
+	$(error ASM_FILE is not set. Usage: make m2c ASM_FILE=asm/jp/main/cd.s)
+endif
+	$(DOCKER_RUN) python3 tools/m2c/m2c.py --target mipsel-gcc-c $(ASM_FILE)
+
+#---------------------------------------------------------------------------
+# Help
+#---------------------------------------------------------------------------
+
 help:
-	@echo "DBZ Legends Decompilation - Available targets:"
+	@echo "DBZ Legends Decompilation - Makefile targets"
 	@echo ""
-	@echo "  make build      - Build the project"
-	@echo "  make clean      - Remove build artifacts"
-	@echo "  make extract    - Extract game files from disc"
-	@echo "  make format     - Format source code"
-	@echo "  make report     - Generate matching report"
-	@echo "  make setup      - Initial project setup"
-	@echo "  make requirements - Install Python dependencies"
-	@echo "  make context OVERLAY=main - Generate decomp.me context"
-	@echo "  make diff FUNC=FuncName - Diff a function"
+	@echo "Build targets:"
+	@echo "  make build OVERLAY=main     - Build an overlay"
+	@echo "  make setup OVERLAY=main     - Setup directories for overlay"
+	@echo "  make clean                  - Remove build artifacts"
 	@echo ""
+	@echo "Docker targets:"
+	@echo "  make docker-image           - Build Docker image"
+	@echo "  make docker-shell           - Open shell in Docker"
+	@echo "  make docker-asm OVERLAY=main FILE=cd  - Compile and show ASM"
+	@echo "  make docker-compile OVERLAY=main FILE=cd - Compile to .o"
+	@echo ""
+	@echo "Analysis targets:"
+	@echo "  make diff OVERLAY=main FUNC=FuncName  - Diff a function"
+	@echo "  make extract OVERLAY=main START=0x80021574 END=0x800215c0"
+	@echo "  make context OVERLAY=main   - Generate decomp.me context"
+	@echo "  make m2c ASM_FILE=asm/jp/main/cd.s - Decompile with m2c"
+	@echo ""
+	@echo "Overlays: main, game, title, select, vs, sp, demo, movie, ending"

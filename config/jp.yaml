@@ -14,115 +14,119 @@ overlays:
   # Main executable - loaded at boot
   - name: main
     disk_path: disks/jp/SLPS_003.55
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 770cda368a733dc965d30ddeb33632127056989f
     base_path: main
     symbol_addrs_path:
       - config/symbols.main.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x80010000  # Standard PSX load address
-    # gp_value: 0x80XXXXXX  # TODO: Find GP register value
+    vram_start: 0x80020000
+    entry_point: 0x8002BF00
     segments:
-      - [0x800, c, main]  # TODO: Determine actual segment layout
-      # - [0xXXXX, data]
-      # - [0xXXXX, bss]
+      - [0x800, c, main]  # .text: 0x80020000 - 0x8004D000 (size: 0x2D000)
 
   # Game main overlay
   - name: game
     disk_path: disks/jp/GAME.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 35fd16b1cd7bf53bcc1612904dfc7c412588af52
     base_path: game
     symbol_addrs_path:
       - config/symbols.game.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x800785AC
     segments:
-      - [0x0, c, game]
-      # - [0xXXXX, data]
-      # - [0xXXXX, bss]
+      - [0x800, c, game]  # .text: 0x80020000 - 0x80105800 (size: 0xE5800)
 
   # Title screen overlay
   - name: title
     disk_path: disks/jp/TITLE.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: c8ff3462f92fc5041fdd12ca7d4b5b5004db7ba0
     base_path: title
     symbol_addrs_path:
       - config/symbols.title.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x80068FF4
     segments:
-      - [0x0, c, title]
+      - [0x800, c, title]  # .text: 0x80020000 - 0x80105800 (size: 0xE5800)
 
   # Character select overlay
   - name: select
     disk_path: disks/jp/SELECT.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 9e2f6ecf0cf4a078406658eff1ae7aecc58532ec
     base_path: select
     symbol_addrs_path:
       - config/symbols.select.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x800347C4
     segments:
-      - [0x0, c, select]
+      - [0x800, c, select]  # .text: 0x80020000 - 0x80056000 (size: 0x36000)
 
   # VS mode overlay
   - name: vs
     disk_path: disks/jp/VS.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 9e45be249c879d05b0d736d8622c1a4a31baad7c
     base_path: vs
     symbol_addrs_path:
       - config/symbols.vs.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x80072F50
     segments:
-      - [0x0, c, vs]
+      - [0x800, c, vs]  # .text: 0x80020000 - 0x80105800 (size: 0xE5800)
 
   # Special mode overlay
   - name: sp
     disk_path: disks/jp/SP.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 5ddbda006cb075de355e70f3b15a539be956c0aa
     base_path: sp
     symbol_addrs_path:
       - config/symbols.sp.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x80072C20
     segments:
-      - [0x0, c, sp]
+      - [0x800, c, sp]  # .text: 0x80020000 - 0x80105800 (size: 0xE5800)
 
   # Demo overlay
   - name: demo
     disk_path: disks/jp/DEMO.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 04b928b5d803576551d6758dc6a6a74d60cae90c
     base_path: demo
     symbol_addrs_path:
       - config/symbols.demo.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x80034838
     segments:
-      - [0x0, c, demo]
+      - [0x800, c, demo]  # .text: 0x80020000 - 0x80046800 (size: 0x26800)
 
   # Movie player overlay
   - name: movie
     disk_path: disks/jp/MOVIE.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: f557452209daae241397149b83bc22a54ff16fad
     base_path: movie
     symbol_addrs_path:
       - config/symbols.movie.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80020000
+    entry_point: 0x8002B954
     segments:
-      - [0x0, c, movie]
+      - [0x800, c, movie]  # .text: 0x80020000 - 0x80040000 (size: 0x20000)
 
   # Ending overlay
   - name: ending
     disk_path: disks/jp/ENDING.EXE
-    sha1: # TODO: Calculate SHA1 hash
+    sha1: 4ca1af2ebee860912a60b7e4db0de974a17b6890
     base_path: ending
     symbol_addrs_path:
       - config/symbols.ending.jp.txt
       - config/sym_extern.jp.txt
-    vram_start: 0x800A0000  # TODO: Determine actual load address
+    vram_start: 0x80010000
+    entry_point: 0x8001F200
     segments:
-      - [0x0, c, ending]
+      - [0x800, c, ending]  # .text: 0x80010000 - 0x80059800 (size: 0x49800)
 
 # Notes:
 # - vram_start values need to be determined by analyzing the executables

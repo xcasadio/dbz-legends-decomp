@@ -10,12 +10,15 @@
 # Add symbols as they are discovered during decompilation
 
 # Entry point
-__main = 0x80010000;
-main = 0x80010800;  # TODO: Find actual main address
+__start = 0x8002BF00;
 
-# System initialization
-# TODO: Add discovered symbols here
+# CD-ROM functions
+CdSeekAndRead = 0x80021574;
+CdRead2 = 0x80026D3C;
 
-# Example format:
-# FunctionName = 0x800XXXXX;
-# g_GlobalVar = 0x800XXXXX; // data
+# CD-ROM callbacks
+data_ready_callback = 0x8002AF88;
+StCdInterrupt = 0x8002A29C;
+
+# Global variables
+g_CdReadMode = 0x800B16B4;
