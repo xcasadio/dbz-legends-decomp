@@ -4,6 +4,7 @@
 # CD-ROM functions
 CdSeekAndRead = 0x80021574;
 CdRead2 = 0x80026D3C;
+LoadFileIntoBuffer = 0x80067404;
 
 # CD-ROM callbacks
 data_ready_callback = 0x8002AF88;
