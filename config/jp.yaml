@@ -13,7 +13,7 @@ align: 4
 overlays:
   # Main executable - loaded at boot
   - name: main
-    disk_path: disks/jp/SLPS_003.55
+    disk_path: data/SLPS_003.55
     sha1: 770cda368a733dc965d30ddeb33632127056989f
     base_path: main
     symbol_addrs_path:
@@ -26,7 +26,7 @@ overlays:
 
   # Game main overlay
   - name: game
-    disk_path: disks/jp/GAME.EXE
+    disk_path: data/GAME.EXE
     sha1: 35fd16b1cd7bf53bcc1612904dfc7c412588af52
     base_path: game
     symbol_addrs_path:
@@ -39,7 +39,7 @@ overlays:
 
   # Title screen overlay
   - name: title
-    disk_path: disks/jp/TITLE.EXE
+    disk_path: data/TITLE.EXE
     sha1: c8ff3462f92fc5041fdd12ca7d4b5b5004db7ba0
     base_path: title
     symbol_addrs_path:
@@ -52,7 +52,7 @@ overlays:
 
   # Character select overlay
   - name: select
-    disk_path: disks/jp/SELECT.EXE
+    disk_path: data/SELECT.EXE
     sha1: 9e2f6ecf0cf4a078406658eff1ae7aecc58532ec
     base_path: select
     symbol_addrs_path:
@@ -65,7 +65,7 @@ overlays:
 
   # VS mode overlay
   - name: vs
-    disk_path: disks/jp/VS.EXE
+    disk_path: data/VS.EXE
     sha1: 9e45be249c879d05b0d736d8622c1a4a31baad7c
     base_path: vs
     symbol_addrs_path:
@@ -78,7 +78,7 @@ overlays:
 
   # Special mode overlay
   - name: sp
-    disk_path: disks/jp/SP.EXE
+    disk_path: data/SP.EXE
     sha1: 5ddbda006cb075de355e70f3b15a539be956c0aa
     base_path: sp
     symbol_addrs_path:
@@ -91,7 +91,7 @@ overlays:
 
   # Demo overlay
   - name: demo
-    disk_path: disks/jp/DEMO.EXE
+    disk_path: data/DEMO.EXE
     sha1: 04b928b5d803576551d6758dc6a6a74d60cae90c
     base_path: demo
     symbol_addrs_path:
@@ -104,7 +104,7 @@ overlays:
 
   # Movie player overlay
   - name: movie
-    disk_path: disks/jp/MOVIE.EXE
+    disk_path: data/MOVIE.EXE
     sha1: f557452209daae241397149b83bc22a54ff16fad
     base_path: movie
     symbol_addrs_path:
@@ -117,7 +117,7 @@ overlays:
 
   # Ending overlay
   - name: ending
-    disk_path: disks/jp/ENDING.EXE
+    disk_path: data/ENDING.EXE
     sha1: 4ca1af2ebee860912a60b7e4db0de974a17b6890
     base_path: ending
     symbol_addrs_path:
