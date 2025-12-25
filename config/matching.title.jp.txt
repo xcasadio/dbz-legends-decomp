@@ -97,6 +97,10 @@ FUN_80023320 = 0x80023320; // EQUIVALENT: 90% (1 iteration)
 # Size: 0x28 (40 bytes) = 10 instructions
 # Clears GP+0x160,0x164 and calls FUN_8002339c (tail-call opt differs)
 
+FUN_80023374 = 0x80023374; // EQUIVALENT: 90% (1 iteration)
+# Size: 0x28 (40 bytes) = 10 instructions
+# Sets GP+0x164 to 1 and calls FUN_8002339c
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
