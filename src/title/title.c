@@ -38,6 +38,13 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_8005329c - 0x8005329C, size: 0x8 (8 bytes)
+ * MATCHING - Empty function (just jr ra + nop)
+ * ============================================================================ */
+void FUN_8005329c(void) {
+}
+
+/* ============================================================================
  * FUN_80021dd0 - 0x80021DD0, size: 0x58 (88 bytes)
  * EQUIVALENT - Logic matches, minor instruction order difference
  * Original: lui a1,0x8011 / lui v0,0x8011 / lw / lui a0,0x8011 / sw ra / jal / addu
