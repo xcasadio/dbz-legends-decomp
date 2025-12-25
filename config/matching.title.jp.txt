@@ -61,6 +61,26 @@ FUN_8006268c = 0x8006268C; // MATCHING: 100% (1 iteration)
 # Size: 0x20 (32 bytes) = 8 instructions
 # Calls FUN_800634e0(0)
 
+FUN_800638fc = 0x800638FC; // MATCHING: 100% (1 iteration)
+# Size: 0x20 (32 bytes) = 8 instructions
+# Calls FUN_800637b0(0)
+
+FUN_80063f2c = 0x80063F2C; // MATCHING: 100% (1 iteration)
+# Size: 0x20 (32 bytes) = 8 instructions
+# Calls FUN_80063c9c(1)
+
+FUN_80064010 = 0x80064010; // MATCHING: 100% (1 iteration)
+# Size: 0x20 (32 bytes) = 8 instructions
+# Calls FUN_800640ec()
+
+FUN_800640ac = 0x800640AC; // MATCHING: 100% (1 iteration)
+# Size: 0x20 (32 bytes) = 8 instructions
+# Calls FUN_8005c214(1)
+
+FUN_800640cc = 0x800640CC; // MATCHING: 100% (1 iteration)
+# Size: 0x20 (32 bytes) = 8 instructions
+# Calls FUN_8005c214(0)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
