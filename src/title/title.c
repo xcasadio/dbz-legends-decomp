@@ -21,6 +21,7 @@ extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
 extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
 extern void FUN_80057674(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8, s32 arg9);  /* 0x80057674 */
 extern void FUN_80049504(u8* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80049504 */
+extern void FUN_80057c80(void* arg0);     /* 0x80057c80 */
 extern void FUN_80037388(void);           /* 0x80037388 */
 extern void FUN_80056dc0(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7);  /* 0x80056dc0 */
 extern void FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
@@ -33,6 +34,19 @@ extern void FUN_80058a9c(void);           /* 0x80058a9c */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
 extern u32 DAT_80083504;   /* cleared in loop */
 extern u16 DAT_800ef10e;   /* Counter */
+extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
+extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
+
+/* ============================================================================
+ * FUN_80021dd0 - 0x80021DD0, size: 0x58 (88 bytes)
+ * EQUIVALENT - Logic matches, minor instruction order difference
+ * Original: lui a1,0x8011 / lui v0,0x8011 / lw / lui a0,0x8011 / sw ra / jal / addu
+ * Compiled: subu sp / lw / li a0 / sw ra / jal / addu
+ * ============================================================================ */
+void FUN_80021dd0(void) {
+    FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
+    FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
+}
 
 /* Title main function - 0x800581DC, size: 0x20C (524 bytes) 
  * Note: This is a NON_MATCHING placeholder - the real function

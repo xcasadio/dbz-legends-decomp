@@ -52,3 +52,4 @@ Thumbs.db
 reference/
 data/
 ghidra/
+/bin/psyq4.0/*

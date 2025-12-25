@@ -1,0 +1,41 @@
+# DBZ Legends (Japan) - TITLE overlay - Matching Report
+# Generated: 2025-12-25
+#
+# Status Legend:
+#   MATCHING     - 100% byte-identical
+#   EQUIVALENT   - Same logic, minor instruction order/register differences  
+#   NON_MATCHING - Needs more work
+#   TODO         - Not yet attempted
+#
+# Format: function = address; // status: XX% (iterations)
+
+# ============================================================================
+# Decompiled Functions
+# ============================================================================
+
+FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
+# Size: 0x58 (88 bytes) = 22 instructions
+# Matching instructions: 20/22 (90.9%)
+# Differences:
+#   - Original uses 3 separate `lui` instructions for 0x8011 before lw
+#   - Compiled merges into `li` pseudo-instruction after `lw`
+#   - Same register allocation, same control flow, same result
+# C code:
+#   void FUN_80021dd0(void) {
+#       FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
+#       FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
+#   }
+
+# ============================================================================
+# Statistics  
+# ============================================================================
+# Total functions:    325
+# Decompiled:         1
+# MATCHING (100%):    0
+# EQUIVALENT (90%+):  1
+# NON_MATCHING:       0
+# TODO:               324
+#
+# Overall progress:   0.31% (1/325 functions)
+# Matching quality:   90% average
+# ============================================================================
