@@ -89,6 +89,10 @@ FUN_8005c974 = 0x8005C974; // EQUIVALENT: 95% (1 iteration)
 # Size: 0x24 (36 bytes) = 9 instructions
 # Sets DAT_8007b000 if different (delay slot optimization differs)
 
+FUN_80068a2c = 0x80068A2C; // MATCHING: 100% (1 iteration)
+# Size: 0x24 (36 bytes) = 9 instructions
+# Sign-extends s16 arg and calls FUN_800688b0
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)

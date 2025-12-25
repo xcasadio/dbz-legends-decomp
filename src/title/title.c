@@ -38,6 +38,16 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_80068a2c - 0x80068A2C, size: 0x24 (36 bytes)
+ * MATCHING - Wrapper that sign-extends arg and calls FUN_800688b0
+ * ============================================================================ */
+extern void FUN_800688b0(s16 arg0);
+
+void FUN_80068a2c(s16 value) {
+    FUN_800688b0(value);
+}
+
+/* ============================================================================
  * FUN_8005c974 - 0x8005C974, size: 0x24 (36 bytes)
  * EQUIVALENT - Sets DAT_8007b000 if different from arg
  * (Compiler optimizes delay slot differently)
