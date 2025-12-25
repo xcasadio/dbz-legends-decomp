@@ -17,6 +17,10 @@ FUN_8005329c = 0x8005329C; // MATCHING: 100% (1 iteration)
 # Size: 0x8 (8 bytes) = 2 instructions
 # Empty function - just jr ra + nop
 
+FUN_800561c8 = 0x800561C8; // MATCHING: 100% (1 iteration)
+# Size: 0xC (12 bytes) = 3 instructions
+# Getter for GP-relative global (offset 0x28C)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
