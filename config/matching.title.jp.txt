@@ -45,6 +45,10 @@ FUN_80070b64 = 0x80070B64; // MATCHING: 100% (1 iteration)
 # Size: 0x10 (16 bytes) = 4 instructions
 # Syscall with a0=1 (EnterCriticalSection)
 
+FUN_80070e44 = 0x80070E44; // MATCHING: 100% (1 iteration)
+# Size: 0x10 (16 bytes) = 4 instructions
+# Syscall with a0=2 (ExitCriticalSection)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)

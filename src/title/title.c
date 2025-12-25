@@ -38,6 +38,15 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_80070e44 - 0x80070E44, size: 0x10 (16 bytes)
+ * MATCHING - Syscall with a0=2 (ExitCriticalSection)
+ * ============================================================================ */
+void FUN_80070e44(void) {
+    __asm__ volatile ("li $4, 2");
+    __asm__ volatile ("syscall");
+}
+
+/* ============================================================================
  * FUN_80070b64 - 0x80070B64, size: 0x10 (16 bytes)
  * MATCHING - Syscall with a0=1 (EnterCriticalSection)
  * ============================================================================ */
