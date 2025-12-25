@@ -66,41 +66,40 @@ void CdSeekAndRead(s32 pos) {
  * @return Number of sectors read
  * @address 0x80067404
  */
+#if 0
+// Original C code - does not produce exact register allocation
+// Uses s3 for async, but original uses s6
 s32 LoadFileIntoBuffer(CdlFILE *cdlFile, u_long *buffer, s16 async) {
-    s32 syncResult;
+    volatile s32 syncResult;
     u_char result[8];
-    s32 unused;  /* padding for stack alignment */
-    
-    /* Calculate number of sectors (file size + 0x7FF) / 0x800 */
-    s32 sectors = (cdlFile->size + 0x7FF) >> 11;
-    s32 successCode = 1;
-    s32 retryCode = 5;
-    s32 cdMode = 0x80;
+    s32 sectors;
+    s32 successCode;
+    s32 retryCode;
+    s32 mode;
+
+    mode = 0x80;
+    retryCode = 5;
+    sectors = (cdlFile->size + 0x7FF) >> 11;
+    successCode = 1;
 
 retry:
-    /* Seek to file position (CdlSetloc = 2) */
     CdControl(CdlSetloc, (u_char *)cdlFile, result);
     
-    /* Wait for seek to complete */
     do {
         syncResult = CdSync(0, result);
     } while (syncResult == 0);
     
-    /* Retry on error 5 */
     if (syncResult == retryCode) {
         goto retry;
     }
     
-    /* Start reading - retry until success */
     do {
-    } while (CdRead(sectors, buffer, cdMode) != successCode);
+    } while (CdRead(sectors, buffer, mode) != successCode);
     
-    /* If async mode, return immediately */
-    if ((s16)async != 0) {
+    if ((s16)async) {
         return 0;
     }
     
-    /* Wait for read to complete */
     do {
         syncResult = CdReadSync(0, result);
         if (syncResult > 0) {
@@ -108,10 +107,12 @@ retry:
         }
     } while (syncResult > 0);
     
-    /* If error (-1), restart from seek */
     if (syncResult == -1) {
         goto retry;
     }
     
     return sectors;
 }
+#else
+INCLUDE_ASM("asm/game", LoadFileIntoBuffer);
+#endif

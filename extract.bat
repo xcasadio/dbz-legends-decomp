@@ -22,4 +22,15 @@ if "%END%"=="" (
 
 if "%OVERLAY%"=="" set OVERLAY=main
 
-docker run --rm -v "%cd%:/project" -w /project dbz-legends-build python3 tools/extract_asm.py data/SLPS_003.55 %START% %END% --overlay %OVERLAY%
+REM Map overlay to executable file
+set EXE_FILE=data/SLPS_003.55
+if /i "%OVERLAY%"=="game" set EXE_FILE=data/GAME.EXE
+if /i "%OVERLAY%"=="title" set EXE_FILE=data/TITLE.EXE
+if /i "%OVERLAY%"=="select" set EXE_FILE=data/SELECT.EXE
+if /i "%OVERLAY%"=="vs" set EXE_FILE=data/VS.EXE
+if /i "%OVERLAY%"=="sp" set EXE_FILE=data/SP.EXE
+if /i "%OVERLAY%"=="demo" set EXE_FILE=data/DEMO.EXE
+if /i "%OVERLAY%"=="movie" set EXE_FILE=data/MOVIE.EXE
+if /i "%OVERLAY%"=="ending" set EXE_FILE=data/ENDING.EXE
+
+docker run --rm -v "%cd%:/project" -w /project dbz-legends-build python3 tools/extract_asm.py %EXE_FILE% %START% %END% --overlay %OVERLAY%
