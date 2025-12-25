@@ -29,6 +29,10 @@ FUN_80064274 = 0x80064274; // MATCHING: 100% (1 iteration)
 # Size: 0x10 (16 bytes) = 4 instructions
 # Sets DAT_800a8834 to 0
 
+FUN_800642bc = 0x800642BC; // MATCHING: 100% (1 iteration)
+# Size: 0x10 (16 bytes) = 4 instructions
+# Setter for DAT_800acd9c (byte)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
