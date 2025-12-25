@@ -38,6 +38,20 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_80023320 - 0x80023320, size: 0x28 (40 bytes)
+ * MATCHING - Clears two GP vars and calls FUN_8002339c
+ * ============================================================================ */
+extern s16 DAT_gp_0160;  /* GP + 0x160 = 352 */
+extern s16 DAT_gp_0164;  /* GP + 0x164 = 356 */
+extern void FUN_8002339c(void);
+
+void FUN_80023320(void) {
+    DAT_gp_0160 = 0;
+    DAT_gp_0164 = 0;
+    FUN_8002339c();
+}
+
+/* ============================================================================
  * FUN_80068a2c - 0x80068A2C, size: 0x24 (36 bytes)
  * MATCHING - Wrapper that sign-extends arg and calls FUN_800688b0
  * ============================================================================ */
