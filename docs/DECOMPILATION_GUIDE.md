@@ -226,6 +226,34 @@ void FUN_80037388(void) { ... }
 
 ---
 
+## Tracking Progress
+
+### Matching File
+
+Update `config/matching.<overlay>.jp.txt` after each function:
+
+```
+# Format: FUNCTION_NAME = STATUS PERCENTAGE
+FUN_80021dd0 = EQUIVALENT 90%
+FUN_80022630 = MATCHING 100%
+```
+
+### Structures File
+
+**IMPORTANT**: Update `docs/STRUCTURES.md` whenever you discover a structure!
+
+When you see patterns like:
+- `lw v0,0x04(a0)` - accessing field at offset 0x04
+- `addiu t0,a0,0x10` - pointer to sub-structure at 0x10
+- Array indexing with shifts (`sll` + `addu`)
+
+Document the structure immediately in `docs/STRUCTURES.md` with:
+- Field offsets and types
+- Size if known
+- Source function where discovered
+
+---
+
 ## For AI Assistants
 
 ### Decompilation Workflow
@@ -256,6 +284,8 @@ docker run --rm -v "$(pwd):/project" -w /project dbz-legends-build /bin/bash -c 
 ### Key Rules
 
 - **Always check `docs/DECOMPILATION_NOTES.md`** for known patterns
+- **Always check `docs/STRUCTURES.md`** for known structures
+- **Update `docs/STRUCTURES.md`** when discovering new structures
 - **Update notes** when discovering new patterns
 - **Frame size = vars + regs + args + extra** (from `.frame` directive)
 - **Delay slots**: Instruction after `jal`/`j`/`b*` executes before branch
