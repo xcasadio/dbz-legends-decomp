@@ -81,6 +81,10 @@ FUN_800640cc = 0x800640CC; // MATCHING: 100% (1 iteration)
 # Size: 0x20 (32 bytes) = 8 instructions
 # Calls FUN_8005c214(0)
 
+FUN_80054dd0 = 0x80054DD0; // MATCHING: 100% (1 iteration)
+# Size: 0x24 (36 bytes) = 9 instructions
+# Sets field_110 to 0x14 if zero (structure at GP+0x18C)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)

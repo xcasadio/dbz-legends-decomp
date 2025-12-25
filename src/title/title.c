@@ -38,6 +38,24 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_80054dd0 - 0x80054DD0, size: 0x24 (36 bytes)
+ * MATCHING - Sets field at offset 0x110 if zero
+ * Structure access: DAT_gp_018c->field_110
+ * ============================================================================ */
+typedef struct {
+    u8 pad[0x110];
+    s16 field_110;
+} Struct_gp_018c;
+
+extern Struct_gp_018c* DAT_gp_018c;
+
+void FUN_80054dd0(void) {
+    if (DAT_gp_018c->field_110 == 0) {
+        DAT_gp_018c->field_110 = 0x14;
+    }
+}
+
+/* ============================================================================
  * FUN_800638fc - 0x800638FC, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_800637b0(0)
  * ============================================================================ */

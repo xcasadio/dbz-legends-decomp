@@ -44,6 +44,20 @@ typedef struct {
 
 *(Add structures here as they are discovered)*
 
+### Struct_gp_018c
+
+```c
+/* Discovered in: FUN_80054dd0
+ * Size: At least 0x112 bytes
+ * Location: Pointer at GP+0x18C
+ * Usage: Unknown, field_110 initialized to 0x14
+ */
+typedef struct {
+    /* 0x000 */ u8 pad[0x110];
+    /* 0x110 */ s16 field_110;    // Set to 0x14 if zero
+} Struct_gp_018c;
+```
+
 ### Example: Unknown Structure 1
 
 ```c
