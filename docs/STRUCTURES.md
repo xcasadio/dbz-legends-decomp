@@ -58,6 +58,22 @@ typedef struct {
 } Struct_gp_018c;
 ```
 
+### Struct_53020
+
+```c
+/* Discovered in: FUN_80053020
+ * Size: At least 0x3030 bytes
+ * Usage: Returns field_14 or field_16 based on field_302C == 0x7530
+ */
+typedef struct {
+    /* 0x0000 */ u8 pad0[0x14];
+    /* 0x0014 */ u16 field_14;
+    /* 0x0016 */ u16 field_16;
+    /* 0x0018 */ u8 pad1[0x302C - 0x18];
+    /* 0x302C */ s32 field_302C;    // Compared to 0x7530 (30000)
+} Struct_53020;
+```
+
 ### Example: Unknown Structure 1
 
 ```c

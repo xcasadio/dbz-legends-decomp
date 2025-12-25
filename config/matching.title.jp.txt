@@ -101,6 +101,10 @@ FUN_80023374 = 0x80023374; // EQUIVALENT: 90% (1 iteration)
 # Size: 0x28 (40 bytes) = 10 instructions
 # Sets GP+0x164 to 1 and calls FUN_8002339c
 
+FUN_80053020 = 0x80053020; // EQUIVALENT: 85% (1 iteration)
+# Size: 0x28 (40 bytes) = 10 instructions  
+# Returns field_14 or field_16 based on field_302C (structure Struct_53020)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)

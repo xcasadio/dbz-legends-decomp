@@ -38,6 +38,27 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_80053020 - 0x80053020, size: 0x28 (40 bytes)
+ * EQUIVALENT - Returns field based on struct comparison
+ * Structure: field_302C compared to 0x7530, returns field_14 or field_16
+ * (Branch condition inverted by compiler)
+ * ============================================================================ */
+typedef struct {
+    u8 pad0[0x14];
+    u16 field_14;          /* offset 0x14 */
+    u16 field_16;          /* offset 0x16 */
+    u8 pad1[0x302C - 0x18];
+    s32 field_302C;        /* offset 0x302C */
+} Struct_53020;
+
+u16 FUN_80053020(Struct_53020* arg0) {
+    if (arg0->field_302C == 0x7530) {
+        return arg0->field_14;
+    }
+    return arg0->field_16;
+}
+
+/* ============================================================================
  * FUN_80023374 - 0x80023374, size: 0x28 (40 bytes)
  * MATCHING - Sets GP+0x164 to 1 and calls FUN_8002339c
  * ============================================================================ */
