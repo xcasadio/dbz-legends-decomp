@@ -38,6 +38,19 @@ extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
 /* ============================================================================
+ * FUN_8005c974 - 0x8005C974, size: 0x24 (36 bytes)
+ * EQUIVALENT - Sets DAT_8007b000 if different from arg
+ * (Compiler optimizes delay slot differently)
+ * ============================================================================ */
+extern s32 DAT_8007b000;
+
+void FUN_8005c974(s32 value) {
+    if (value != DAT_8007b000) {
+        DAT_8007b000 = value;
+    }
+}
+
+/* ============================================================================
  * FUN_80054dd0 - 0x80054DD0, size: 0x24 (36 bytes)
  * MATCHING - Sets field at offset 0x110 if zero
  * Structure access: DAT_gp_018c->field_110

@@ -85,6 +85,10 @@ FUN_80054dd0 = 0x80054DD0; // MATCHING: 100% (1 iteration)
 # Size: 0x24 (36 bytes) = 9 instructions
 # Sets field_110 to 0x14 if zero (structure at GP+0x18C)
 
+FUN_8005c974 = 0x8005C974; // EQUIVALENT: 95% (1 iteration)
+# Size: 0x24 (36 bytes) = 9 instructions
+# Sets DAT_8007b000 if different (delay slot optimization differs)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
