@@ -2,7 +2,7 @@
 # Game functions and data symbols only (SDK filtered out)
 #
 # Format: symbol_name = 0xADDRESS; // size: 0xXX (for functions)
-# Total: 343 functions, 0 data symbols
+# Total: 325 functions, 0 data symbols
 
 FUN_80021dd0 = 0x80021DD0; // size: 0x58
 FUN_80022630 = 0x80022630; // size: 0x50
@@ -247,16 +247,6 @@ FUN_800583fc = 0x800583FC; // size: 0x3AC
 FUN_800587a8 = 0x800587A8; // size: 0x2F4
 FUN_80058a9c = 0x80058A9C; // size: 0x2C8
 FUN_80058d64 = 0x80058D64; // size: 0x108
-_SpuSetVoiceAttr = 0x800595A8; // size: 0x198
-_SpuStCBPrepare = 0x80059C10; // size: 0x138
-_SpuStStartPrepare = 0x80059D60; // size: 0xCC
-_SpuStSetTransferEnv = 0x80059F10; // size: 0xB4
-_SpuStCB_IRQ = 0x8005A144; // size: 0x3D8
-_SpuStCB_Transfer = 0x8005A578; // size: 0x1EC
-_SpuStStart = 0x8005A828; // size: 0x8C
-_SpuStCB_IRQfinal = 0x8005AD44; // size: 0xA4
-_SpuInit = 0x8005C214; // size: 0xA4
-_SpuMallocSeparateTo3 = 0x8005C360; // size: 0x70
 FUN_8005c974 = 0x8005C974; // size: 0x24
 FUN_8005d0d8 = 0x8005D0D8; // size: 0x170
 FUN_8005d248 = 0x8005D248; // size: 0x2C
@@ -279,14 +269,11 @@ FUN_80061c88 = 0x80061C88; // size: 0x124
 FUN_800620e8 = 0x800620E8; // size: 0x7C
 FUN_800621f0 = 0x800621F0; // size: 0x9C
 FUN_80062334 = 0x80062334; // size: 0x20C
-_SpuSetAnyVoice = 0x800625B8; // size: 0xA0
 FUN_8006268c = 0x8006268C; // size: 0x20
 FUN_800626ac = 0x800626AC; // size: 0xA4
 FUN_80062760 = 0x80062760; // size: 0x98
 FUN_800627f8 = 0x800627F8; // size: 0x40
 FUN_80062838 = 0x80062838; // size: 0x40
-_SpuIsInAllocateArea = 0x80063258; // size: 0x18
-_SpuIsInAllocateArea_ = 0x800632C8; // size: 0x24
 FUN_80063608 = 0x80063608; // size: 0xD4
 FUN_80063714 = 0x80063714; // size: 0x30
 FUN_800637b0 = 0x800637B0; // size: 0x14C
@@ -339,11 +326,6 @@ FUN_80068a2c = 0x80068A2C; // size: 0x24
 FUN_80068e34 = 0x80068E34; // size: 0xD8
 FUN_80068f0c = 0x80068F0C; // size: 0x28
 FUN_80068f60 = 0x80068F60; // size: 0x94
-MulRotMatrix0 = 0x8006CCE4; // size: 0xE4
-MulRotMatrix = 0x8006CDC8; // size: 0xE8
-SetMulMatrix = 0x8006CEB0; // size: 0x110
-PushMatrix = 0x8006D274; // size: 0xA0
-PopMatrix = 0x8006D314; // size: 0xA0
 FUN_8006fe58 = 0x8006FE58; // size: 0x10
 FUN_80070b64 = 0x80070B64; // size: 0x10
 FUN_80070e44 = 0x80070E44; // size: 0x10
