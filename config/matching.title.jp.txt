@@ -25,6 +25,10 @@ FUN_8005d274 = 0x8005D274; // MATCHING: 100% (1 iteration)
 # Size: 0x10 (16 bytes) = 4 instructions
 # Returns true if DAT_8007affc == 0
 
+FUN_80064274 = 0x80064274; // MATCHING: 100% (1 iteration)
+# Size: 0x10 (16 bytes) = 4 instructions
+# Sets DAT_800a8834 to 0
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes) = 22 instructions
 # Matching instructions: 20/22 (90.9%)
