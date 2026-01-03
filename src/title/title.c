@@ -29,6 +29,7 @@ extern void FUN_80058d64(void);           /* 0x80058d64 */
 extern void FUN_80021dd0(void);           /* 0x80021dd0 */
 extern void FUN_800587a8(void);           /* 0x800587a8 */
 extern void FUN_80058a9c(void);           /* 0x80058a9c */
+extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -59,14 +60,23 @@ u16 FUN_80053020(Struct_53020* arg0) {
 }
 
 /* ============================================================================
+ * FUN_8006420c - 0x8006420C, size: 0x28 (40 bytes)
+ * EQUIVALENT - Sign-extends s16 arg and calls FUN_80064168(arg0, 0)
+ * Note: compiler uses subu/addu for stack adjust vs addiu.
+ * ============================================================================ */
+void FUN_8006420c(s16 arg0) {
+    FUN_80064168(arg0, 0);
+}
+
+/* ============================================================================
  * FUN_80023374 - 0x80023374, size: 0x28 (40 bytes)
  * MATCHING - Sets GP+0x164 to 1 and calls FUN_8002339c
  * ============================================================================ */
-extern s16 DAT_gp_0164;  /* GP + 0x164 = 356 - shared with FUN_80023320 */
+extern s16 DAT_80083318;  /* GP + 0x164 = 356 - shared with FUN_80023320 */
 extern void FUN_8002339c(void);
 
 void FUN_80023374(void) {
-    DAT_gp_0164 = 1;
+    DAT_80083318 = 1;
     FUN_8002339c();
 }
 
@@ -74,13 +84,13 @@ void FUN_80023374(void) {
  * FUN_80023320 - 0x80023320, size: 0x28 (40 bytes)
  * EQUIVALENT - Clears two GP vars and calls FUN_8002339c
  * ============================================================================ */
-extern s16 DAT_gp_0160;  /* GP + 0x160 = 352 */
-/* extern s16 DAT_gp_0164; - declared above */
+extern s16 DAT_80083314;  /* GP + 0x160 = 352 */
+/* extern s16 DAT_80083318; - declared above */
 /* extern void FUN_8002339c(void); - declared above */
 
 void FUN_80023320(void) {
-    DAT_gp_0160 = 0;
-    DAT_gp_0164 = 0;
+    DAT_80083314 = 0;
+    DAT_80083318 = 0;
     FUN_8002339c();
 }
 

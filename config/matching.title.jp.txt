@@ -1,133 +1,106 @@
 # DBZ Legends (Japan) - TITLE overlay - Matching Report
-# Generated: 2025-12-25
+# Updated: 2026-01-03
 #
 # Status Legend:
 #   MATCHING     - 100% byte-identical
-#   EQUIVALENT   - Same logic, minor instruction order/register differences  
+#   EQUIVALENT   - Same logic, minor instruction/reg/allocation differences
 #   NON_MATCHING - Needs more work
 #   TODO         - Not yet attempted
 #
-# Format: function = address; // status: XX% (iterations)
+# Format: function = address; // STATUS: XX% (iterations)
 
 # ============================================================================
 # Decompiled Functions
 # ============================================================================
 
 FUN_8005329c = 0x8005329C; // MATCHING: 100% (1 iteration)
-# Size: 0x8 (8 bytes) = 2 instructions
-# Empty function - just jr ra + nop
+# Size: 0x8 (8 bytes)
 
 FUN_800561c8 = 0x800561C8; // MATCHING: 100% (1 iteration)
-# Size: 0xC (12 bytes) = 3 instructions
-# Getter for GP-relative global (offset 0x28C)
+# Size: 0xC (12 bytes)
 
 FUN_8005d274 = 0x8005D274; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Returns true if DAT_8007affc == 0
+# Size: 0x10 (16 bytes)
 
 FUN_80064274 = 0x80064274; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Sets DAT_800a8834 to 0
+# Size: 0x10 (16 bytes)
 
 FUN_800642bc = 0x800642BC; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Setter for DAT_800acd9c (byte)
+# Size: 0x10 (16 bytes)
 
 FUN_800678a4 = 0x800678A4; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Sets DAT_800a6768 to 0
+# Size: 0x10 (16 bytes)
 
 FUN_8006fe58 = 0x8006FE58; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Getter for DAT_800813a4
+# Size: 0x10 (16 bytes)
 
 FUN_80070b64 = 0x80070B64; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Syscall with a0=1 (EnterCriticalSection)
+# Size: 0x10 (16 bytes)
 
 FUN_80070e44 = 0x80070E44; // MATCHING: 100% (1 iteration)
-# Size: 0x10 (16 bytes) = 4 instructions
-# Syscall with a0=2 (ExitCriticalSection)
+# Size: 0x10 (16 bytes)
 
 FUN_80064260 = 0x80064260; // MATCHING: 100% (1 iteration)
-# Size: 0x14 (20 bytes) = 5 instructions
-# Sets DAT_800a8834 to 1
+# Size: 0x14 (20 bytes)
 
 FUN_8006767c = 0x8006767C; // MATCHING: 100% (1 iteration)
-# Size: 0x14 (20 bytes) = 5 instructions
-# Sets DAT_800a6768 to 2
+# Size: 0x14 (20 bytes)
 
 FUN_8006268c = 0x8006268C; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_800634e0(0)
+# Size: 0x20 (32 bytes)
 
 FUN_800638fc = 0x800638FC; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_800637b0(0)
+# Size: 0x20 (32 bytes)
 
 FUN_80063f2c = 0x80063F2C; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_80063c9c(1)
+# Size: 0x20 (32 bytes)
 
 FUN_80064010 = 0x80064010; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_800640ec()
+# Size: 0x20 (32 bytes)
 
 FUN_800640ac = 0x800640AC; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_8005c214(1)
+# Size: 0x20 (32 bytes)
 
 FUN_800640cc = 0x800640CC; // MATCHING: 100% (1 iteration)
-# Size: 0x20 (32 bytes) = 8 instructions
-# Calls FUN_8005c214(0)
+# Size: 0x20 (32 bytes)
 
 FUN_80054dd0 = 0x80054DD0; // MATCHING: 100% (1 iteration)
-# Size: 0x24 (36 bytes) = 9 instructions
-# Sets field_110 to 0x14 if zero (structure at GP+0x18C)
+# Size: 0x24 (36 bytes)
+# Notes: initializes Struct_gp_018c.field_110 to 0x14 if zero
 
 FUN_8005c974 = 0x8005C974; // EQUIVALENT: 95% (1 iteration)
-# Size: 0x24 (36 bytes) = 9 instructions
-# Sets DAT_8007b000 if different (delay slot optimization differs)
+# Size: 0x24 (36 bytes)
+# Notes: delay-slot scheduling differs
 
 FUN_80068a2c = 0x80068A2C; // MATCHING: 100% (1 iteration)
-# Size: 0x24 (36 bytes) = 9 instructions
-# Sign-extends s16 arg and calls FUN_800688b0
+# Size: 0x24 (36 bytes)
 
 FUN_80023320 = 0x80023320; // EQUIVALENT: 90% (1 iteration)
-# Size: 0x28 (40 bytes) = 10 instructions
-# Clears GP+0x160,0x164 and calls FUN_8002339c (tail-call opt differs)
+# Size: 0x28 (40 bytes)
 
-FUN_80023374 = 0x80023374; // EQUIVALENT: 90% (1 iteration)
-# Size: 0x28 (40 bytes) = 10 instructions
-# Sets GP+0x164 to 1 and calls FUN_8002339c
+FUN_80023374 = 0x80023374; // MATCHING: 100% (1 iteration)
+# Size: 0x28 (40 bytes)
 
 FUN_80053020 = 0x80053020; // EQUIVALENT: 85% (1 iteration)
-# Size: 0x28 (40 bytes) = 10 instructions  
-# Returns field_14 or field_16 based on field_302C (structure Struct_53020)
+# Size: 0x28 (40 bytes)
+# Notes: branch inversion / scheduling differs (Struct_53020)
+
+FUN_8006420c = 0x8006420C; // EQUIVALENT: 90% (1 iteration)
+# Size: 0x28 (40 bytes)
+# Notes: stack adjust differs (subu/addu vs addiu)
 
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
-# Size: 0x58 (88 bytes) = 22 instructions
-# Matching instructions: 20/22 (90.9%)
-# Differences:
-#   - Original uses 3 separate `lui` instructions for 0x8011 before lw
-#   - Compiled merges into `li` pseudo-instruction after `lw`
-#   - Same register allocation, same control flow, same result
-# C code:
-#   void FUN_80021dd0(void) {
-#       FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
-#       FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
-#   }
+# Size: 0x58 (88 bytes)
 
 # ============================================================================
-# Statistics  
+# Statistics
 # ============================================================================
 # Total functions:    325
-# Decompiled:         1
-# MATCHING (100%):    0
-# EQUIVALENT (90%+):  1
+# Decompiled:         25
+# MATCHING (100%):    20
+# EQUIVALENT:         5
 # NON_MATCHING:       0
-# TODO:               324
+# TODO:               300
 #
-# Overall progress:   0.31% (1/325 functions)
-# Matching quality:   90% average
+# Overall progress:   7.69% (25/325 functions)
 # ============================================================================
