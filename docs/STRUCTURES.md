@@ -44,18 +44,45 @@ typedef struct {
 
 *(Add structures here as they are discovered)*
 
-### Struct_gp_018c
+### TitleAudioBlock (formerly Struct_gp_018c)
 
 ```c
-/* Discovered in: FUN_80054dd0
- * Size: At least 0x112 bytes
+/* Discovered in: FUN_80054dd0 / FUN_80054f04 / FUN_80054fc8 / FUN_80055110 / FUN_80053304
+ * Size: 0x112 bytes (used as an array: DAT_gp_018c[0] and DAT_gp_018c[1])
  * Location: Pointer at GP+0x18C
- * Usage: Unknown, field_110 initialized to 0x14
+ * Usage: Audio/CD work area (block 0 = CD/BGM state; block 1 = SFX/requests state).
  */
-typedef struct {
-    /* 0x000 */ u8 pad[0x110];
-    /* 0x110 */ s16 field_110;    // Set to 0x14 if zero
-} Struct_gp_018c;
+typedef union {
+    struct {
+        /* 0x0018 */ CdlFILE bgm_file;          // Used with CdSearchFile("\\SOUND\\BGM.B;1")
+        /* 0x0078 */ CdlLOC cd_loc;             // Used with CdControl(CdlSetloc)
+        /* 0x007C */ u32 cd_read_sectors;       // Written as 2 or 10 before CdRead
+        /* 0x0090 */ CdlLOC cd_base_loc;        // Base for CdPosToInt
+        /* 0x0108 */ s16 seq_id_108;            // Masked with 0x7f
+        /* 0x010A */ s16 vab_id_10A;            // Sound bank id
+        /* 0x0110 */ s16 timer_110;             // Set to 0x14/0x15 when zero
+    } cd;
+
+    struct {
+        /* 0x0018 */ s16 cd_state_18;           // State machine used by FUN_80055110
+        /* 0x001A */ s16 handles_1A[6];         // Checked against -1
+        /* 0x002A */ s16 retry_counter_2A;      // Decremented, reloaded to 10
+        /* 0x0030 */ u8 volume_r_30;
+        /* 0x0031 */ u8 volume_l_31;
+        /* 0x0032 */ u8 color_r_32;
+        /* 0x0033 */ u8 color_g_33;
+        /* 0x0034 */ u8 color_b_34;
+        /* 0x0035 */ u8 color_a_35;
+        /* 0x0036 */ u16 requests_36[6];        // 0x80 bit indicates pending request
+        /* 0x0042 */ s16 sample_id_42;          // Checked against -1
+        /* 0x0044 */ s16 request_kind_44;
+        /* 0x0046 */ s16 voice_group_46;        // Checked against -1
+        /* 0x0110 */ s16 timer_110;
+    } sfx;
+
+    /* Raw view (full 0x112 bytes) */
+    u8 raw[0x112];
+} TitleAudioBlock;
 ```
 
 ### TitleMenuState (formerly Struct_53020)

@@ -127,18 +127,64 @@ void FUN_8005c974(s32 value) {
 /* ============================================================================
  * FUN_80054dd0 - 0x80054DD0, size: 0x24 (36 bytes)
  * MATCHING - Sets field at offset 0x110 if zero
- * Structure access: DAT_gp_018c->field_110
+ * Structure access: DAT_gp_018c->cd.timer_110
  * ============================================================================ */
 typedef struct {
-    u8 pad[0x110];
-    s16 field_110;
-} Struct_gp_018c;
+    u8 pad_00[0x18];
+    CdlFILE bgm_file;          /* 0x18 */
+    u8 pad_30[0x78 - 0x30];
+    CdlLOC cd_loc;             /* 0x78 */
+    u32 cd_read_sectors;       /* 0x7C - written as 2 or 10 before CdRead */
+    u8 pad_80[0x90 - 0x80];
+    CdlLOC cd_base_loc;        /* 0x90 - used as base for CdPosToInt */
+    u8 pad_94[0x108 - 0x94];
+    s16 seq_id_108;            /* 0x108 - masked with 0x7f before FUN_80068a2c */
+    s16 vab_id_10A;            /* 0x10A - sound bank id (SsUtGetVBaddrInSB) */
+    u8 pad_10C[0x110 - 0x10C];
+    s16 timer_110;             /* 0x110 - small timer, set when zero */
+} TitleAudioCdBlock;
 
-extern Struct_gp_018c* DAT_gp_018c;
+typedef struct {
+    u8 pad_00[0x08];
+    u16 unk_08;
+    u16 unk_0A;
+    u16 unk_0C;
+    u16 unk_0E;
+    u16 param_10;
+    u16 param_12;
+    u8 active_14;
+    u8 active_15;
+    u16 param_16;
+    s16 cd_state_18;
+    s16 handles_1A[6];         /* 0x1A - frequently checked against -1 */
+    u8 pad_26[0x2A - 0x26];
+    s16 retry_counter_2A;      /* 0x2A - decremented, reloaded to 10 */
+    u8 pad_2C[0x30 - 0x2C];
+    u8 volume_r_30;
+    u8 volume_l_31;
+    u8 color_r_32;
+    u8 color_g_33;
+    u8 color_b_34;
+    u8 color_a_35;
+    u16 requests_36[6];        /* 0x36 - 0x80 bit indicates pending request */
+    s16 sample_id_42;
+    s16 request_kind_44;
+    s16 voice_group_46;
+    u8 pad_48[0x110 - 0x48];
+    s16 timer_110;
+} TitleAudioSfxBlock;
+
+typedef union {
+    TitleAudioCdBlock cd;
+    TitleAudioSfxBlock sfx;
+    u8 raw[0x112];
+} TitleAudioBlock;
+
+extern TitleAudioBlock* DAT_gp_018c;
 
 void FUN_80054dd0(void) {
-    if (DAT_gp_018c->field_110 == 0) {
-        DAT_gp_018c->field_110 = 0x14;
+    if (DAT_gp_018c->cd.timer_110 == 0) {
+        DAT_gp_018c->cd.timer_110 = 0x14;
     }
 }
 
