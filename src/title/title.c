@@ -28,6 +28,7 @@ extern void FUN_80058d64(void);           /* 0x80058d64 */
 extern void FUN_80021dd0(void);           /* 0x80021dd0 */
 extern void FUN_800587a8(void);           /* 0x800587a8 */
 extern void FUN_80058a9c(void);           /* 0x80058a9c */
+extern s32 FUN_8005c9d8(s16 arg0);        /* 0x8005c9d8 */
 extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
 extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
 extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
@@ -72,6 +73,15 @@ u16 FUN_80053020(TitleMenuState* state) {
  * ============================================================================ */
 void FUN_8006420c(s16 arg0) {
     FUN_80064168(arg0, 0);
+}
+
+/* ============================================================================
+ * FUN_80067c48 - 0x80067C48, size: 0x2C (44 bytes)
+ * EQUIVALENT - Sign-extends s16 arg, calls FUN_8005c9d8, sign-extends return
+ * Notes: stack adjust differs (subu/addu vs addiu)
+ * ============================================================================ */
+s16 FUN_80067c48(s16 arg0) {
+    return (s16)FUN_8005c9d8(arg0);
 }
 
 /* ============================================================================
