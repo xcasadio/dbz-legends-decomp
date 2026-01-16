@@ -145,6 +145,23 @@ FUN_80062838 = 0x80062838; // EQUIVALENT: 90% (1 iteration)
 # Size: 0x40 (64 bytes)
 # Notes: stack adjust differs (subu/addu vs addiu)
 
+FUN_80057f80 = 0x80057F80; // EQUIVALENT: 95% (1 iteration)
+# Size: 0x44 (68 bytes)
+
+FUN_80022c04 = 0x80022C04; // EQUIVALENT: 95% (1 iteration)
+# Size: 0x48 (72 bytes)
+
+FUN_80022c4c = 0x80022C4C; // EQUIVALENT: 95% (1 iteration)
+# Size: 0x48 (72 bytes)
+
+FUN_80037104 = 0x80037104; // EQUIVALENT: 90% (1 iteration)
+# Size: 0x48 (72 bytes)
+# Notes: uses hardcoded handler address 0x8003714C
+
+FUN_800299bc = 0x800299BC; // EQUIVALENT: 90% (1 iteration)
+# Size: 0x4C (76 bytes)
+# Notes: uses hardcoded handler address 0x80029AEC
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes)
 
@@ -152,11 +169,11 @@ FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Statistics
 # ============================================================================
 # Total functions:    325
-# Decompiled:         40
+# Decompiled:         45
 # MATCHING (100%):    20
-# EQUIVALENT:         20
+# EQUIVALENT:         25
 # NON_MATCHING:       0
-# TODO:               285
+# TODO:               280
 #
-# Overall progress:   12.31% (40/325 functions)
+# Overall progress:   13.85% (45/325 functions)
 # ============================================================================
