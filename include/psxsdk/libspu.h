@@ -91,6 +91,16 @@ typedef struct SpuCommonAttr {
     s16 ext_mix;
 } SpuCommonAttr;
 
+/* SPU reverb attribute structure */
+typedef struct SpuReverbAttr {
+    u32 mask;
+    s32 mode;
+    s16 depth_left;
+    s16 depth_right;
+    s32 delay;
+    s32 feedback;
+} SpuReverbAttr;
+
 /*---------------------------------------------------------------------------
  * Function Prototypes
  *---------------------------------------------------------------------------*/
@@ -117,6 +127,7 @@ void SpuSetCommonAttr(SpuCommonAttr* attr);
 void SpuSetReverb(s32 on_off);
 void SpuSetReverbModeType(s32 type);
 void SpuSetReverbDepth(s16 depth_l, s16 depth_r);
+void SpuSetReverbModeParam(SpuReverbAttr* attr);
 u32 SpuSetReverbVoice(s32 on_off, u32 voice_bit);
 
 u32 SpuMalloc(u32 size);
