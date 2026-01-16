@@ -8,6 +8,7 @@
 #include "game.h"
 #include "psxsdk/libcd.h"
 #include "psxsdk/libetc.h"
+#include "psxsdk/kernel.h"
 
 /* External game functions from TITLE.EXE */
 extern void FUN_80070b64(void);           /* 0x80070b64 - callback reset? */
@@ -44,21 +45,6 @@ extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
  * Structure: side_balance_302C compared to 0x7530, returns cursor_left or cursor_right
  * (Branch condition inverted by compiler)
  * ============================================================================ */
-typedef struct {
-    u8 pad_00[0x02];
-    s16 blink_timer;        /* 0x02 - decremented each frame, often set to 0x10 */
-    u8 pad_04[0x02];
-    s16 countdown_06;       /* 0x06 - observed countdown (often compared to 0x0F) */
-    u8 pad_08[0x08];
-    u32 flags_10;           /* 0x10 - bitfield used heavily in menu logic */
-    u16 cursor_left;        /* 0x14 - typically constrained to [0..5] */
-    u16 cursor_right;       /* 0x16 - typically constrained to [6..11] */
-    u16 selected_index;     /* 0x18 - observed as current selection index */
-    u16 active_index;       /* 0x1A - set from FUN_80053020 result */
-    u8 pad_1C[0x302C - 0x1C];
-    s32 side_balance_302C;  /* 0x302C - clamped to +/-30000, compared to 30000 */
-} TitleMenuState;
-
 u16 FUN_80053020(TitleMenuState* state) {
     if (state->side_balance_302C == 0x7530) {
         return state->cursor_left;
@@ -129,57 +115,6 @@ void FUN_8005c974(s32 value) {
  * MATCHING - Sets field at offset 0x110 if zero
  * Structure access: DAT_gp_018c->cd.timer_110
  * ============================================================================ */
-typedef struct {
-    u8 pad_00[0x18];
-    CdlFILE bgm_file;          /* 0x18 */
-    u8 pad_30[0x78 - 0x30];
-    CdlLOC cd_loc;             /* 0x78 */
-    u32 cd_read_sectors;       /* 0x7C - written as 2 or 10 before CdRead */
-    u8 pad_80[0x90 - 0x80];
-    CdlLOC cd_base_loc;        /* 0x90 - used as base for CdPosToInt */
-    u8 pad_94[0x108 - 0x94];
-    s16 seq_id_108;            /* 0x108 - masked with 0x7f before FUN_80068a2c */
-    s16 vab_id_10A;            /* 0x10A - sound bank id (SsUtGetVBaddrInSB) */
-    u8 pad_10C[0x110 - 0x10C];
-    s16 timer_110;             /* 0x110 - small timer, set when zero */
-} TitleAudioCdBlock;
-
-typedef struct {
-    u8 pad_00[0x08];
-    u16 unk_08;
-    u16 unk_0A;
-    u16 unk_0C;
-    u16 unk_0E;
-    u16 param_10;
-    u16 param_12;
-    u8 active_14;
-    u8 active_15;
-    u16 param_16;
-    s16 cd_state_18;
-    s16 handles_1A[6];         /* 0x1A - frequently checked against -1 */
-    u8 pad_26[0x2A - 0x26];
-    s16 retry_counter_2A;      /* 0x2A - decremented, reloaded to 10 */
-    u8 pad_2C[0x30 - 0x2C];
-    u8 volume_r_30;
-    u8 volume_l_31;
-    u8 color_r_32;
-    u8 color_g_33;
-    u8 color_b_34;
-    u8 color_a_35;
-    u16 requests_36[6];        /* 0x36 - 0x80 bit indicates pending request */
-    s16 sample_id_42;
-    s16 request_kind_44;
-    s16 voice_group_46;
-    u8 pad_48[0x110 - 0x48];
-    s16 timer_110;
-} TitleAudioSfxBlock;
-
-typedef union {
-    TitleAudioCdBlock cd;
-    TitleAudioSfxBlock sfx;
-    u8 raw[0x112];
-} TitleAudioBlock;
-
 extern TitleAudioBlock* DAT_gp_018c;
 
 void FUN_80054dd0(void) {
@@ -271,8 +206,7 @@ void FUN_80064260(void) {
  * MATCHING - Syscall with a0=2 (ExitCriticalSection)
  * ============================================================================ */
 void FUN_80070e44(void) {
-    __asm__ volatile ("li $4, 2");
-    __asm__ volatile ("syscall");
+    ExitCriticalSection();
 }
 
 /* ============================================================================
@@ -280,8 +214,7 @@ void FUN_80070e44(void) {
  * MATCHING - Syscall with a0=1 (EnterCriticalSection)
  * ============================================================================ */
 void FUN_80070b64(void) {
-    __asm__ volatile ("li $4, 1");
-    __asm__ volatile ("syscall");
+    EnterCriticalSection();
 }
 
 /* ============================================================================

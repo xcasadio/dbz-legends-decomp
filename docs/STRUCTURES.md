@@ -80,6 +80,10 @@ typedef union {
         /* 0x0110 */ s16 timer_110;
     } sfx;
 
+    /* Note: block 1 has additional unknown parameters at 0x08..0x16 and two
+     * one-byte flags at 0x14..0x15 (see TitleAudioSfxBlock in include/game.h).
+     */
+
     /* Raw view (full 0x112 bytes) */
     u8 raw[0x112];
 } TitleAudioBlock;
