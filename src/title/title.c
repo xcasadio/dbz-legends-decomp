@@ -12,11 +12,9 @@
 
 /* External game functions from TITLE.EXE */
 extern void FUN_80070b64(void);           /* 0x80070b64 - callback reset? */
-extern void FUN_80071648(s32 arg0);       /* 0x80071648 */
+extern void __main(void);
 extern void FUN_80057508(void);           /* 0x80057508 */
-extern void FUN_80071a4c(s32 arg0);       /* 0x80071a4c */
-extern void FUN_80057df4(u8* arg0, u8* arg1, s32 arg2);  /* 0x80057df4 */
-extern void FUN_80059160(s32 arg0, s32 arg1);  /* 0x80059160 */
+extern void ReadFile(char* name, u8* dst, s32 arg2);     /* 0x80057df4 */
 extern void FUN_80070e44(void);           /* 0x80070e44 */
 extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
 extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
@@ -34,8 +32,21 @@ extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
+extern s32 DAT_8008344c;
+extern s32 DAT_80083450;
+extern s32 DAT_80083448;
 extern u32 DAT_80083504;   /* cleared in loop */
-extern u16 DAT_800ef10e;   /* Counter */
+extern s32 DAT_80083544;
+extern s32 DAT_800835b4;
+extern s32 PTR_80079854;
+
+extern CdlFILE DAT_800a8860;
+extern u8 DAT_80110000;
+
+extern volatile u16 DAT_801ff10e;
+extern volatile u16 DAT_801ff100;
+extern volatile u32 DAT_1f80012c;
+
 extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 
@@ -295,74 +306,64 @@ void FUN_80021dd0(void) {
     FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
 }
 
-/* Title main function - 0x800581DC, size: 0x20C (524 bytes) 
- * Note: This is a NON_MATCHING placeholder - the real function
- * has complex initialization that requires understanding more globals
+/* Title main function - 0x800581DC, size: 0x20C (524 bytes)
+ * EQUIVALENT - Decompiled from Ghidra; not yet assembly-matched.
  */
-int main(void) {
-    CdlFILE file;
-    s32 result;
-    volatile u16* counter = (volatile u16*)0x800ef10e;
-    volatile u16* gpu_reg = (volatile u16*)0x801ff100;
-    volatile u32* hw_reg = (volatile u32*)0x1f80012c;
-    
-    /* System initialization sequence */
+void main(void) {
+    CdlFILE* cd_file;
+    u32 seed;
+
+    __main();
     FUN_80070b64();
     ResetCallback();
-    FUN_80071648(0);
+    ResetGraph(0);
     InitGeom();
-    FUN_80071a4c(0);
+    SetDispMask(0);
     FUN_80057508();
     PadInit(0);
     CdInit();
-    
-    /* CD file search loop */
+
     do {
-        result = (s32)CdSearchFile(&file, "\\AT1\\GT.B");
-    } while (result == 0);
-    
-    /* File/memory setup */
-    FUN_80057df4((u8*)0x800a8860, (u8*)0x80020ab8, 0);
-    
-    /* Display setup */
-    FUN_80059160(0x10000, 0x10000);
-    srand(1);
+        cd_file = CdSearchFile(&DAT_800a8860, "\\SELECT.EXE;1");
+    } while (cd_file == (CdlFILE*)0);
+
+    ReadFile("\\SUB\\TITLE.B;1", &DAT_80110000, 0);
+
+    seed = 0x10000;
+    InitHeap((void*)0x10000, 0x10000);
+    srand(seed);
     FUN_80070e44();
-    FUN_800742cc(960, 256);
-    
-    /* Extended display init */
-    result = FUN_80074370(16, 16, 256, 200, 0, 512);
-    DAT_80083498 = result;
-    
-    /* More setup */
-    FUN_80057674(168, 128, 4096, 0, 0, 0, 0, 4096, 0, 0);
-    FUN_80049504((u8*)0x80037388, 0, 0, 0, 0, DAT_80083498);
+    FUN_800742cc(0x3c0, 0x100);
+
+    DAT_80083498 = FUN_80074370(0x10, 0x10, 0x100, 200, 0, 0x200);
+    DAT_8008344c = 0;
+    DAT_80083450 = 0;
+    DAT_80083448 = 0;
+
+    FUN_80057674(0xa8, 0x80, 0x1000, 0, 0, 0, 0x1000, 0, 0, 0);
+    FUN_80049504((u8*)FUN_80037388, 0, 0, 0, 0, PTR_80079854);
     FUN_80037388();
-    FUN_80056dc0(20, 200, 100, 350, 20, 20, 0, 0);
-    
-    /* Initial state */
+    FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
+    DAT_80083544 = 0;
+
     FUN_80038228(8, 0);
     FUN_80058d64();
-    
-    /* Main loop */
+
     while (1) {
-        u16 cnt = *counter;
-        
-        if (cnt >= 3) {
-            *counter = 0;
+        if (2 < DAT_801ff10e) {
+            DAT_801ff10e = 0;
         }
-        
-        cnt = *counter;
-        *gpu_reg = 2;
-        *hw_reg = cnt;
-        *counter = cnt + 1;
-        
+
+        DAT_1f80012c = (u32)DAT_801ff10e;
+        DAT_801ff100 = 2;
+        DAT_801ff10e = DAT_801ff10e + 1;
+
         FUN_80038228(8, 0);
-        /* Something set at GP+1024 */
+        DAT_800835b4 = 1;
         FUN_80021dd0();
         FUN_800587a8();
         FUN_80058a9c();
-        
+
         FUN_80038228(2, 4);
         DAT_80083504 = 0;
         FUN_800587a8();
