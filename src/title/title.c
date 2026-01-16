@@ -30,6 +30,7 @@ extern void FUN_800587a8(void);           /* 0x800587a8 */
 extern void FUN_80058a9c(void);           /* 0x80058a9c */
 extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
 extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
+extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -80,6 +81,15 @@ void FUN_8006420c(s16 arg0) {
  * ============================================================================ */
 void FUN_80067de0(s16 arg0) {
     FUN_80067c74(arg0, 0);
+}
+
+/* ============================================================================
+ * FUN_80068f0c - 0x80068F0C, size: 0x28 (40 bytes)
+ * EQUIVALENT - Sign-extends s16 arg and calls FUN_80068e34(arg0, 0)
+ * Notes: stack adjust differs (subu/addu vs addiu)
+ * ============================================================================ */
+void FUN_80068f0c(s16 arg0) {
+    FUN_80068e34(arg0, 0);
 }
 
 /* ============================================================================

@@ -93,6 +93,10 @@ FUN_80067de0 = 0x80067DE0; // EQUIVALENT: 95% (1 iteration)
 # Size: 0x28 (40 bytes)
 # Notes: stack adjust differs (subu/addu vs addiu)
 
+FUN_80068f0c = 0x80068F0C; // EQUIVALENT: 95% (1 iteration)
+# Size: 0x28 (40 bytes)
+# Notes: stack adjust differs (subu/addu vs addiu)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes)
 
@@ -100,11 +104,11 @@ FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Statistics
 # ============================================================================
 # Total functions:    325
-# Decompiled:         25
+# Decompiled:         26
 # MATCHING (100%):    20
-# EQUIVALENT:         5
+# EQUIVALENT:         6
 # NON_MATCHING:       0
-# TODO:               300
+# TODO:               299
 #
-# Overall progress:   7.69% (25/325 functions)
+# Overall progress:   8.00% (26/325 functions)
 # ============================================================================
