@@ -58,20 +58,23 @@ typedef struct {
 } Struct_gp_018c;
 ```
 
-### Struct_53020
+### TitleMenuState (formerly Struct_53020)
 
 ```c
-/* Discovered in: FUN_80053020
+/* Discovered in: FUN_80053020 (+ usage observed in caller FUN_8004c168)
  * Size: At least 0x3030 bytes
- * Usage: Returns field_14 or field_16 based on field_302C == 0x7530
+ * Usage: Selects left/right cursor based on a signed balance value at 0x302C.
  */
 typedef struct {
-    /* 0x0000 */ u8 pad0[0x14];
-    /* 0x0014 */ u16 field_14;
-    /* 0x0016 */ u16 field_16;
-    /* 0x0018 */ u8 pad1[0x302C - 0x18];
-    /* 0x302C */ s32 field_302C;    // Compared to 0x7530 (30000)
-} Struct_53020;
+    /* 0x0002 */ s16 blink_timer;        // Decremented; often initialized to 0x10
+    /* 0x0006 */ s16 countdown_06;       // Countdown used in menu state transitions
+    /* 0x0010 */ u32 flags_10;           // Bitfield
+    /* 0x0014 */ u16 cursor_left;        // Typically [0..5]
+    /* 0x0016 */ u16 cursor_right;       // Typically [6..11]
+    /* 0x0018 */ u16 selected_index;     // Current selection index
+    /* 0x001A */ u16 active_index;       // Written from FUN_80053020 result
+    /* 0x302C */ s32 side_balance_302C;  // Clamped to +/-30000, compared to 30000
+} TitleMenuState;
 ```
 
 ### Example: Unknown Structure 1

@@ -41,22 +41,29 @@ extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
 /* ============================================================================
  * FUN_80053020 - 0x80053020, size: 0x28 (40 bytes)
  * EQUIVALENT - Returns field based on struct comparison
- * Structure: field_302C compared to 0x7530, returns field_14 or field_16
+ * Structure: side_balance_302C compared to 0x7530, returns cursor_left or cursor_right
  * (Branch condition inverted by compiler)
  * ============================================================================ */
 typedef struct {
-    u8 pad0[0x14];
-    u16 field_14;          /* offset 0x14 */
-    u16 field_16;          /* offset 0x16 */
-    u8 pad1[0x302C - 0x18];
-    s32 field_302C;        /* offset 0x302C */
-} Struct_53020;
+    u8 pad_00[0x02];
+    s16 blink_timer;        /* 0x02 - decremented each frame, often set to 0x10 */
+    u8 pad_04[0x02];
+    s16 countdown_06;       /* 0x06 - observed countdown (often compared to 0x0F) */
+    u8 pad_08[0x08];
+    u32 flags_10;           /* 0x10 - bitfield used heavily in menu logic */
+    u16 cursor_left;        /* 0x14 - typically constrained to [0..5] */
+    u16 cursor_right;       /* 0x16 - typically constrained to [6..11] */
+    u16 selected_index;     /* 0x18 - observed as current selection index */
+    u16 active_index;       /* 0x1A - set from FUN_80053020 result */
+    u8 pad_1C[0x302C - 0x1C];
+    s32 side_balance_302C;  /* 0x302C - clamped to +/-30000, compared to 30000 */
+} TitleMenuState;
 
-u16 FUN_80053020(Struct_53020* arg0) {
-    if (arg0->field_302C == 0x7530) {
-        return arg0->field_14;
+u16 FUN_80053020(TitleMenuState* state) {
+    if (state->side_balance_302C == 0x7530) {
+        return state->cursor_left;
     }
-    return arg0->field_16;
+    return state->cursor_right;
 }
 
 /* ============================================================================
