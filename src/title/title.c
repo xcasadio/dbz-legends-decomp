@@ -29,9 +29,21 @@ extern void FUN_80021dd0(void);           /* 0x80021dd0 */
 extern void FUN_800587a8(void);           /* 0x800587a8 */
 extern void FUN_80058a9c(void);           /* 0x80058a9c */
 extern s32 FUN_8005c9d8(s16 arg0);        /* 0x8005c9d8 */
+extern void FUN_800607fc(s16 arg0, u16 arg1, u16 arg2, s32 arg3);  /* 0x800607fc */
 extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
+extern s32 FUN_80064368(s32 arg0, s16 arg1, s32 arg2, s32 arg3);   /* 0x80064368 */
 extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
+extern void FUN_800678b4(s16 arg0, s32 arg1, u8 arg2, s16 arg3);   /* 0x800678b4 */
 extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
+extern s32 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
+extern void FUN_8004be40(void* arg0, u16 arg1); /* 0x8004be40 */
+extern void FUN_80050744(void* arg0);          /* 0x80050744 */
+extern void FUN_8005286c(void* arg0);          /* 0x8005286c */
+extern void FUN_80062760(s32 arg0, s32 arg1);  /* 0x80062760 */
+extern void FUN_800627f8(s16 arg0);            /* 0x800627f8 */
+extern void FUN_80062838(s16 arg0);            /* 0x80062838 */
+extern void FUN_80062878(void* arg0);          /* 0x80062878 */
+extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -45,6 +57,17 @@ extern s32 PTR_80079854;
 
 extern CdlFILE DAT_800a8860;
 extern u8 DAT_80110000;
+
+extern void* DAT_80083224;
+
+extern char DAT_800831b4[];
+extern char DAT_800831bc[];
+
+extern s32 DAT_80096650;
+extern s32 DAT_8009665c;
+extern s32 DAT_80096660;
+
+extern u8 DAT_800836d4[];
 
 extern volatile u16 DAT_801ff10e;
 extern volatile u16 DAT_801ff100;
@@ -67,12 +90,43 @@ u16 FUN_80053020(TitleMenuState* state) {
 }
 
 /* ============================================================================
+ * FUN_8004dbac - 0x8004DBAC, size: 0x3C (60 bytes)
+ * EQUIVALENT - Loads ptr at DAT_80083224->+8 and calls two routines on it
+ * ============================================================================ */
+void FUN_8004dbac(void) {
+    void* ptr = *(void**)((u8*)DAT_80083224 + 8);
+
+    FUN_80050744(ptr);
+    FUN_8005286c(ptr);
+}
+
+/* ============================================================================
+ * FUN_8004bf94 - 0x8004BF94, size: 0x3C (60 bytes)
+ * EQUIVALENT - Reads s16 at +0x11E, transforms it, then calls FUN_8004be40
+ * ============================================================================ */
+void FUN_8004bf94(void* arg0) {
+    s16 value = *(s16*)((u8*)arg0 + 0x11E);
+    u16 result = (u16)FUN_8003bcc4(value);
+
+    FUN_8004be40(arg0, result);
+}
+
+/* ============================================================================
  * FUN_8006420c - 0x8006420C, size: 0x28 (40 bytes)
  * EQUIVALENT - Sign-extends s16 arg and calls FUN_80064168(arg0, 0)
  * Note: compiler uses subu/addu for stack adjust vs addiu.
  * ============================================================================ */
 void FUN_8006420c(s16 arg0) {
     FUN_80064168(arg0, 0);
+}
+
+/* ============================================================================
+ * FUN_80064300 - 0x80064300, size: 0x34 (52 bytes)
+ * EQUIVALENT - Sign-extends s16 arg1, calls FUN_80064368(arg0,arg1,1,arg2), sign-extends return
+ * Notes: stack adjust differs (subu/addu vs addiu)
+ * ============================================================================ */
+s16 FUN_80064300(s32 arg0, s16 arg1, s32 arg2) {
+    return (s16)FUN_80064368(arg0, arg1, 1, arg2);
 }
 
 /* ============================================================================
@@ -174,6 +228,17 @@ void FUN_8005d248(s32 value) {
 }
 
 /* ============================================================================
+ * FUN_80056af4 - 0x80056AF4, size: 0x3C (60 bytes)
+ * EQUIVALENT - Calls a small sequence of reset/config routines
+ * ============================================================================ */
+void FUN_80056af4(void) {
+    FUN_80062760(0, 0);
+    FUN_800627f8(0);
+    FUN_80062838(0);
+    FUN_8006268c();
+}
+
+/* ============================================================================
  * FUN_80054dd0 - 0x80054DD0, size: 0x24 (36 bytes)
  * MATCHING - Sets field at offset 0x110 if zero
  * Structure access: DAT_gp_018c->cd.timer_110
@@ -184,6 +249,28 @@ void FUN_80054dd0(void) {
     if (DAT_gp_018c->cd.timer_110 == 0) {
         DAT_gp_018c->cd.timer_110 = 0x14;
     }
+}
+
+/* ============================================================================
+ * FUN_80054d9c - 0x80054D9C, size: 0x34 (52 bytes)
+ * EQUIVALENT - Returns DAT_gp_018c->cd.timer_110 if < 0x10 (signed), else 0
+ * ============================================================================ */
+s16 FUN_80054d9c(void) {
+    s16 timer = (s16)DAT_gp_018c->cd.timer_110;
+
+    if (timer < 0x10) {
+        return timer;
+    }
+
+    return 0;
+}
+
+/* ============================================================================
+ * FUN_80063714 - 0x80063714, size: 0x30 (48 bytes)
+ * EQUIVALENT - Sign-extends s16 arg0, masks arg1/arg2 to u16, calls FUN_800607fc
+ * ============================================================================ */
+void FUN_80063714(s16 arg0, u16 arg1, u16 arg2) {
+    FUN_800607fc(arg0, arg1, arg2, 0);
 }
 
 /* ============================================================================
@@ -245,6 +332,26 @@ void FUN_8006268c(void) {
 }
 
 /* ============================================================================
+ * FUN_800627f8 - 0x800627F8, size: 0x40 (64 bytes)
+ * EQUIVALENT - Writes request type 0x10 and arg to globals, then calls FUN_80062878
+ * ============================================================================ */
+void FUN_800627f8(s16 arg0) {
+    DAT_80096650 = 0x10;
+    DAT_80096660 = arg0;
+    FUN_80062878(&DAT_80096650);
+}
+
+/* ============================================================================
+ * FUN_80062838 - 0x80062838, size: 0x40 (64 bytes)
+ * EQUIVALENT - Writes request type 0x8 and arg to globals, then calls FUN_80062878
+ * ============================================================================ */
+void FUN_80062838(s16 arg0) {
+    DAT_80096650 = 0x8;
+    DAT_8009665c = arg0;
+    FUN_80062878(&DAT_80096650);
+}
+
+/* ============================================================================
  * FUN_8006767c - 0x8006767C, size: 0x14 (20 bytes)
  * MATCHING - Sets DAT_800a6768 to 2
  * ============================================================================ */
@@ -301,6 +408,14 @@ void FUN_800678a4(void) {
 }
 
 /* ============================================================================
+ * FUN_800679b4 - 0x800679B4, size: 0x38 (56 bytes)
+ * EQUIVALENT - Sign-extends s16 arg0/arg2, masks arg1 to u8, calls FUN_800678b4(arg0,0,arg1,arg2)
+ * ============================================================================ */
+void FUN_800679b4(s16 arg0, u8 arg1, s16 arg2) {
+    FUN_800678b4(arg0, 0, arg1, arg2);
+}
+
+/* ============================================================================
  * FUN_800642bc - 0x800642BC, size: 0x10 (16 bytes)
  * MATCHING - Setter for DAT_800acd9c (byte)
  * ============================================================================ */
@@ -354,6 +469,40 @@ void FUN_8005329c(void) {
 void FUN_80021dd0(void) {
     FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
     FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
+}
+
+/* ============================================================================
+ * FUN_800229e0 - 0x800229E0, size: 0x40 (64 bytes)
+ * EQUIVALENT - Calls FUN_80070bc4 with one of two strings; returns (ret == 0)
+ * ============================================================================ */
+s32 FUN_800229e0(s32 arg0) {
+    const char* str = arg0 ? DAT_800831bc : DAT_800831b4;
+    return FUN_80070bc4(str) == 0;
+}
+
+/* ============================================================================
+ * FUN_80027314 - 0x80027314, size: 0x40 (64 bytes)
+ * EQUIVALENT - Clears entries referencing arg0 in a 30-element table; clears byte at arg0+0x227
+ * ============================================================================ */
+void FUN_80027314(void* arg0) {
+    typedef struct {
+        u32 unk0;
+        u32 unk4;
+        u8 pad_08[0x18];
+        void* ptr_20;
+    } Unk_800836d4_Entry;
+
+    Unk_800836d4_Entry* entry = (Unk_800836d4_Entry*)DAT_800836d4;
+    s32 i;
+
+    for (i = 0; i < 30; i++) {
+        if (entry[i].ptr_20 == arg0) {
+            entry[i].unk4 = 0;
+            entry[i].unk0 = 0;
+        }
+    }
+
+    *(u8*)((u8*)arg0 + 0x227) = 0;
 }
 
 /* Title main function - 0x800581DC, size: 0x20C (524 bytes)
