@@ -97,6 +97,10 @@ FUN_80068f0c = 0x80068F0C; // EQUIVALENT: 95% (1 iteration)
 # Size: 0x28 (40 bytes)
 # Notes: stack adjust differs (subu/addu vs addiu)
 
+FUN_80023348 = 0x80023348; // EQUIVALENT: 90% (1 iteration)
+# Size: 0x2C (44 bytes)
+# Notes: delay slot scheduling differs (lw $ra in jal delay slot vs nop)
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes)
 
@@ -104,11 +108,11 @@ FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Statistics
 # ============================================================================
 # Total functions:    325
-# Decompiled:         26
+# Decompiled:         27
 # MATCHING (100%):    20
-# EQUIVALENT:         6
+# EQUIVALENT:         7
 # NON_MATCHING:       0
-# TODO:               299
+# TODO:               298
 #
-# Overall progress:   8.00% (26/325 functions)
+# Overall progress:   8.31% (27/325 functions)
 # ============================================================================
