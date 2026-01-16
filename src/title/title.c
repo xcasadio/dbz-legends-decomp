@@ -141,11 +141,26 @@ void FUN_80068a2c(s16 value) {
  * (Compiler optimizes delay slot differently)
  * ============================================================================ */
 extern s32 DAT_8007b000;
+extern s32 DAT_8007affc;
 
 void FUN_8005c974(s32 value) {
     if (value != DAT_8007b000) {
         DAT_8007b000 = value;
     }
+}
+
+/* ============================================================================
+ * FUN_8005d248 - 0x8005D248, size: 0x2C (44 bytes)
+ * EQUIVALENT - Sets DAT_8007affc to 0 if arg0 == 1, else sets it to 1
+ * Notes: compiler may schedule the store in the branch delay slot.
+ * ============================================================================ */
+void FUN_8005d248(s32 value) {
+    if (value == 1) {
+        DAT_8007affc = 0;
+        return;
+    }
+
+    DAT_8007affc = 1;
 }
 
 /* ============================================================================
@@ -299,8 +314,6 @@ void FUN_80064274(void) {
  * FUN_8005d274 - 0x8005D274, size: 0x10 (16 bytes)
  * MATCHING - Returns true if DAT_8007affc == 0
  * ============================================================================ */
-extern s32 DAT_8007affc;
-
 s32 FUN_8005d274(void) {
     return DAT_8007affc == 0;
 }

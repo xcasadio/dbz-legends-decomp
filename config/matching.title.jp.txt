@@ -101,6 +101,10 @@ FUN_80023348 = 0x80023348; // EQUIVALENT: 90% (1 iteration)
 # Size: 0x2C (44 bytes)
 # Notes: delay slot scheduling differs (lw $ra in jal delay slot vs nop)
 
+FUN_8005d248 = 0x8005D248; // EQUIVALENT: 85% (1 iteration)
+# Size: 0x2C (44 bytes)
+# Notes: delay slot / store scheduling differs
+
 FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Size: 0x58 (88 bytes)
 
@@ -108,11 +112,11 @@ FUN_80021dd0 = 0x80021DD0; // EQUIVALENT: 90% (3 iterations)
 # Statistics
 # ============================================================================
 # Total functions:    325
-# Decompiled:         27
+# Decompiled:         28
 # MATCHING (100%):    20
-# EQUIVALENT:         7
+# EQUIVALENT:         8
 # NON_MATCHING:       0
-# TODO:               298
+# TODO:               297
 #
-# Overall progress:   8.31% (27/325 functions)
+# Overall progress:   8.62% (28/325 functions)
 # ============================================================================
