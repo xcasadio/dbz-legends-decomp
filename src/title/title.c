@@ -16,6 +16,10 @@
 /* External game functions from TITLE.EXE */
 extern void FUN_80070b64(void);           /* 0x80070b64 - callback reset? */
 extern void __main(void);
+extern void InitCARD(long val);
+extern long StartCARD(void);
+extern long _card_auto(long val);
+extern void ChangeClearPAD(long val);
 extern void FUN_80057e40(CdlFILE* cdlFile, u8* buffer, u16 mode);        /* 0x80057e40 */
 void FUN_80057df4(char* fileName, u8* buffer, u16 mode);                 /* 0x80057df4 */
 extern void FUN_80070e44(void);           /* 0x80070e44 */
@@ -29,6 +33,8 @@ extern void FUN_80056dc0(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 a
 extern void FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
 extern void FUN_80058d64(void);           /* 0x80058d64 */
 extern void FUN_80021dd0(void);           /* 0x80021dd0 */
+extern void FUN_80022c94(void);           /* 0x80022c94 */
+extern void FUN_80023290(void);           /* 0x80023290 */
 extern void FUN_800587a8(void);           /* 0x800587a8 */
 extern void FUN_80058a9c(void);           /* 0x80058a9c */
 extern s32 FUN_8005c9d8(s16 arg0);        /* 0x8005c9d8 */
@@ -531,6 +537,20 @@ void FUN_8005329c(void) {
 void FUN_80021dd0(void) {
     FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
     FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
+}
+
+/* ============================================================================
+ * FUN_80022630 - 0x80022630, size: 0x50 (80 bytes)
+ * EQUIVALENT - Initializes memory card handling and input clearing
+ * ============================================================================ */
+void FUN_80022630(void) {
+    InitCARD(1);
+    StartCARD();
+    _bu_init();
+    FUN_80022c94();
+    _card_auto(0);
+    ChangeClearPAD(0);
+    FUN_80023290();
 }
 
 /* ============================================================================
