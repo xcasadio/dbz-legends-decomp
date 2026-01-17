@@ -125,7 +125,7 @@ typedef struct {
     u8 pad_06[0x92];
     void* unk_98;
     u8 pad_9C[0x78];
-    s16 rect_114[4];
+    RECT rect_114;
     u8 unk_11C[2];
     s16 value_11E;
     u8 pad_120[0x14];
