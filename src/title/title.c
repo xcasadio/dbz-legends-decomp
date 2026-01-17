@@ -11,11 +11,13 @@
 #include "psxsdk/libspu.h"
 #include "psxsdk/kernel.h"
 
+#define ReadFile FUN_80057df4
+
 /* External game functions from TITLE.EXE */
 extern void FUN_80070b64(void);           /* 0x80070b64 - callback reset? */
 extern void __main(void);
-extern void FUN_80057508(void);           /* 0x80057508 */
-extern void ReadFile(char* name, u8* dst, s32 arg2);     /* 0x80057df4 */
+extern void FUN_80057e40(CdlFILE* cdlFile, u8* buffer, u16 mode);        /* 0x80057e40 */
+void FUN_80057df4(char* fileName, u8* buffer, u16 mode);                 /* 0x80057df4 */
 extern void FUN_80070e44(void);           /* 0x80070e44 */
 extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
 extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
@@ -168,8 +170,8 @@ void FUN_8006420c(s16 arg0) {
  * EQUIVALENT - Sign-extends s16 arg1, calls FUN_80064368(arg0,arg1,1,arg2), sign-extends return
  * Notes: stack adjust differs (subu/addu vs addiu)
  * ============================================================================ */
-s16 FUN_80064300(s32 arg0, s16 arg1, s32 arg2) {
-    return (s16)FUN_80064368(arg0, arg1, 1, arg2);
+s16 FUN_80064300(s32 arg0, s32 arg1, s32 arg2) {
+    return (s16)FUN_80064368(arg0, (s16)arg1, 1, arg2);
 }
 
 /* ============================================================================
@@ -177,8 +179,8 @@ s16 FUN_80064300(s32 arg0, s16 arg1, s32 arg2) {
  * EQUIVALENT - Sign-extends s16 arg, calls FUN_8005c9d8, sign-extends return
  * Notes: stack adjust differs (subu/addu vs addiu)
  * ============================================================================ */
-s16 FUN_80067c48(s16 arg0) {
-    return (s16)FUN_8005c9d8(arg0);
+s16 FUN_80067c48(s32 arg0) {
+    return (s16)FUN_8005c9d8((s16)arg0);
 }
 
 /* ============================================================================
@@ -279,6 +281,22 @@ void FUN_80056af4(void) {
     FUN_800627f8(0);
     FUN_80062838(0);
     FUN_8006268c();
+}
+
+/* ============================================================================
+ * FUN_80057508 - 0x80057508, size: 0x4C (76 bytes)
+ * EQUIVALENT - Clears full screen to black via ClearImage + DrawSync
+ * ============================================================================ */
+void FUN_80057508(void) {
+    RECT rect;
+
+    rect.w = 0x400;
+    rect.h = 0x200;
+    rect.x = 0;
+    rect.y = 0;
+
+    ClearImage(&rect, 0, 0, 0);
+    DrawSync(0);
 }
 
 /* ============================================================================
@@ -455,8 +473,8 @@ void FUN_800678a4(void) {
  * FUN_800679b4 - 0x800679B4, size: 0x38 (56 bytes)
  * EQUIVALENT - Sign-extends s16 arg0/arg2, masks arg1 to u8, calls FUN_800678b4(arg0,0,arg1,arg2)
  * ============================================================================ */
-void FUN_800679b4(s16 arg0, u8 arg1, s16 arg2) {
-    FUN_800678b4(arg0, 0, arg1, arg2);
+void FUN_800679b4(s32 arg0, s32 arg1, s32 arg2) {
+    FUN_800678b4((s16)arg0, 0, (u8)arg1, (s16)arg2);
 }
 
 /* ============================================================================
@@ -578,6 +596,18 @@ void FUN_80022c4c(void) {
 void FUN_80057f80(void* arg0, void* arg1) {
     while (FUN_8006bc88(arg1, arg0) == 0) {
     }
+}
+
+/* ============================================================================
+ * FUN_80057df4 - 0x80057DF4, size: 0x4C (76 bytes)
+ * EQUIVALENT - Waits for file info then reads CD data into buffer
+ * Calls: FUN_80057f80(fileName, &cdlFile), FUN_80057e40(&cdlFile, buffer, mode)
+ * ============================================================================ */
+void FUN_80057df4(char* fileName, u8* buffer, u16 mode) {
+    CdlFILE cdlFile;
+
+    FUN_80057f80(fileName, &cdlFile);
+    FUN_80057e40(&cdlFile, buffer, mode);
 }
 
 /* ============================================================================
