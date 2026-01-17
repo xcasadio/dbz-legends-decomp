@@ -299,21 +299,22 @@ void FUN_80054dd0(void) {
  * EQUIVALENT - Returns DAT_gp_018c->cd.timer_110 if < 0x10 (signed), else 0
  * ============================================================================ */
 s16 FUN_80054d9c(void) {
-    s16 timer = (s16)DAT_gp_018c->cd.timer_110;
+    s16 timer_s = (s16)DAT_gp_018c->cd.timer_110;
+    u16 timer_u = (u16)DAT_gp_018c->cd.timer_110;
 
-    if (timer < 0x10) {
-        return timer;
+    if (timer_s >= 0x10) {
+        timer_u = 0;
     }
 
-    return 0;
+    return (s16)timer_u;
 }
 
 /* ============================================================================
  * FUN_80063714 - 0x80063714, size: 0x30 (48 bytes)
  * EQUIVALENT - Sign-extends s16 arg0, masks arg1/arg2 to u16, calls FUN_800607fc
  * ============================================================================ */
-void FUN_80063714(s16 arg0, u16 arg1, u16 arg2) {
-    FUN_800607fc(arg0, arg1, arg2, 0);
+void FUN_80063714(s32 arg0, s32 arg1, s32 arg2) {
+    FUN_800607fc((s16)arg0, (u16)arg1, (u16)arg2, 0);
 }
 
 /* ============================================================================
