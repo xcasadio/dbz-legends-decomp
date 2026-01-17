@@ -163,6 +163,15 @@ void FUN_8004bf94(UnkStruct_8004bf94* arg0) {
 }
 
 /* ============================================================================
+ * FUN_80044754 - 0x80044754, size: 0x30 (48 bytes)
+ * EQUIVALENT - Clears bit 0x20000000 at +0x134, clears byte at +0x224
+ * ============================================================================ */
+void FUN_80044754(void* arg0) {
+    *(u32*)((u8*)arg0 + 0x134) &= 0xDFFFFFFF;
+    *(u8*)((u8*)arg0 + 0x224) = 0;
+}
+
+/* ============================================================================
  * FUN_8006420c - 0x8006420C, size: 0x28 (40 bytes)
  * EQUIVALENT - Sign-extends s16 arg and calls FUN_80064168(arg0, 0)
  * Note: compiler uses subu/addu for stack adjust vs addiu.
@@ -178,6 +187,23 @@ void FUN_8006420c(s16 arg0) {
  * ============================================================================ */
 s16 FUN_80064300(s32 arg0, s32 arg1, s32 arg2) {
     return (s16)FUN_80064368(arg0, (s16)arg1, 1, arg2);
+}
+
+/* ============================================================================
+ * FUN_80064a78 - 0x80064A78, size: 0x50 (80 bytes)
+ * EQUIVALENT - Sets main SPU volume L/R to (s16)arg*129 via SpuSetCommonAttr
+ * Notes: uses sll/sra sign-extend + (x<<7)+x multiply pattern
+ * ============================================================================ */
+void FUN_80064a78(s32 arg0, s32 arg1) {
+    SpuCommonAttr attr;
+    s32 vol_l = (s16)arg0;
+    s32 vol_r = (s16)arg1;
+
+    attr.mask = 3;
+    attr.mvol_l = (s16)((vol_l << 7) + vol_l);
+    attr.mvol_r = (s16)((vol_r << 7) + vol_r);
+
+    SpuSetCommonAttr(&attr);
 }
 
 /* ============================================================================
