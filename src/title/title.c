@@ -166,9 +166,16 @@ void FUN_8004bf94(UnkStruct_8004bf94* arg0) {
  * FUN_80044754 - 0x80044754, size: 0x30 (48 bytes)
  * EQUIVALENT - Clears bit 0x20000000 at +0x134, clears byte at +0x224
  * ============================================================================ */
-void FUN_80044754(void* arg0) {
-    *(u32*)((u8*)arg0 + 0x134) &= 0xDFFFFFFF;
-    *(u8*)((u8*)arg0 + 0x224) = 0;
+typedef struct {
+    u8 pad_000[0x134];
+    u32 flags_134;
+    u8 pad_138[0x224 - 0x138];
+    u8 byte_224;
+} UnkStruct_80044754;
+
+void FUN_80044754(UnkStruct_80044754* arg0) {
+    arg0->flags_134 &= 0xDFFFFFFF;
+    arg0->byte_224 = 0;
 }
 
 /* ============================================================================
@@ -586,6 +593,43 @@ void FUN_80022630(void) {
 s32 FUN_800229e0(s32 arg0) {
     const char* str = arg0 ? DAT_800831bc : DAT_800831b4;
     return FUN_80070bc4(str) == 0;
+}
+
+/* ============================================================================
+ * FUN_8002cd70 - 0x8002CD70, size: 0x54 (84 bytes)
+ * EQUIVALENT - Initializes several fields then calls FUN_80032434
+ * ============================================================================ */
+typedef struct {
+    s16 mode_00;
+    u8 pad_002[0x10 - 0x02];
+    u32 field_10;
+    u32 field_14;
+    u32 field_18;
+    u8 pad_01C[0x20 - 0x1C];
+    s16 state_20;
+    u8 pad_022[0x2A - 0x22];
+    s16 field_2A;
+    s16 field_2C;
+    s16 field_2E;
+    s16 field_30;
+    s16 field_32;
+} UnkStruct_8002cd70;
+
+extern void FUN_8002cdc4(UnkStruct_8002cd70* arg0); /* 0x8002cdc4 */
+extern void FUN_80032434(UnkStruct_8002cd70* arg0); /* 0x80032434 */
+
+void FUN_8002cd70(UnkStruct_8002cd70* arg0) {
+    FUN_8002cdc4(arg0);
+
+    arg0->field_2C = -0x250;
+    arg0->field_2E = 0x250;
+    arg0->field_30 = 0;
+    arg0->field_32 = 0;
+
+    FUN_80032434(arg0);
+
+    arg0->field_2A = 0;
+    arg0->mode_00 = 2;
 }
 
 /* ============================================================================
