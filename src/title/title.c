@@ -8,6 +8,7 @@
 #include "game.h"
 #include "psxsdk/libcd.h"
 #include "psxsdk/libetc.h"
+#include "psxsdk/libspu.h"
 #include "psxsdk/kernel.h"
 
 /* External game functions from TITLE.EXE */
@@ -42,7 +43,7 @@ extern void FUN_8005286c(void* arg0);          /* 0x8005286c */
 extern void FUN_80062760(s32 arg0, s32 arg1);  /* 0x80062760 */
 extern void FUN_800627f8(s16 arg0);            /* 0x800627f8 */
 extern void FUN_80062838(s16 arg0);            /* 0x80062838 */
-extern void FUN_80062878(void* arg0);          /* 0x80062878 */
+extern void SpuSetReverbModeParam(SpuReverbAttr* attr); /* 0x80062878 */
 extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
 extern s32 FUN_8006bc88(void* arg0, void* arg1); /* 0x8006bc88 */
 extern void FUN_80070e34(void* arg0);           /* 0x80070e34 */
@@ -67,9 +68,7 @@ extern void* DAT_80083224;
 extern char DAT_800831b4[];
 extern char DAT_800831bc[];
 
-extern s32 DAT_80096650;
-extern s32 DAT_8009665c;
-extern s32 DAT_80096660;
+extern SpuReverbAttr DAT_80096650;
 
 extern u8 DAT_800836d4[];
 
@@ -120,8 +119,36 @@ void FUN_8004dbac(void) {
  * FUN_8004bf94 - 0x8004BF94, size: 0x3C (60 bytes)
  * EQUIVALENT - Reads s16 at +0x11E, transforms it, then calls FUN_8004be40
  * ============================================================================ */
-void FUN_8004bf94(void* arg0) {
-    s16 value = *(s16*)((u8*)arg0 + 0x11E);
+typedef struct {
+    u8 pad_00[4];
+    u16 unk_04;
+    u8 pad_06[0x92];
+    void* unk_98;
+    u8 pad_9C[0x78];
+    s16 rect_114[4];
+    u8 unk_11C[2];
+    s16 value_11E;
+    u8 pad_120[0x14];
+    u32 flags_134;
+    u32 flags_138;
+    u32 unk_13C;
+    u32 unk_140;
+    u8 pad_144[0x0C];
+    u8 color_r_150;
+    u8 color_g_151;
+    u8 color_b_152;
+    u8 pad_153[3];
+    u16 field_156;
+    u16 field_158;
+    u16 field_15A;
+    u8 pad_15C[0x0E];
+    u8 code_16A;
+    u8 pad_16B[0x08];
+    u8 code_173;
+} UnkStruct_8004bf94;
+
+void FUN_8004bf94(UnkStruct_8004bf94* arg0) {
+    s16 value = arg0->value_11E;
     u16 result = (u16)FUN_8003bcc4(value);
 
     FUN_8004be40(arg0, result);
@@ -349,22 +376,22 @@ void FUN_8006268c(void) {
 
 /* ============================================================================
  * FUN_800627f8 - 0x800627F8, size: 0x40 (64 bytes)
- * EQUIVALENT - Writes request type 0x10 and arg to globals, then calls FUN_80062878
+ * EQUIVALENT - Writes request mask 0x10 and feedback, then calls SpuSetReverbModeParam
  * ============================================================================ */
 void FUN_800627f8(s16 arg0) {
-    DAT_80096650 = 0x10;
-    DAT_80096660 = arg0;
-    FUN_80062878(&DAT_80096650);
+    DAT_80096650.mask = 0x10;
+    DAT_80096650.feedback = (s32)arg0;
+    SpuSetReverbModeParam(&DAT_80096650);
 }
 
 /* ============================================================================
  * FUN_80062838 - 0x80062838, size: 0x40 (64 bytes)
- * EQUIVALENT - Writes request type 0x8 and arg to globals, then calls FUN_80062878
+ * EQUIVALENT - Writes request mask 0x8 and delay, then calls SpuSetReverbModeParam
  * ============================================================================ */
 void FUN_80062838(s16 arg0) {
-    DAT_80096650 = 0x8;
-    DAT_8009665c = arg0;
-    FUN_80062878(&DAT_80096650);
+    DAT_80096650.mask = 0x8;
+    DAT_80096650.delay = (s32)arg0;
+    SpuSetReverbModeParam(&DAT_80096650);
 }
 
 /* ============================================================================
