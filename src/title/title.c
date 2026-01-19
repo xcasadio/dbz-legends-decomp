@@ -55,6 +55,7 @@ extern void SpuSetReverbModeParam(SpuReverbAttr* attr); /* 0x80062878 */
 extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
 extern s32 FUN_8006bc88(void* arg0, void* arg1); /* 0x8006bc88 */
 extern void FUN_80070e34(void* arg0);           /* 0x80070e34 */
+extern void FUN_8003de38(void* arg0, s32 arg1); /* 0x8003de38 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -593,6 +594,16 @@ void FUN_80022630(void) {
 s32 FUN_800229e0(s32 arg0) {
     const char* str = arg0 ? DAT_800831bc : DAT_800831b4;
     return FUN_80070bc4(str) == 0;
+}
+
+/* ============================================================================
+ * FUN_800469a4 - 0x800469A4, size: 0x54 (84 bytes)
+ * EQUIVALENT - Calls FUN_8003de38, FUN_80027314, then sets flags_138 to 0x4000000
+ * ============================================================================ */
+void FUN_800469a4(UnkStruct_8004bf94* arg0) {
+    FUN_8003de38(arg0, 0x22);
+    FUN_80027314(arg0);
+    arg0->flags_138 = 0x4000000;
 }
 
 /* ============================================================================
