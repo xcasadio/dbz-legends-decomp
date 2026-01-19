@@ -691,6 +691,114 @@ void FUN_8004247c(UnkStruct_8004bf94* arg0) {
 }
 
 /* ============================================================================
+ * FUN_8003287c - 0x8003287C, size: 0x5C (92 bytes)
+ * EQUIVALENT - Updates fields at +0x2C and +0x2E, sets mode to 5 when both are zero
+ * ============================================================================ */
+typedef struct {
+    s16 mode_00;
+    u8 pad_002[0x2C - 0x02];
+    s16 field_2C;
+    s16 field_2E;
+} UnkStruct_8003287c;
+
+void FUN_8003287c(UnkStruct_8003287c* arg0) {
+    s16 val1;
+    s16 val2;
+
+    val1 = arg0->field_2C;
+    arg0->field_2C = val1 + 0x80;
+    if (arg0->field_2C >= 0) {
+        arg0->field_2C = 0;
+    }
+
+    val2 = arg0->field_2E;
+    arg0->field_2E = val2 - 0x80;
+    if (arg0->field_2E <= 0) {
+        arg0->field_2E = 0;
+    }
+
+    if ((arg0->field_2C | arg0->field_2E) == 0) {
+        arg0->mode_00 = 5;
+    }
+}
+
+/* ============================================================================
+ * FUN_80040bbc - 0x80040BBC, size: 0x5C (92 bytes)
+ * EQUIVALENT - Calls FUN_8003de38 with parameter and sets bit 4 in flags_138
+ * ============================================================================ */
+void FUN_80040bbc(UnkStruct_8004bf94* arg0, s32 arg1) {
+    FUN_8003de38(arg0, arg1);
+    arg0->flags_138 |= 0x10;
+}
+
+/* ============================================================================
+ * FUN_80056624 - 0x80056624, size: 0x5C (92 bytes)
+ * EQUIVALENT - Sends CD control commands 0x0A and 0x08, resets DAT_8008335c
+ * ============================================================================ */
+extern s32 DAT_8008335c;
+extern u32 DAT_800833fc;
+
+void FUN_80056624(void) {
+    s32 result;
+
+    do {
+        result = CdControlB(0x0A, (u_char*)0, (u_char*)0);
+    } while (result == 0);
+
+    do {
+        result = CdControlB(0x08, (u_char*)0, (u_char*)0);
+    } while (result == 0);
+
+    DAT_8008335c = 0;
+    DAT_800833fc &= 0xFFFFFFFD;
+}
+
+/* ============================================================================
+ * FUN_80067188 - 0x80067188, size: 0x5C (92 bytes)
+ * EQUIVALENT - Extracts bit fields from two u32 params into u16 array
+ * ============================================================================ */
+void FUN_80067188(u32 arg0, u32 arg1, u16* arg2) {
+    u16 val1;
+
+    arg2[5] = (u16)arg0 & 0x8000;
+    val1 = (u16)arg1;
+    arg2[6] = val1 & 0x8000;
+    arg2[8] = val1 & 0x4000;
+    arg2[7] = val1 & 0x20;
+    arg2[0] = (u16)((arg0 & 0xFFFF) >> 8) & 0x7F;
+    arg2[1] = (u16)((arg0 & 0xFFFF) >> 4) & 0xF;
+    arg2[2] = (u16)arg0 & 0xF;
+    arg2[3] = (u16)(arg1 >> 6) & 0x7F;
+    arg2[4] = val1 & 0x1F;
+}
+
+/* ============================================================================
+ * FUN_80049b44 - 0x80049B44, size: 0x60 (96 bytes)
+ * EQUIVALENT - Clears unk_04, computes offsets based on sign and index
+ * ============================================================================ */
+void FUN_80049b44(UnkStruct_8004bf94* arg0, s32 arg1, u32 arg2) {
+    u32 value;
+    s32 offset;
+
+    arg0->unk_04 = 0;
+
+    offset = arg1;
+    if (arg1 >= 0) {
+        offset = arg1 + *(s32*)arg0->pad_00;
+    }
+
+    value = *(u32*)(offset + (arg2 & 0xFFFF) * 4);
+    *(u32*)(arg0->pad_06 + 2) = value;
+
+    if (value < 0x80000000) {
+        *(u32*)(arg0->pad_06 + 2) = value + *(s32*)arg0->pad_00;
+    }
+
+    arg0->pad_06[0] = 0;
+    arg0->pad_06[1] = 0;
+}
+
+/* ============================================================================
  * FUN_80027314 - 0x80027314, size: 0x40 (64 bytes)
  * EQUIVALENT - Clears entries referencing arg0 in a 30-element table; clears byte at arg0+0x227
  * ============================================================================ */
