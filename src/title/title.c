@@ -30,7 +30,7 @@ extern void* FUN_80049504(void* callback, s32 arg1, s32 arg2, s32 arg3, s32 arg4
 extern void FUN_80057c80(void* arg0);     /* 0x80057c80 */
 extern void FUN_80037388(void);           /* 0x80037388 */
 extern void FUN_80056dc0(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7);  /* 0x80056dc0 */
-extern void FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
+extern s16 FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
 extern void FUN_80058d64(void);           /* 0x80058d64 */
 extern void FUN_80021dd0(void);           /* 0x80021dd0 */
 extern void FUN_80022c94(void);           /* 0x80022c94 */
@@ -54,10 +54,20 @@ extern void FUN_80062838(s16 arg0);            /* 0x80062838 */
 extern void SpuSetReverbModeParam(SpuReverbAttr* attr); /* 0x80062878 */
 extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
 extern s32 FUN_8006bc88(void* arg0, void* arg1); /* 0x8006bc88 */
-extern void FUN_80070e34(void* arg0);           /* 0x80070e34 */
+extern void FUN_80070e34(void* arg0);           /* 0x80070e34 - TestEvent from PSX SDK */
 extern void FUN_8003de38(void* arg0, s32 arg1); /* 0x8003de38 */
 extern s32 FUN_80027174(void);                  /* 0x80027174 */
 extern void FUN_80030ec4(void);                 /* 0x80030ec4 */
+extern void FUN_80056b30(void);                 /* 0x80056b30 */
+extern void FUN_80056d00(void);                 /* 0x80056d00 */
+extern void FUN_80058158(const char* arg0);     /* 0x80058158 */
+extern void FUN_800402dc(void* arg0);           /* 0x800402dc */
+extern void FUN_80022c04(void);                 /* 0x80022c04 */
+extern s32 FUN_80022b1c(void);                  /* 0x80022b1c */
+extern void FUN_80057b08(void* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5); /* 0x80057b08 */
+extern void LoadImageInVram(u_long* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, u8 arg5); /* LoadImageInVram */
+extern void FUN_8004080c(UnkStruct_8004bf94* arg0, s32 arg1);   /* 0x8004080c */
+extern s32 FUN_80063608(s32 arg0, s32 arg1);    /* 0x80063608 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -97,6 +107,34 @@ extern volatile u32 DAT_1f80012c;
 
 extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
 extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
+extern s32 DAT_8008337c;   /* CD seek mode */
+extern s32 DAT_80083358;   /* CD sector index */
+extern u8 DAT_8008f19c;    /* CD sector data base */
+extern s32 DAT_8008335c;   /* CD status flags */
+extern u32 DAT_800833fc;   /* CD control flags */
+extern u32 DAT_800833dc;   /* Game state pointer */
+extern u32 DAT_800831b4;   /* String part 1 */
+extern u16 DAT_800831b8;   /* String part 2 */
+extern u32 DAT_800831bc;   /* String part 3 */
+extern u16 DAT_800831c0;   /* String part 4 */
+extern u32 DAT_800834c8;   /* Event handle 1 */
+extern u32 DAT_800834cc;   /* Event handle 2 */
+extern u32 DAT_800834d0;   /* Event handle 3 */
+extern u32 DAT_800834d4;   /* Event handle 4 */
+extern u32 DAT_800834ec;   /* Event handle 5 */
+extern u32 DAT_800834f0;   /* Event handle 6 */
+extern u32 DAT_800834f4;   /* Event handle 7 */
+extern u32 DAT_800834f8;   /* Event handle 8 */
+extern u32 DAT_800833f4;   /* Pointer */
+extern u32 DAT_80083440;   /* CD status */
+extern s16 DAT_800acb1a;   /* Character index */
+extern u8 DAT_800b954c;    /* Character data base */
+extern u8 DAT_80077a50;    /* Image data base */
+extern void* PTR_DAT_80077b38; /* Image pointer */
+extern s32 DAT_800a8880;   /* Global data array base */
+extern u8 DAT_8008f568;    /* Global array 1 */
+extern u8 DAT_8008f56a;    /* Global array 2 */
+extern u8 DAT_8008f6e8;    /* Global array 3 */
 
 extern void* DAT_gp_0314;  /* GP + 0x314 = 788 */
 extern void* DAT_gp_0318;  /* GP + 0x318 = 792 */
@@ -799,6 +837,299 @@ void FUN_80049b44(UnkStruct_8004bf94* arg0, s32 arg1, u32 arg2) {
 }
 
 /* ============================================================================
+ * FUN_80056a94 - 0x80056A94, size: 0x60 (96 bytes)
+ * EQUIVALENT - Sends CD seek command and updates CD status flags
+ * ============================================================================ */
+void FUN_80056a94(void) {
+    DAT_8008337c = 3;
+    CdControl(0x03, &DAT_8008f19c + DAT_80083358 * 4, (u_char*)0);
+    DAT_8008335c &= 0xFFFFFFFE;
+    DAT_800833fc &= 0xFFFFFFFD;
+}
+
+/* ============================================================================
+ * FUN_80022a20 - 0x80022A20, size: 0x64 (100 bytes)
+ * EQUIVALENT - Checks for save file on memory card
+ * ============================================================================ */
+s32 FUN_80022a20(s32 arg0) {
+    s32 result;
+    u32 local_50;
+    u16 local_4c;
+    u8 auStack_30[40];
+
+    if (arg0 == 0) {
+        local_50 = DAT_800831b4;
+        local_4c = DAT_800831b8;
+    } else {
+        local_50 = DAT_800831bc;
+        local_4c = DAT_800831c0;
+    }
+
+    strcat((char*)&local_50, "BISLPS-00355DRAGON");
+    result = firstfile((char*)&local_50, auStack_30);
+    return result == 0;
+}
+
+/* ============================================================================
+ * FUN_800360f0 - 0x800360F0, size: 0x64 (100 bytes)
+ * EQUIVALENT - Checks for button press and loads movie executable
+ * ============================================================================ */
+void FUN_800360f0(void) {
+    s32 result;
+
+    if ((*(u32*)(DAT_800833dc + 0x10) & 8) != 0) {
+        result = FUN_80038228(9, 0);
+        if (result == 0) {
+            FUN_80056b30();
+            FUN_80056d00();
+            FUN_80058158("cdrom:\\MOVIE.EXE;1");
+        }
+    }
+}
+
+/* ============================================================================
+ * FUN_80057030 - 0x80057030, size: 0x64 (100 bytes)
+ * EQUIVALENT - Frees memory slot and clears associated data
+ * ============================================================================ */
+s32 FUN_80057030(s32 arg0, u32 arg1) {
+    s32 result;
+    s32* ptr;
+
+    if ((arg1 & 0xFFFF) < 8) {
+        ptr = (s32*)(arg0 + (arg1 & 0xFFFF) * 4);
+        result = 0xFFFFFFFE;
+        if (*ptr == 0) {
+            free((void*)0);
+            result = 0;
+            *ptr = 0;
+            ptr[8] = 0;
+            ptr[0x10] = 0;
+        }
+    } else {
+        result = 0xFFFFFFFC;
+    }
+
+    return result;
+}
+
+/* ============================================================================
+ * FUN_80032814 - 0x80032814, size: 0x68 (104 bytes)
+ * EQUIVALENT - Decrements three byte values with underflow protection
+ * ============================================================================ */
+void FUN_80032814(s32 arg0, u8 arg1) {
+    u8 val;
+
+    val = *(u8*)(arg0 + 0x23) - arg1;
+    *(u8*)(arg0 + 0x23) = val;
+    if ((val & 0x80) != 0) {
+        *(u8*)(arg0 + 0x23) = 0;
+    }
+
+    val = *(u8*)(arg0 + 0x24) - arg1;
+    *(u8*)(arg0 + 0x24) = val;
+    if ((val & 0x80) != 0) {
+        *(u8*)(arg0 + 0x24) = 0;
+    }
+
+    val = *(u8*)(arg0 + 0x25) - arg1;
+    *(u8*)(arg0 + 0x25) = val;
+    if ((val & 0x80) != 0) {
+        *(u8*)(arg0 + 0x25) = 0;
+    }
+}
+
+/* ============================================================================
+ * FUN_80040ae4 - 0x80040AE4, size: 0x6C (108 bytes)
+ * EQUIVALENT - Calls FUN_8003de38, sets bit 0 in flags_138, calls FUN_800402dc
+ * ============================================================================ */
+void FUN_80040ae4(UnkStruct_8004bf94* arg0, s32 arg1) {
+    FUN_8003de38(arg0, arg1);
+    arg0->flags_138 |= 1;
+    FUN_800402dc(arg0);
+}
+
+/* ============================================================================
+ * FUN_80040b50 - 0x80040B50, size: 0x6C (108 bytes)
+ * EQUIVALENT - Calls FUN_8003de38, sets bit 3 in flags_138, calls FUN_800402dc
+ * ============================================================================ */
+void FUN_80040b50(UnkStruct_8004bf94* arg0, s32 arg1) {
+    FUN_8003de38(arg0, arg1);
+    arg0->flags_138 |= 8;
+    FUN_800402dc(arg0);
+}
+
+/* ============================================================================
+ * FUN_80022900 - 0x80022900, size: 0x70 (112 bytes)
+ * EQUIVALENT - Memory card info query with retry on error
+ * ============================================================================ */
+s32 FUN_80022900(s32 arg0) {
+    s32 result;
+
+    FUN_80022c04();
+    _card_info(0);
+    result = FUN_80022b1c();
+
+    if ((result == 2) && (arg0 != 2)) {
+        FUN_80022c04();
+        _card_info(0);
+        result = FUN_80022b1c();
+    }
+
+    return result;
+}
+
+/* ============================================================================
+ * FUN_80022970 - 0x80022970, size: 0x70 (112 bytes)
+ * EQUIVALENT - Counts free blocks on memory card
+ * ============================================================================ */
+s32 FUN_80022970(s32 arg0) {
+    s32 result;
+    const char* path;
+    s32 count;
+    u8 auStack_30[24];
+    s32 local_18;
+
+    count = 0;
+
+    if (arg0 == 0) {
+        path = "bu00:*.*";
+    } else {
+        path = "bu10:*.*";
+    }
+
+    result = firstfile((char*)path, auStack_30);
+    while (result != 0) {
+        count += (local_18 >> 0xD);
+        result = nextfile(auStack_30);
+    }
+
+    return 0xF - count;
+}
+
+/* ============================================================================
+ * FUN_800328d8 - 0x800328D8, size: 0x70 (112 bytes)
+ * EQUIVALENT - Updates fields with clamping and mode transition
+ * ============================================================================ */
+void FUN_800328d8(UnkStruct_8003287c* arg0) {
+    s16 val;
+
+    val = arg0->field_2C;
+    arg0->field_2C = val + 0x80;
+    if (arg0->field_2C > 0x24F) {
+        arg0->field_2C = -0x250;
+    }
+
+    val = arg0->field_2E;
+    arg0->field_2E = val - 0x80;
+    if (arg0->field_2E < -0x24F) {
+        arg0->field_2E = 0x250;
+    }
+
+    if ((arg0->field_2C | arg0->field_2E) == 0x250FDB0) {
+        arg0->mode_00 = 2;
+    }
+}
+
+/* ============================================================================
+ * FUN_80056158 - 0x80056158, size: 0x70 (112 bytes)
+ * EQUIVALENT - Checks CD status and updates flags
+ * ============================================================================ */
+s32 FUN_80056158(void) {
+    s32 result;
+
+    *(u8*)(DAT_800833f4 + 0x174) = 2;
+
+    if (((DAT_80083440 == 0) || ((DAT_80083440 & 0x3F) == 0xB)) || ((DAT_80083440 & 0x80) != 0)) {
+        result = 0;
+    } else if ((DAT_80083440 == 9) || (DAT_80083440 == 0x10)) {
+        DAT_80083440 = 0;
+        DAT_800833fc &= 0xFFFFFFDF;
+        result = 0;
+    } else {
+        result = 1;
+    }
+
+    return result;
+}
+
+/* ============================================================================
+ * FUN_8006097c - 0x8006097C, size: 0x70 (112 bytes)
+ * EQUIVALENT - Retrieves character data by index
+ * ============================================================================ */
+s32 FUN_8006097c(u32 arg0, u16* arg1, u16* arg2) {
+    s32 offset;
+
+    DAT_800acb1a = (s16)arg0;
+    offset = ((s32)(arg0 & 0xFF00) >> 8) * 0xAC + (&DAT_800b954c)[arg0 & 0xFF];
+    *arg1 = *(u16*)(offset + 0x74);
+    *arg2 = *(u16*)(offset + 0x76);
+
+    return (s32)DAT_800acb1a;
+}
+
+/* ============================================================================
+ * FUN_80022b1c - 0x80022B1C, size: 0x74 (116 bytes)
+ * EQUIVALENT - Polls memory card events and returns status
+ * ============================================================================ */
+s32 FUN_80022b1c(void) {
+    s32 result;
+
+    do {
+        result = TestEvent(DAT_800834c8);
+        if (result == 1) {
+            return 0;
+        }
+        result = TestEvent(DAT_800834cc);
+        if (result == 1) {
+            return 1;
+        }
+        result = TestEvent(DAT_800834d0);
+        if (result == 1) {
+            return 2;
+        }
+        result = TestEvent(DAT_800834d4);
+    } while (result != 1);
+
+    return 4;
+}
+
+/* ============================================================================
+ * FUN_80022b90 - 0x80022B90, size: 0x74 (116 bytes)
+ * EQUIVALENT - Polls memory card events (second slot) and returns status
+ * ============================================================================ */
+s32 FUN_80022b90(void) {
+    s32 result;
+
+    do {
+        result = TestEvent(DAT_800834ec);
+        if (result == 1) {
+            return 0;
+        }
+        result = TestEvent(DAT_800834f0);
+        if (result == 1) {
+            return 1;
+        }
+        result = TestEvent(DAT_800834f4);
+        if (result == 1) {
+            return 2;
+        }
+        result = TestEvent(DAT_800834f8);
+    } while (result != 1);
+
+    return 4;
+}
+
+/* ============================================================================
+ * FUN_80035700 - 0x80035700, size: 0x74 (116 bytes)
+ * EQUIVALENT - Clears memory and loads images
+ * ============================================================================ */
+void FUN_80035700(void) {
+    memset((u8*)(UnkStruct_Array_8004bf94 + 1), 0, 0xB610);
+    FUN_80057b08(&DAT_80077a50, 0x380, 0x180, 0x10, 0x40, 0);
+    LoadImageInVram((u_long*)&PTR_DAT_80077b38, 0, 0x1EA, 0xA0, 1, 0);
+}
+
+/* ============================================================================
  * FUN_80027314 - 0x80027314, size: 0x40 (64 bytes)
  * EQUIVALENT - Clears entries referencing arg0 in a 30-element table; clears byte at arg0+0x227
  * ============================================================================ */
@@ -889,6 +1220,99 @@ void FUN_80037104(s16 arg0) {
     DAT_gp_02dc = 0;
 
     FUN_80049504((void*)0x8003714c, 0, 0xD, 0xC, 0, PTR_800798dc);
+}
+
+/* ============================================================================
+ * FUN_80040ee0 - 0x80040EE0, size: 0x74 (116 bytes)
+ * EQUIVALENT - Calls FUN_8003de38 and manipulates flags_138
+ * ============================================================================ */
+void FUN_80040ee0(UnkStruct_8004bf94* arg0) {
+    FUN_8003de38(arg0, 0x20);
+    arg0->flags_138 = arg0->flags_138 & 0xFA640000;
+    arg0->flags_138 = arg0->flags_138 | 0x4000;
+}
+
+/* ============================================================================
+ * FUN_800411f8 - 0x800411F8, size: 0x74 (116 bytes)
+ * EQUIVALENT - Conditionally clears flag bit and calls FUN_8004080c
+ * ============================================================================ */
+void FUN_800411f8(UnkStruct_8004bf94* arg0) {
+    if (arg0->unk_04 == 0) {
+        arg0->flags_138 = arg0->flags_138 & 0xFFFF7FFF;
+        FUN_8004080c(arg0, 0);
+    }
+}
+
+/* ============================================================================
+ * FUN_80060be8 - 0x80060BE8, size: 0x74 (116 bytes)
+ * EQUIVALENT - Sets byte in global array after validation
+ * ============================================================================ */
+u32 FUN_80060be8(s16 arg0, s16 arg1, u8 arg2) {
+    s32 result;
+    u32 retval;
+
+    result = FUN_80063608((s32)arg0, (s32)arg1);
+    retval = 0xFFFFFFFF;
+
+    if (result == 0) {
+        s32 offset = arg1 * 0x10;
+        (&DAT_8008f56a)[offset] = arg2;
+        retval = (u32)(&DAT_8008f56a)[offset];
+    }
+
+    return retval;
+}
+
+/* ============================================================================
+ * FUN_8003279c - 0x8003279C, size: 0x78 (120 bytes)
+ * EQUIVALENT - Decrements three struct fields with clamping to zero
+ * ============================================================================ */
+void FUN_8003279c(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4) {
+    s32 offset;
+    s32 val;
+
+    offset = arg0 + ((arg1 << 0x10) >> 0xF);
+
+    val = (u32)*(u16*)(offset + 0x30) - arg2;
+    *(s16*)(offset + 0x30) = (s16)val;
+    if (val * 0x10000 < 1) {
+        *(s16*)(offset + 0x30) = 0;
+    }
+
+    val = (u32)*(u16*)(offset + 0x38) - arg3;
+    *(s16*)(offset + 0x38) = (s16)val;
+    if (val * 0x10000 < 1) {
+        *(s16*)(offset + 0x38) = 0;
+    }
+
+    val = (u32)*(u16*)(offset + 0x40) - arg4;
+    *(s16*)(offset + 0x40) = (s16)val;
+    if (val * 0x10000 < 1) {
+        *(s16*)(offset + 0x40) = 0;
+    }
+}
+
+/* ============================================================================
+ * FUN_800620e8 - 0x800620E8, size: 0x7C (124 bytes)
+ * EQUIVALENT - Updates global arrays with bounds checking
+ * ============================================================================ */
+u32 FUN_800620e8(u16 arg0, u16 arg1, u16 arg2) {
+    u8 val;
+    u32 retval;
+    s32 index;
+
+    if (arg0 < 0x18) {
+        index = (s32)(s16)arg0;
+        (&DAT_8008f56a)[index * 8] = arg2;
+        val = (&DAT_8008f6e8)[index];
+        retval = 0;
+        (&DAT_8008f568)[index * 8] = arg1;
+        (&DAT_8008f6e8)[index] = val | 3;
+    } else {
+        retval = 0xFFFFFFFF;
+    }
+
+    return retval;
 }
 
 /* Title main function - 0x800581DC, size: 0x20C (524 bytes)
