@@ -68,6 +68,7 @@ extern void FUN_80057b08(void* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32
 extern void LoadImageInVram(u_long* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, u8 arg5); /* LoadImageInVram */
 extern void FUN_8004080c(UnkStruct_8004bf94* arg0, s32 arg1);   /* 0x8004080c */
 extern s32 FUN_80063608(s32 arg0, s32 arg1);    /* 0x80063608 */
+extern u32 FUN_800670cc(void);                  /* 0x800670cc */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -135,6 +136,12 @@ extern s32 DAT_800a8880;   /* Global data array base */
 extern u8 DAT_8008f568;    /* Global array 1 */
 extern u8 DAT_8008f56a;    /* Global array 2 */
 extern u8 DAT_8008f6e8;    /* Global array 3 */
+extern s32 DAT_8007b484;   /* SPU initialization flag */
+extern s32 DAT_8007b000;   /* SPU state variable 1 */
+extern s32 DAT_8007b004;   /* SPU state variable 2 */
+extern u32 DAT_8007b080;   /* SPU event descriptor */
+extern u16 DAT_80078b3c;   /* Lookup table base */
+extern SVECTOR SVECTOR_1f80007c; /* GTE scratchpad vector */
 
 extern void* DAT_gp_0314;  /* GP + 0x314 = 788 */
 extern void* DAT_gp_0318;  /* GP + 0x318 = 792 */
@@ -1313,6 +1320,61 @@ u32 FUN_800620e8(u16 arg0, u16 arg1, u16 arg2) {
     }
 
     return retval;
+}
+
+/* ============================================================================
+ * FUN_800640ec - 0x800640EC, size: 0x7C (124 bytes)
+ * EQUIVALENT - SPU shutdown (likely SpuQuit)
+ * ============================================================================ */
+void FUN_800640ec(void) {
+    if (DAT_8007b484 == 1) {
+        DAT_8007b484 = 0;
+        FUN_80070b64();
+        DAT_8007b000 = 0;
+        DAT_8007b004 = 0;
+        _SpuDataCallback(0);
+        CloseEvent(DAT_8007b080);
+        DisableEvent(DAT_8007b080);
+        FUN_80070e44();
+    }
+}
+
+/* ============================================================================
+ * FUN_80066324 - 0x80066324, size: 0x7C (124 bytes)
+ * EQUIVALENT - Sets byte at offset 0x13, increments counter, updates timestamp
+ * ============================================================================ */
+void FUN_80066324(s16 arg0, s16 arg1, u8 arg2) {
+    u32 timestamp;
+    s32 offset;
+
+    offset = arg1 * 0xAC + (&DAT_800b954c)[arg0];
+    *(u8*)(offset + 0x13) = arg2;
+    *(s8*)(offset + 0x29) = *(s8*)(offset + 0x29) + 1;
+    timestamp = FUN_800670cc();
+    *(u32*)(offset + 0x88) = timestamp;
+}
+
+/* ============================================================================
+ * FUN_800663a0 - 0x800663A0, size: 0x7C (124 bytes)
+ * EQUIVALENT - Sets byte at offset 0x14, increments counter, updates timestamp
+ * ============================================================================ */
+void FUN_800663a0(s16 arg0, s16 arg1, u8 arg2) {
+    u32 timestamp;
+    s32 offset;
+
+    offset = arg1 * 0xAC + (&DAT_800b954c)[arg0];
+    *(u8*)(offset + 0x14) = arg2;
+    *(s8*)(offset + 0x29) = *(s8*)(offset + 0x29) + 1;
+    timestamp = FUN_800670cc();
+    *(u32*)(offset + 0x88) = timestamp;
+}
+
+/* ============================================================================
+ * FUN_8003bcc4 - 0x8003BCC4, size: 0x80 (128 bytes)
+ * EQUIVALENT - Lookup table accessor using GTE scratchpad
+ * ============================================================================ */
+u16 FUN_8003bcc4(s16 arg0) {
+    return *(u16*)(&DAT_80078b3c + ((s32)((s32)SVECTOR_1f80007c.vy + (s32)arg0 & 0xFFF) >> 8) * 2);
 }
 
 /* Title main function - 0x800581DC, size: 0x20C (524 bytes)
