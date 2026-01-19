@@ -82,7 +82,14 @@ extern char DAT_800831bc[];
 
 extern SpuReverbAttr DAT_80096650;
 
-extern u8 DAT_800836d4[];
+typedef struct {
+    u32 unk0;
+    u32 unk4;
+    u8 pad_08[0x18];
+    void* ptr_20;
+} Unk_800836d4_Entry;
+
+extern Unk_800836d4_Entry UnkStruct_Array_8004bf94[30];
 
 extern volatile u16 DAT_801ff10e;
 extern volatile u16 DAT_801ff100;
@@ -666,24 +673,34 @@ void FUN_80030e6c(UnkStruct_8002cd70* arg0) {
 }
 
 /* ============================================================================
+ * FUN_80040c18 - 0x80040C18, size: 0x58 (88 bytes)
+ * EQUIVALENT - Calls FUN_8003de38 and sets bit 1 in flags_138
+ * ============================================================================ */
+void FUN_80040c18(UnkStruct_8004bf94* arg0) {
+    FUN_8003de38(arg0, 0x21);
+    arg0->flags_138 |= 2;
+}
+
+/* ============================================================================
+ * FUN_8004247c - 0x8004247C, size: 0x58 (88 bytes)
+ * EQUIVALENT - Calls FUN_8003de38 and sets bit 15 in flags_138
+ * ============================================================================ */
+void FUN_8004247c(UnkStruct_8004bf94* arg0) {
+    FUN_8003de38(arg0, 0x1F);
+    arg0->flags_138 |= 0x8000;
+}
+
+/* ============================================================================
  * FUN_80027314 - 0x80027314, size: 0x40 (64 bytes)
  * EQUIVALENT - Clears entries referencing arg0 in a 30-element table; clears byte at arg0+0x227
  * ============================================================================ */
 void FUN_80027314(void* arg0) {
-    typedef struct {
-        u32 unk0;
-        u32 unk4;
-        u8 pad_08[0x18];
-        void* ptr_20;
-    } Unk_800836d4_Entry;
-
-    Unk_800836d4_Entry* entry = (Unk_800836d4_Entry*)DAT_800836d4;
     s32 i;
 
     for (i = 0; i < 30; i++) {
-        if (entry[i].ptr_20 == arg0) {
-            entry[i].unk4 = 0;
-            entry[i].unk0 = 0;
+        if (UnkStruct_Array_8004bf94[i].ptr_20 == arg0) {
+            UnkStruct_Array_8004bf94[i].unk4 = 0;
+            UnkStruct_Array_8004bf94[i].unk0 = 0;
         }
     }
 
@@ -692,10 +709,10 @@ void FUN_80027314(void* arg0) {
 
 /* ============================================================================
  * FUN_80027354 - 0x80027354, size: 0x58 (88 bytes)
- * EQUIVALENT - Clears DAT_800836d4 table (0x438 bytes) and creates object
+ * EQUIVALENT - Clears UnkStruct_Array_8004bf94 table (0x438 bytes) and creates object
  * ============================================================================ */
 void FUN_80027354(void) {
-    memset(DAT_800836d4, 0, 0x438);
+    memset(UnkStruct_Array_8004bf94, 0, 0x438);
     FUN_80049504((void*)FUN_80027174, 0, 0xB, 0, 1, DAT_800798d4);
 }
 
