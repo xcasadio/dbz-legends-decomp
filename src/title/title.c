@@ -26,7 +26,7 @@ extern void FUN_80070e44(void);           /* 0x80070e44 */
 extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
 extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
 extern void FUN_80057674(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8, s32 arg9);  /* 0x80057674 */
-extern void* FUN_80049504(u8* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80049504 */
+extern void* FUN_80049504(void* callback, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80049504 */
 extern void FUN_80057c80(void* arg0);     /* 0x80057c80 */
 extern void FUN_80037388(void);           /* 0x80037388 */
 extern void FUN_80056dc0(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7);  /* 0x80056dc0 */
@@ -68,6 +68,7 @@ extern s32 DAT_800835b4;
 extern s32 PTR_80079854;
 extern s32 PTR_800798bc;
 extern s32 PTR_800798dc;
+extern s32 DAT_800798d4;
 
 extern CdlFILE DAT_800a8860;
 extern u8 DAT_80110000;
@@ -570,7 +571,7 @@ void FUN_8005329c(void) {
  * ============================================================================ */
 void FUN_80021dd0(void) {
     FUN_80057c80((void*)(DAT_80110004 + 0x80110000));
-    FUN_80049504((u8*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
+    FUN_80049504((void*)0x80021e28, 0, 6, 0x70, 0, DAT_800898c0);
 }
 
 /* ============================================================================
@@ -669,6 +670,15 @@ void FUN_80027314(void* arg0) {
 }
 
 /* ============================================================================
+ * FUN_80027354 - 0x80027354, size: 0x58 (88 bytes)
+ * EQUIVALENT - Clears DAT_800836d4 table (0x438 bytes) and creates object
+ * ============================================================================ */
+void FUN_80027354(void) {
+    memset(DAT_800836d4, 0, 0x438);
+    FUN_80049504((void*)0x80027174, 0, 0xB, 0, 1, DAT_800798d4);
+}
+
+/* ============================================================================
  * FUN_80022c04 - 0x80022C04, size: 0x48 (72 bytes)
  * EQUIVALENT - Calls FUN_80070e34 on four GP-relative pointers
  * ============================================================================ */
@@ -719,7 +729,7 @@ void FUN_800299bc(void) {
     void* obj;
     s32* field_08;
 
-    obj = FUN_80049504((u8*)0x80029aec, 0, 5, 0xC, 0, PTR_800798bc);
+    obj = FUN_80049504((void*)0x80029aec, 0, 5, 0xC, 0, PTR_800798bc);
     field_08 = *(s32**)((u8*)obj + 8);
     *field_08 = 2;
 }
@@ -732,7 +742,7 @@ void FUN_80037104(s16 arg0) {
     DAT_gp_02a4 = arg0;
     DAT_gp_02dc = 0;
 
-    FUN_80049504((u8*)0x8003714c, 0, 0xD, 0xC, 0, PTR_800798dc);
+    FUN_80049504((void*)0x8003714c, 0, 0xD, 0xC, 0, PTR_800798dc);
 }
 
 /* Title main function - 0x800581DC, size: 0x20C (524 bytes)
@@ -770,7 +780,7 @@ void main(void) {
     DAT_80083448 = 0;
 
     FUN_80057674(0xa8, 0x80, 0x1000, 0, 0, 0, 0x1000, 0, 0, 0);
-    FUN_80049504((u8*)FUN_80037388, 0, 0, 0, 0, PTR_80079854);
+    FUN_80049504((void*)FUN_80037388, 0, 0, 0, 0, PTR_80079854);
     FUN_80037388();
     FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
     DAT_80083544 = 0;
