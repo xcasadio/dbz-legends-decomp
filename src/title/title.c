@@ -56,6 +56,8 @@ extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
 extern s32 FUN_8006bc88(void* arg0, void* arg1); /* 0x8006bc88 */
 extern void FUN_80070e34(void* arg0);           /* 0x80070e34 */
 extern void FUN_8003de38(void* arg0, s32 arg1); /* 0x8003de38 */
+extern s32 FUN_80027174(void);                  /* 0x80027174 */
+extern void FUN_80030ec4(void);                 /* 0x80030ec4 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -645,6 +647,25 @@ void FUN_8002cd70(UnkStruct_8002cd70* arg0) {
 }
 
 /* ============================================================================
+ * FUN_80030e6c - 0x80030E6C, size: 0x58 (88 bytes)
+ * EQUIVALENT - Initializes several fields then calls FUN_80032434
+ * Uses same struct layout as FUN_8002cd70
+ * ============================================================================ */
+void FUN_80030e6c(UnkStruct_8002cd70* arg0) {
+    FUN_80030ec4();
+
+    arg0->field_2C = -0x250;
+    arg0->field_2E = 0x250;
+    arg0->field_30 = 0;
+    arg0->field_32 = 0;
+
+    FUN_80032434(arg0);
+
+    arg0->field_2A = 0;
+    arg0->mode_00 = 2;
+}
+
+/* ============================================================================
  * FUN_80027314 - 0x80027314, size: 0x40 (64 bytes)
  * EQUIVALENT - Clears entries referencing arg0 in a 30-element table; clears byte at arg0+0x227
  * ============================================================================ */
@@ -675,7 +696,7 @@ void FUN_80027314(void* arg0) {
  * ============================================================================ */
 void FUN_80027354(void) {
     memset(DAT_800836d4, 0, 0x438);
-    FUN_80049504((void*)0x80027174, 0, 0xB, 0, 1, DAT_800798d4);
+    FUN_80049504((void*)FUN_80027174, 0, 0xB, 0, 1, DAT_800798d4);
 }
 
 /* ============================================================================
