@@ -44,7 +44,7 @@ extern s32 FUN_80064368(s32 arg0, s16 arg1, s32 arg2, s32 arg3);   /* 0x80064368
 extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
 extern void FUN_800678b4(s16 arg0, s32 arg1, u8 arg2, s16 arg3);   /* 0x800678b4 */
 extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
-extern s32 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
+extern s16 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
 extern void FUN_8004be40(void* arg0, u16 arg1); /* 0x8004be40 */
 extern void FUN_80050744(void* arg0);          /* 0x80050744 */
 extern void FUN_8005286c(void* arg0);          /* 0x8005286c */
@@ -68,7 +68,7 @@ extern void FUN_80057b08(void* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32
 extern void LoadImageInVram(u_long* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, u8 arg5); /* LoadImageInVram */
 extern void FUN_8004080c(UnkStruct_8004bf94* arg0, s32 arg1);   /* 0x8004080c */
 extern s32 FUN_80063608(s32 arg0, s32 arg1);    /* 0x80063608 */
-extern u32 FUN_800670cc(void);                  /* 0x800670cc */
+extern u32 FUN_800670cc(s16 arg0, s16 arg1);                  /* 0x800670cc */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -129,7 +129,7 @@ extern u32 DAT_800834f8;   /* Event handle 8 */
 extern u32 DAT_800833f4;   /* Pointer */
 extern u32 DAT_80083440;   /* CD status */
 extern s16 DAT_800acb1a;   /* Character index */
-extern u8 DAT_800b954c;    /* Character data base */
+extern s32 INT_ARRAY_800b954c[];    /* Character data base */
 extern u8 DAT_80077a50;    /* Image data base */
 extern void* PTR_DAT_80077b38; /* Image pointer */
 extern s32 DAT_800a8880;   /* Global data array base */
@@ -1067,7 +1067,7 @@ s32 FUN_8006097c(u32 arg0, u16* arg1, u16* arg2) {
     s32 offset;
 
     DAT_800acb1a = (s16)arg0;
-    offset = ((s32)(arg0 & 0xFF00) >> 8) * 0xAC + (&DAT_800b954c)[arg0 & 0xFF];
+    offset = ((s32)(arg0 & 0xFF00) >> 8) * 0xAC + (&INT_ARRAY_800b954c)[arg0 & 0xFF];
     *arg1 = *(u16*)(offset + 0x74);
     *arg2 = *(u16*)(offset + 0x76);
 
@@ -1347,10 +1347,10 @@ void FUN_80066324(s16 arg0, s16 arg1, u8 arg2) {
     u32 timestamp;
     s32 offset;
 
-    offset = arg1 * 0xAC + (&DAT_800b954c)[arg0];
+    offset = arg1 * 0xAC + (&INT_ARRAY_800b954c)[arg0];
     *(u8*)(offset + 0x13) = arg2;
     *(s8*)(offset + 0x29) = *(s8*)(offset + 0x29) + 1;
-    timestamp = FUN_800670cc();
+    timestamp = FUN_800670cc(arg0, arg1);
     *(u32*)(offset + 0x88) = timestamp;
 }
 
@@ -1362,10 +1362,10 @@ void FUN_800663a0(s16 arg0, s16 arg1, u8 arg2) {
     u32 timestamp;
     s32 offset;
 
-    offset = arg1 * 0xAC + (&DAT_800b954c)[arg0];
+    offset = arg1 * 0xAC + (&INT_ARRAY_800b954c)[arg0];
     *(u8*)(offset + 0x14) = arg2;
     *(s8*)(offset + 0x29) = *(s8*)(offset + 0x29) + 1;
-    timestamp = FUN_800670cc();
+    timestamp = FUN_800670cc(arg0, arg1);
     *(u32*)(offset + 0x88) = timestamp;
 }
 
