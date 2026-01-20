@@ -59,7 +59,6 @@ extern void FUN_8003de38(void* arg0, s32 arg1); /* 0x8003de38 */
 extern s32 FUN_80027174(void);                  /* 0x80027174 */
 extern void FUN_80030ec4(void);                 /* 0x80030ec4 */
 extern void FUN_80056b30(void);                 /* 0x80056b30 */
-extern void FUN_80056d00(void);                 /* 0x80056d00 */
 extern void FUN_80058158(const char* arg0);     /* 0x80058158 */
 extern void FUN_800402dc(void* arg0);           /* 0x800402dc */
 extern void FUN_80022c04(void);                 /* 0x80022c04 */
@@ -69,6 +68,12 @@ extern void LoadImageInVram(u_long* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4
 extern void FUN_8004080c(UnkStruct_8004bf94* arg0, s32 arg1);   /* 0x8004080c */
 extern s32 FUN_80063608(s32 arg0, s32 arg1);    /* 0x80063608 */
 extern u32 FUN_800670cc(s16 arg0, s16 arg1);                  /* 0x800670cc */
+extern void FUN_80062334(s32 arg0);         /* 0x80062334 */
+extern void FUN_80064a78(s32 arg0, s32 arg1); /* 0x80064a78 */
+extern void FUN_80068f60(s32 arg0, s32 arg1, s32 arg2); /* 0x80068f60 */
+extern void FUN_80067ae8(s32 arg0, s32 arg1, s32 arg2); /* 0x80067ae8 */
+extern void FUN_80063f6c(void);             /* 0x80063f6c */
+extern void FUN_80064010(void);             /* 0x80064010 */
 
 /* External global variables - need to match exact addresses */
 extern u32 DAT_80083498;   /* Result from FUN_80074370 */
@@ -142,6 +147,16 @@ extern s32 DAT_8007b004;   /* SPU state variable 2 */
 extern u32 DAT_8007b080;   /* SPU event descriptor */
 extern u16 DAT_80078b3c;   /* Lookup table base */
 extern SVECTOR SVECTOR_1f80007c; /* GTE scratchpad vector */
+extern CdlATV CdlATV_80083378; /* CD audio/video attenuation values */
+extern u32 DAT_801fff00; /* LoadExec stack pointer parameter */
+extern u16 DAT_801ff200; /* Controller input flag 1 */
+extern u16 USHORT_801ff202; /* Controller input value 1 */
+extern u16 DAT_801ff208; /* Controller input flag 2 */
+extern u16 USHORT_801ff20a; /* Controller input value 2 */
+extern u16 USHORT_801ff210; /* Controller input flag 3 */
+extern u16 USHORT_801ff212; /* Controller input value 3 */
+
+extern void SpuStQuit(void); /* PSX SDK - SPU streaming quit */
 
 extern void* DAT_gp_0314;  /* GP + 0x314 = 788 */
 extern void* DAT_gp_0318;  /* GP + 0x318 = 792 */
@@ -1433,10 +1448,167 @@ void main(void) {
         DAT_800835b4 = 1;
         FUN_80021dd0();
         FUN_800587a8();
-        FUN_80058a9c();
-
-        FUN_80038228(2, 4);
+        FUN_80058a9c();        FUN_80038228(2, 4);
         DAT_80083504 = 0;
         FUN_800587a8();
+    }
+}
+
+/* ============================================================================
+ * FUN_80032c38 - 0x80032c38
+ * ============================================================================ */
+void FUN_80032c38(u32 offset, UnknownGraphicsStruct* graphics_struct, u8 r, u8 g, u8 b) {
+    UnknownGraphicsStruct* base_struct;
+    u8 start_index;
+    u8 primitive_count;
+    u8 end_index;
+    u8 current_index;
+    u8* primitive_base;
+    
+    /* Calculate base address by adding offset to structure pointer */
+    base_struct = (UnknownGraphicsStruct*)((u8*)graphics_struct + offset);
+    
+    /* Read start index and primitive count from structure */
+    start_index = base_struct->start_index;
+    primitive_count = base_struct->primitive_count;
+    end_index = start_index + primitive_count;
+    
+    /* Loop through all primitives from start_index to end_index */
+    for (current_index = start_index; current_index < end_index; current_index++) {
+        /* Calculate base address for current primitive (52 bytes per primitive) */
+        primitive_base = (u8*)graphics_struct + (current_index * 52);
+        
+        /* Set RGB values for all 4 vertices of the primitive */
+        /* Vertex 1 at offset 0x78 (120) */
+        primitive_base[0x78] = r;
+        primitive_base[0x79] = g;
+        primitive_base[0x7A] = b;
+        
+        /* Vertex 2 at offset 0x84 (132) */
+        primitive_base[0x84] = r;
+        primitive_base[0x85] = g;
+        primitive_base[0x86] = b;
+        
+        /* Vertex 3 at offset 0x90 (144) */
+        primitive_base[0x90] = r;
+        primitive_base[0x91] = g;
+        primitive_base[0x92] = b;
+        
+        /* Vertex 4 at offset 0x9C (156) */
+        primitive_base[0x9C] = r;
+        primitive_base[0x9D] = g;
+        primitive_base[0x9E] = b;
+    }
+}
+
+/* ============================================================================
+ * FUN_80056d00 - 0x80056D00, size: 0x84 (132 bytes)
+ * EQUIVALENT - Audio/CD shutdown routine
+ * Clears CD audio attenuation and shuts down SPU streaming
+ * ============================================================================ */
+void FUN_80056d00(void) {
+    /* Initialize audio/CD functions */
+    FUN_80062334(0);
+    FUN_80064a78(0, 0);
+    
+    /* Clear CD audio/video attenuation values */
+    CdlATV_80083378.val0 = 0;
+    CdlATV_80083378.val1 = 0;
+    CdlATV_80083378.val2 = 0;
+    CdlATV_80083378.val3 = 0;
+    CdMix(&CdlATV_80083378);
+    
+    /* Shutdown audio systems */
+    FUN_80068f60(0, 0, 0);
+    FUN_80067ae8(0, 0, 0);
+    SpuStQuit();
+    
+    /* Final cleanup */
+    FUN_80063f6c();
+    FUN_80064010();
+}
+
+/* ============================================================================
+ * FUN_80058158 - 0x80058158, size: 0x84 (132 bytes)
+ * EQUIVALENT - Executable loader/switcher
+ * Stops all systems and loads another executable (SELECT.EXE, MOVIE.EXE, etc.)
+ * ============================================================================ */
+void FUN_80058158(const char* executable_path) {
+    /* Stop all 4 root counters (hardware timers) */
+    StopRCnt(0xF2000000);
+    StopRCnt(0xF2000001);
+    StopRCnt(0xF2000002);
+    StopRCnt(0xF2000003);
+    
+    /* Shutdown graphics and input systems */
+    ResetGraph(0);
+    PadStop();
+    StopCallback();
+    
+    /* Initialize loader system and execute new program */
+    _96_init();
+    LoadExec(executable_path, &DAT_801fff00, 0);
+}
+
+/* ============================================================================
+ * FUN_80042ba0 - 0x80042BA0, size: 0x88 (136 bytes)
+ * EQUIVALENT - Clears flag bit 8 if conditions met
+ * Checks unk_04==0 and pad_06!=0, then clears bit 0x100 from flags_138
+ * ============================================================================ */
+void FUN_80042ba0(UnkStruct_8004bf94* param_1) {
+    if ((param_1->unk_04 == 0) && (*(s16*)param_1->pad_06 != 0)) {
+        param_1->flags_138 = param_1->flags_138 & 0xFFFFFEFF;
+        FUN_8004080c(param_1, 0);
+    }
+}
+
+/* ============================================================================
+ * FUN_8004792c - 0x8004792C, size: 0x88 (136 bytes)
+ * EQUIVALENT - Matrix transformation helper for GTE
+ * Combines rotation and translation matrices and sets them in GTE
+ * ============================================================================ */
+void FUN_8004792c(SVECTOR* sVector, VECTOR* vector) {
+    MATRIX finalMatrix;
+    MATRIX currentMatrix;
+    MATRIX transformMatrix;
+    
+    /* Read current rotation matrix from GTE */
+    ReadRotMatrix(&currentMatrix);
+    
+    /* Create translation matrix and apply rotation */
+    TransMatrix(&transformMatrix, vector);
+    RotMatrix(sVector, &transformMatrix);
+    
+    /* Compose matrices and set in GTE */
+    CompMatrix(&currentMatrix, &transformMatrix, &finalMatrix);
+    SetRotMatrix(&finalMatrix);
+    SetTransMatrix(&finalMatrix);
+}
+
+/* ============================================================================
+ * FUN_8002cdc4 - 0x8002CDC4, size: 0x8C (140 bytes)
+ * EQUIVALENT - Conditionally initializes struct fields based on input flags
+ * Checks controller input flags and copies values to struct fields
+ * ============================================================================ */
+void FUN_8002cdc4(UnkStruct_8002cd70* param_1) {
+    /* Check flag 1 and conditionally set field at offset 0x10 */
+    if ((DAT_801ff200 & 1) == 0) {
+        param_1->field_10 = 0;
+    } else {
+        param_1->field_10 = (u32)USHORT_801ff202;
+    }
+    
+    /* Check flag 2 and conditionally set field at offset 0x14 */
+    if ((DAT_801ff208 & 1) == 0) {
+        param_1->field_14 = 0;
+    } else {
+        param_1->field_14 = (u32)USHORT_801ff20a;
+    }
+    
+    /* Check flag 3 and conditionally set field at offset 0x18 */
+    if ((USHORT_801ff210 & 1) == 0) {
+        param_1->field_18 = 0;
+    } else {
+        param_1->field_18 = (u32)USHORT_801ff212;
     }
 }

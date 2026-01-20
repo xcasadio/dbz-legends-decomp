@@ -71,6 +71,14 @@ typedef struct CdlFILTER {
     u16 pad;
 } CdlFILTER;
 
+/* Audio/Video Attenuation */
+typedef struct CdlATV {
+    u8 val0;
+    u8 val1;
+    u8 val2;
+    u8 val3;
+} CdlATV;
+
 /* Callback types */
 typedef void (*CdlCB)(u8 status, u8* result);
 
@@ -100,5 +108,7 @@ CdlCB CdSyncCallback(CdlCB func);
 CdlCB CdDataCallback(CdlCB func);
 
 s32 CdGetSector(void* madr, s32 size);
+
+s32 CdMix(CdlATV* vol);
 
 #endif /* PSXSDK_LIBCD_H */
