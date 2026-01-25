@@ -6,169 +6,11 @@
 
 #include "common.h"
 #include "game.h"
+#include "title.h"
 #include "psxsdk/libcd.h"
 #include "psxsdk/libetc.h"
 #include "psxsdk/libspu.h"
 #include "psxsdk/kernel.h"
-
-#define ReadFile FUN_80057df4
-
-/* External game functions from TITLE.EXE */
-extern void FUN_80070b64(void);           /* 0x80070b64 - callback reset? */
-extern void __main(void);
-extern void InitCARD(long val);
-extern long StartCARD(void);
-extern long _card_auto(long val);
-extern void ChangeClearPAD(long val);
-extern void FUN_80057e40(CdlFILE* cdlFile, u8* buffer, u16 mode);        /* 0x80057e40 */
-void FUN_80057df4(char* fileName, u8* buffer, u16 mode);                 /* 0x80057df4 */
-extern void FUN_80070e44(void);           /* 0x80070e44 */
-extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
-extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
-extern void FUN_80057674(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8, s32 arg9);  /* 0x80057674 */
-extern void* FUN_80049504(void* callback, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80049504 */
-extern void FUN_80057c80(void* arg0);     /* 0x80057c80 */
-extern void FUN_80037388(void);           /* 0x80037388 */
-extern void FUN_80056dc0(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7);  /* 0x80056dc0 */
-extern s16 FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
-extern void FUN_80058d64(void);           /* 0x80058d64 */
-extern void FUN_80021dd0(void);           /* 0x80021dd0 */
-extern void FUN_80022c94(void);           /* 0x80022c94 */
-extern void FUN_80023290(void);           /* 0x80023290 */
-extern void FUN_800587a8(void);           /* 0x800587a8 */
-extern void FUN_80058a9c(void);           /* 0x80058a9c */
-extern s32 FUN_8005c9d8(s16 arg0);        /* 0x8005c9d8 */
-extern void FUN_800607fc(s16 arg0, u16 arg1, u16 arg2, s32 arg3);  /* 0x800607fc */
-extern void FUN_80064168(s16 arg0, s32 arg1);  /* 0x80064168 */
-extern s32 FUN_80064368(s32 arg0, s16 arg1, s32 arg2, s32 arg3);   /* 0x80064368 */
-extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
-extern void FUN_800678b4(s16 arg0, s32 arg1, u8 arg2, s16 arg3);   /* 0x800678b4 */
-extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
-extern s16 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
-extern void FUN_8004be40(void* arg0, u16 arg1); /* 0x8004be40 */
-extern void FUN_80050744(void* arg0);          /* 0x80050744 */
-extern void FUN_8005286c(void* arg0);          /* 0x8005286c */
-extern void FUN_80062760(s32 arg0, s32 arg1);  /* 0x80062760 */
-extern void FUN_800627f8(s16 arg0);            /* 0x800627f8 */
-extern void FUN_80062838(s16 arg0);            /* 0x80062838 */
-extern void SpuSetReverbModeParam(SpuReverbAttr* attr); /* 0x80062878 */
-extern s32 FUN_80070bc4(const char* arg0);     /* 0x80070bc4 */
-extern s32 FUN_8006bc88(void* arg0, void* arg1); /* 0x8006bc88 */
-extern void FUN_80070e34(void* arg0);           /* 0x80070e34 - TestEvent from PSX SDK */
-extern void FUN_8003de38(void* arg0, s32 arg1); /* 0x8003de38 */
-extern s32 FUN_80027174(void);                  /* 0x80027174 */
-extern void FUN_80030ec4(void);                 /* 0x80030ec4 */
-extern void FUN_80056b30(void);                 /* 0x80056b30 */
-extern void FUN_80058158(const char* arg0);     /* 0x80058158 */
-extern void FUN_800402dc(void* arg0);           /* 0x800402dc */
-extern void FUN_80022c04(void);                 /* 0x80022c04 */
-extern s32 FUN_80022b1c(void);                  /* 0x80022b1c */
-extern void FUN_80057b08(void* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5); /* 0x80057b08 */
-extern void LoadImageInVram(u_long* arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, u8 arg5); /* LoadImageInVram */
-extern void FUN_8004080c(UnkStruct_8004bf94* arg0, s32 arg1);   /* 0x8004080c */
-extern s32 FUN_80063608(s32 arg0, s32 arg1);    /* 0x80063608 */
-extern u32 FUN_800670cc(s16 arg0, s16 arg1);                  /* 0x800670cc */
-extern void FUN_80062334(s32 arg0);         /* 0x80062334 */
-extern void FUN_80064a78(s32 arg0, s32 arg1); /* 0x80064a78 */
-extern void FUN_80068f60(s32 arg0, s32 arg1, s32 arg2); /* 0x80068f60 */
-extern void FUN_80067ae8(s32 arg0, s32 arg1, s32 arg2); /* 0x80067ae8 */
-extern void FUN_80063f6c(void);             /* 0x80063f6c */
-extern void FUN_80064010(void);             /* 0x80064010 */
-
-/* External global variables - need to match exact addresses */
-extern u32 DAT_80083498;   /* Result from FUN_80074370 */
-extern s32 DAT_8008344c;
-extern s32 DAT_80083450;
-extern s32 DAT_80083448;
-extern u32 DAT_80083504;   /* cleared in loop */
-extern s32 DAT_80083544;
-extern s32 DAT_800835b4;
-extern s32 PTR_80079854;
-extern s32 PTR_800798bc;
-extern s32 PTR_800798dc;
-extern s32 DAT_800798d4;
-
-extern CdlFILE DAT_800a8860;
-extern u8 DAT_80110000;
-
-extern void* DAT_80083224;
-
-extern char DAT_800831b4[];
-extern char DAT_800831bc[];
-
-extern SpuReverbAttr DAT_80096650;
-
-typedef struct {
-    u32 unk0;
-    u32 unk4;
-    u8 pad_08[0x18];
-    void* ptr_20;
-} Unk_800836d4_Entry;
-
-extern Unk_800836d4_Entry UnkStruct_Array_8004bf94[30];
-
-extern volatile u16 DAT_801ff10e;
-extern volatile u16 DAT_801ff100;
-extern volatile u32 DAT_1f80012c;
-
-extern s32 DAT_80110004;   /* 0x80110004 - global accessed by FUN_80021dd0 */
-extern s32 DAT_800898c0;   /* 0x800898c0 - global accessed by FUN_80021dd0 */
-extern s32 DAT_8008337c;   /* CD seek mode */
-extern s32 DAT_80083358;   /* CD sector index */
-extern u8 DAT_8008f19c;    /* CD sector data base */
-extern s32 DAT_8008335c;   /* CD status flags */
-extern u32 DAT_800833fc;   /* CD control flags */
-extern u32 DAT_800833dc;   /* Game state pointer */
-extern u32 DAT_800831b4;   /* String part 1 */
-extern u16 DAT_800831b8;   /* String part 2 */
-extern u32 DAT_800831bc;   /* String part 3 */
-extern u16 DAT_800831c0;   /* String part 4 */
-extern u32 DAT_800834c8;   /* Event handle 1 */
-extern u32 DAT_800834cc;   /* Event handle 2 */
-extern u32 DAT_800834d0;   /* Event handle 3 */
-extern u32 DAT_800834d4;   /* Event handle 4 */
-extern u32 DAT_800834ec;   /* Event handle 5 */
-extern u32 DAT_800834f0;   /* Event handle 6 */
-extern u32 DAT_800834f4;   /* Event handle 7 */
-extern u32 DAT_800834f8;   /* Event handle 8 */
-extern u32 DAT_800833f4;   /* Pointer */
-extern u32 DAT_80083440;   /* CD status */
-extern s16 DAT_800acb1a;   /* Character index */
-extern s32 INT_ARRAY_800b954c[];    /* Character data base */
-extern u8 DAT_80077a50;    /* Image data base */
-extern void* PTR_DAT_80077b38; /* Image pointer */
-extern s32 DAT_800a8880;   /* Global data array base */
-extern u8 DAT_8008f568;    /* Global array 1 */
-extern u8 DAT_8008f56a;    /* Global array 2 */
-extern u8 DAT_8008f6e8;    /* Global array 3 */
-extern s32 DAT_8007b484;   /* SPU initialization flag */
-extern s32 DAT_8007b000;   /* SPU state variable 1 */
-extern s32 DAT_8007b004;   /* SPU state variable 2 */
-extern u32 DAT_8007b080;   /* SPU event descriptor */
-extern u16 DAT_80078b3c;   /* Lookup table base */
-extern SVECTOR SVECTOR_1f80007c; /* GTE scratchpad vector */
-extern CdlATV CdlATV_80083378; /* CD audio/video attenuation values */
-extern u32 DAT_801fff00; /* LoadExec stack pointer parameter */
-extern u16 DAT_801ff200; /* Controller input flag 1 */
-extern u16 USHORT_801ff202; /* Controller input value 1 */
-extern u16 DAT_801ff208; /* Controller input flag 2 */
-extern u16 USHORT_801ff20a; /* Controller input value 2 */
-extern u16 USHORT_801ff210; /* Controller input flag 3 */
-extern u16 USHORT_801ff212; /* Controller input value 3 */
-
-extern void SpuStQuit(void); /* PSX SDK - SPU streaming quit */
-
-extern void* DAT_gp_0314;  /* GP + 0x314 = 788 */
-extern void* DAT_gp_0318;  /* GP + 0x318 = 792 */
-extern void* DAT_gp_031c;  /* GP + 0x31C = 796 */
-extern void* DAT_gp_0320;  /* GP + 0x320 = 800 */
-extern void* DAT_gp_0338;  /* GP + 0x338 = 824 */
-extern void* DAT_gp_033c;  /* GP + 0x33C = 828 */
-extern void* DAT_gp_0340;  /* GP + 0x340 = 832 */
-extern void* DAT_gp_0344;  /* GP + 0x344 = 836 */
-
-extern s16 DAT_gp_02a4;    /* GP + 0x2A4 = 676 */
-extern s16 DAT_gp_02dc;    /* GP + 0x2DC = 732 */
 
 /* ============================================================================
  * FUN_80053020 - 0x80053020, size: 0x28 (40 bytes)
@@ -198,34 +40,6 @@ void FUN_8004dbac(void) {
  * FUN_8004bf94 - 0x8004BF94, size: 0x3C (60 bytes)
  * EQUIVALENT - Reads s16 at +0x11E, transforms it, then calls FUN_8004be40
  * ============================================================================ */
-typedef struct {
-    u8 pad_00[4];
-    u16 unk_04;
-    u8 pad_06[0x92];
-    void* unk_98;
-    u8 pad_9C[0x78];
-    RECT rect_114;
-    u8 unk_11C[2];
-    s16 value_11E;
-    u8 pad_120[0x14];
-    u32 flags_134;
-    u32 flags_138;
-    u32 unk_13C;
-    u32 unk_140;
-    u8 pad_144[0x0C];
-    u8 color_r_150;
-    u8 color_g_151;
-    u8 color_b_152;
-    u8 pad_153[3];
-    u16 field_156;
-    u16 field_158;
-    u16 field_15A;
-    u8 pad_15C[0x0E];
-    u8 code_16A;
-    u8 pad_16B[0x08];
-    u8 code_173;
-} UnkStruct_8004bf94;
-
 void FUN_8004bf94(UnkStruct_8004bf94* arg0) {
     s16 value = arg0->value_11E;
     u16 result = (u16)FUN_8003bcc4(value);
@@ -237,13 +51,6 @@ void FUN_8004bf94(UnkStruct_8004bf94* arg0) {
  * FUN_80044754 - 0x80044754, size: 0x30 (48 bytes)
  * EQUIVALENT - Clears bit 0x20000000 at +0x134, clears byte at +0x224
  * ============================================================================ */
-typedef struct {
-    u8 pad_000[0x134];
-    u32 flags_134;
-    u8 pad_138[0x224 - 0x138];
-    u8 byte_224;
-} UnkStruct_80044754;
-
 void FUN_80044754(UnkStruct_80044754* arg0) {
     arg0->flags_134 &= 0xDFFFFFFF;
     arg0->byte_224 = 0;
@@ -315,10 +122,6 @@ void FUN_80068f0c(s16 arg0) {
  * FUN_80023320 - 0x80023320, size: 0x28 (40 bytes)
  * EQUIVALENT - Clears two GP vars and calls FUN_8002339c
  * ============================================================================ */
-extern s16 DAT_80083314;  /* GP + 0x160 = 352 */
-extern s16 DAT_80083318;  /* GP + 0x164 = 356 */
-extern void FUN_8002339c(void);
-
 void FUN_80023320(void) {
     DAT_80083314 = 0;
     DAT_80083318 = 0;
@@ -348,8 +151,6 @@ void FUN_80023374(void) {
  * FUN_80068a2c - 0x80068A2C, size: 0x24 (36 bytes)
  * MATCHING - Wrapper that sign-extends arg and calls FUN_800688b0
  * ============================================================================ */
-extern void FUN_800688b0(s16 arg0);
-
 void FUN_80068a2c(s16 value) {
     FUN_800688b0(value);
 }
@@ -359,9 +160,6 @@ void FUN_80068a2c(s16 value) {
  * EQUIVALENT - Sets DAT_8007b000 if different from arg
  * (Compiler optimizes delay slot differently)
  * ============================================================================ */
-extern s32 DAT_8007b000;
-extern s32 DAT_8007affc;
-
 void FUN_8005c974(s32 value) {
     if (value != DAT_8007b000) {
         DAT_8007b000 = value;
@@ -414,8 +212,6 @@ void FUN_80057508(void) {
  * MATCHING - Sets field at offset 0x110 if zero
  * Structure access: DAT_gp_018c->cd.timer_110
  * ============================================================================ */
-extern TitleAudioBlock* DAT_gp_018c;
-
 void FUN_80054dd0(void) {
     if (DAT_gp_018c->cd.timer_110 == 0) {
         DAT_gp_018c->cd.timer_110 = 0x14;
@@ -449,8 +245,6 @@ void FUN_80063714(s32 arg0, s32 arg1, s32 arg2) {
  * FUN_800638fc - 0x800638FC, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_800637b0(0)
  * ============================================================================ */
-extern void FUN_800637b0(s32 arg0);
-
 void FUN_800638fc(void) {
     FUN_800637b0(0);
 }
@@ -459,8 +253,6 @@ void FUN_800638fc(void) {
  * FUN_80063f2c - 0x80063F2C, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_80063c9c(1)
  * ============================================================================ */
-extern void FUN_80063c9c(s32 arg0);
-
 void FUN_80063f2c(void) {
     FUN_80063c9c(1);
 }
@@ -469,8 +261,6 @@ void FUN_80063f2c(void) {
  * FUN_80064010 - 0x80064010, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_800640ec()
  * ============================================================================ */
-extern void FUN_800640ec(void);
-
 void FUN_80064010(void) {
     FUN_800640ec();
 }
@@ -479,8 +269,6 @@ void FUN_80064010(void) {
  * FUN_800640ac - 0x800640AC, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_8005c214(1)
  * ============================================================================ */
-extern void FUN_8005c214(s32 arg0);
-
 void FUN_800640ac(void) {
     FUN_8005c214(1);
 }
@@ -497,8 +285,6 @@ void FUN_800640cc(void) {
  * FUN_8006268c - 0x8006268C, size: 0x20 (32 bytes)
  * MATCHING - Calls FUN_800634e0(0)
  * ============================================================================ */
-extern void FUN_800634e0(s32 arg0);
-
 void FUN_8006268c(void) {
     FUN_800634e0(0);
 }
@@ -527,8 +313,6 @@ void FUN_80062838(s16 arg0) {
  * FUN_8006767c - 0x8006767C, size: 0x14 (20 bytes)
  * MATCHING - Sets DAT_800a6768 to 2
  * ============================================================================ */
-extern s16 DAT_800a6768;  /* Shared with FUN_800678a4 */
-
 void FUN_8006767c(void) {
     DAT_800a6768 = 2;
 }
@@ -537,8 +321,6 @@ void FUN_8006767c(void) {
  * FUN_80064260 - 0x80064260, size: 0x14 (20 bytes)
  * MATCHING - Sets DAT_800a8834 to 1
  * ============================================================================ */
-extern s16 DAT_800a8834;  /* Shared with FUN_80064274 */
-
 void FUN_80064260(void) {
     DAT_800a8834 = 1;
 }
@@ -563,8 +345,6 @@ void FUN_80070b64(void) {
  * FUN_8006fe58 - 0x8006FE58, size: 0x10 (16 bytes)
  * MATCHING - Getter for DAT_800813a4
  * ============================================================================ */
-extern s32 DAT_800813a4;
-
 s32 FUN_8006fe58(void) {
     return DAT_800813a4;
 }
@@ -573,8 +353,6 @@ s32 FUN_8006fe58(void) {
  * FUN_800678a4 - 0x800678A4, size: 0x10 (16 bytes)
  * MATCHING - Sets DAT_800a6768 to 0
  * ============================================================================ */
-/* extern s16 DAT_800a6768; - declared above in FUN_8006767c */
-
 void FUN_800678a4(void) {
     DAT_800a6768 = 0;
 }
@@ -591,8 +369,6 @@ void FUN_800679b4(s32 arg0, s32 arg1, s32 arg2) {
  * FUN_800642bc - 0x800642BC, size: 0x10 (16 bytes)
  * MATCHING - Setter for DAT_800acd9c (byte)
  * ============================================================================ */
-extern u8 DAT_800acd9c;
-
 void FUN_800642bc(u8 value) {
     DAT_800acd9c = value;
 }
@@ -601,8 +377,6 @@ void FUN_800642bc(u8 value) {
  * FUN_80064274 - 0x80064274, size: 0x10 (16 bytes)
  * MATCHING - Sets DAT_800a8834 to 0
  * ============================================================================ */
-/* extern s16 DAT_800a8834; - declared above in FUN_80064260 */
-
 void FUN_80064274(void) {
     DAT_800a8834 = 0;
 }
@@ -619,8 +393,6 @@ s32 FUN_8005d274(void) {
  * FUN_800561c8 - 0x800561C8, size: 0xC (12 bytes)
  * MATCHING - Getter for GP-relative global (offset 0x28C = 652)
  * ============================================================================ */
-extern s16 DAT_gp_028c;  /* GP + 0x28C */
-
 s16 FUN_800561c8(void) {
     return DAT_gp_028c;
 }
@@ -680,25 +452,6 @@ void FUN_800469a4(UnkStruct_8004bf94* arg0) {
  * FUN_8002cd70 - 0x8002CD70, size: 0x54 (84 bytes)
  * EQUIVALENT - Initializes several fields then calls FUN_80032434
  * ============================================================================ */
-typedef struct {
-    s16 mode_00;
-    u8 pad_002[0x10 - 0x02];
-    u32 field_10;
-    u32 field_14;
-    u32 field_18;
-    u8 pad_01C[0x20 - 0x1C];
-    s16 state_20;
-    u8 pad_022[0x2A - 0x22];
-    s16 field_2A;
-    s16 field_2C;
-    s16 field_2E;
-    s16 field_30;
-    s16 field_32;
-} UnkStruct_8002cd70;
-
-extern void FUN_8002cdc4(UnkStruct_8002cd70* arg0); /* 0x8002cdc4 */
-extern void FUN_80032434(UnkStruct_8002cd70* arg0); /* 0x80032434 */
-
 void FUN_8002cd70(UnkStruct_8002cd70* arg0) {
     FUN_8002cdc4(arg0);
 
@@ -754,13 +507,6 @@ void FUN_8004247c(UnkStruct_8004bf94* arg0) {
  * FUN_8003287c - 0x8003287C, size: 0x5C (92 bytes)
  * EQUIVALENT - Updates fields at +0x2C and +0x2E, sets mode to 5 when both are zero
  * ============================================================================ */
-typedef struct {
-    s16 mode_00;
-    u8 pad_002[0x2C - 0x02];
-    s16 field_2C;
-    s16 field_2E;
-} UnkStruct_8003287c;
-
 void FUN_8003287c(UnkStruct_8003287c* arg0) {
     s16 val1;
     s16 val2;
@@ -795,9 +541,6 @@ void FUN_80040bbc(UnkStruct_8004bf94* arg0, s32 arg1) {
  * FUN_80056624 - 0x80056624, size: 0x5C (92 bytes)
  * EQUIVALENT - Sends CD control commands 0x0A and 0x08, resets DAT_8008335c
  * ============================================================================ */
-extern s32 DAT_8008335c;
-extern u32 DAT_800833fc;
-
 void FUN_80056624(void) {
     s32 result;
 
@@ -1146,7 +889,7 @@ s32 FUN_80022b90(void) {
  * EQUIVALENT - Clears memory and loads images
  * ============================================================================ */
 void FUN_80035700(void) {
-    memset((u8*)(UnkStruct_Array_8004bf94 + 1), 0, 0xB610);
+    memset((u8*)(UnkStruct_Array_800836d4 + 1), 0, 0xB610);
     FUN_80057b08(&DAT_80077a50, 0x380, 0x180, 0x10, 0x40, 0);
     LoadImageInVram((u_long*)&PTR_DAT_80077b38, 0, 0x1EA, 0xA0, 1, 0);
 }
@@ -1159,9 +902,9 @@ void FUN_80027314(void* arg0) {
     s32 i;
 
     for (i = 0; i < 30; i++) {
-        if (UnkStruct_Array_8004bf94[i].ptr_20 == arg0) {
-            UnkStruct_Array_8004bf94[i].unk4 = 0;
-            UnkStruct_Array_8004bf94[i].unk0 = 0;
+        if (UnkStruct_Array_800836d4[i].ptr_20 == arg0) {
+            UnkStruct_Array_800836d4[i].unk4 = 0;
+            UnkStruct_Array_800836d4[i].unk0 = 0;
         }
     }
 
@@ -1170,10 +913,10 @@ void FUN_80027314(void* arg0) {
 
 /* ============================================================================
  * FUN_80027354 - 0x80027354, size: 0x58 (88 bytes)
- * EQUIVALENT - Clears UnkStruct_Array_8004bf94 table (0x438 bytes) and creates object
+ * EQUIVALENT - Clears UnkStruct_Array_800836d4 table (0x438 bytes) and creates object
  * ============================================================================ */
 void FUN_80027354(void) {
-    memset(UnkStruct_Array_8004bf94, 0, 0x438);
+    memset(UnkStruct_Array_800836d4, 0, 0x438);
     FUN_80049504((void*)FUN_80027174, 0, 0xB, 0, 1, DAT_800798d4);
 }
 
@@ -1611,4 +1354,62 @@ void FUN_8002cdc4(UnkStruct_8002cd70* param_1) {
     } else {
         param_1->field_18 = (u32)USHORT_801ff212;
     }
+}
+
+/* ============================================================================
+ * FUN_800350f4 - 0x800350F4 - 140 bytes (0x8C)
+ * EQUIVALENT - Searches for a free slot in UnkStruct_Array_80081cb4 (6 slots checked), allocates it,
+ *              and stores two 8-bit parameters at offset 0x438 within the slot.
+ *              Returns 0 on success, 0xFFFFFFFF on failure (no free slot found).
+ * ============================================================================ */
+u32 FUN_800350f4(u16 param_1, u16 param_2) {
+    int* slot_ptr;
+    u32 result;
+    int slot_index;
+    int offset_calc;
+    u16* data_ptr;
+    
+    slot_index = 6;
+    offset_calc = 0xB610;
+    
+    do {
+        slot_index = slot_index - 1;
+        if (slot_index < 0) {
+            data_ptr = (u16*)0x0;
+            goto found_or_null;
+        }
+        slot_ptr = (int*)(offset_calc + (int)UnkStruct_Array_80081cb4);
+        offset_calc = offset_calc - 0x1E58;
+    } while (*slot_ptr != 0);
+    
+    data_ptr = (u16*)((int)UnkStruct_Array_80081cb4 + slot_index * 0x1E58 + 0x438);
+    
+found_or_null:
+    result = 0;
+    if (data_ptr == (u16*)0x0) {
+        result = 0xFFFFFFFF;
+    } else {
+        *data_ptr = param_1 & 0xFF;
+        data_ptr[1] = param_2 & 0xFF;
+    }
+    return result;
+}
+
+/* ============================================================================
+ * FUN_800671e4 - 0x800671E4
+ * ============================================================================ */
+void FUN_800671e4(Struct_800671e4_Param *param_1, u16 *param_2, u16 *param_3) {
+    u16 uVar1;
+    u16 uVar2;
+    u16 uVar3;
+    
+    uVar3 = -(u16)(param_1->field_0xc != 0) & 0x8000;
+    if (param_1->field_0x10 != 0) {
+        uVar3 = uVar3 | 0x4000;
+    }
+    uVar1 = param_1->field_0x6;
+    uVar2 = param_1->field_0x8;
+    *param_2 = -(u16)(param_1->field_0xa != 0) & 0x8000 | (param_1->field_0x0 & 0x7f) << 8 | (param_1->field_0x2 & 0xf) << 4
+               | param_1->field_0x4 & 0xf;
+    *param_3 = uVar3 | (uVar1 & 0x7f) << 6 | uVar2 & 0x1f;
 }

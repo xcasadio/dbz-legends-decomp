@@ -39,6 +39,17 @@
  * Graphics / Rendering
  *===========================================================================*/
 
+typedef struct {
+    u8 r1, g1, b1;         /* 0x78 - Vertex 1 RGB color */
+    u8 pad_7B[0x09];       /* 0x7B - Padding */
+    u8 r2, g2, b2;         /* 0x84 - Vertex 2 RGB color */
+    u8 pad_87[0x09];       /* 0x87 - Padding */
+    u8 r3, g3, b3;         /* 0x90 - Vertex 3 RGB color */
+    u8 pad_93[0x09];       /* 0x93 - Padding */
+    u8 r4, g4, b4;         /* 0x9C - Vertex 4 RGB color */
+    u8 pad_9F[0x35];       /* 0x9F - Padding to next primitive (52 bytes total) */
+} primitive; 
+
 /* Graphics primitive structure used for vertex color manipulation */
 typedef struct {
     u8 pad_00[0x06];           /* 0x00 - Unknown padding */
@@ -46,25 +57,8 @@ typedef struct {
     u8 pad_07[0x02];           /* 0x07 - Padding */
     u8 primitive_count;        /* 0x09 - Number of primitives to process */
     u8 pad_0A[0x6E];           /* 0x0A - Padding to graphics data */
-    
-    /* Graphics primitive data starts at offset 0x78 (120) */
-    struct {
-        u8 r1, g1, b1;         /* 0x78 - Vertex 1 RGB color */
-        u8 pad_7B[0x09];       /* 0x7B - Padding */
-        u8 r2, g2, b2;         /* 0x84 - Vertex 2 RGB color */
-        u8 pad_87[0x09];       /* 0x87 - Padding */
-        u8 r3, g3, b3;         /* 0x90 - Vertex 3 RGB color */
-        u8 pad_93[0x09];       /* 0x93 - Padding */
-        u8 r4, g4, b4;         /* 0x9C - Vertex 4 RGB color */
-        u8 pad_9F[0x35];       /* 0x9F - Padding to next primitive (52 bytes total) */
-    } primitives[];            /* Array of graphics primitives */
+    primitive primitives[1];   /* 0x78 - Array of graphics primitives */
 } UnknownGraphicsStruct;
-
-
-/*===========================================================================
- * Memory / File System
- *===========================================================================*/
-
 
 /*===========================================================================
  * Title Overlay Types (TITLE.EXE)
