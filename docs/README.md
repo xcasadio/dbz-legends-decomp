@@ -38,5 +38,5 @@ When asked to work on decompilation:
 
 ### Maximum Iterations Rule
 
-When decompiling a function, attempt **maximum 10 iterations** to achieve matching.
-After 10 attempts, mark the function as NON_MATCHING and move on.
+When decompiling a function, attempt **maximum 30 iterations** to achieve matching.
+After 30 attempts, mark the function as NON_MATCHING and move on.

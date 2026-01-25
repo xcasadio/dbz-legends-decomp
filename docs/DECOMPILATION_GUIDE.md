@@ -24,7 +24,7 @@ Example:
 python tools/extract_func.py title 0x80021DD0 0x58 --name FUN_80021dd0 --save
 ```
 
-Output: `asm/jp/title/FUN_80021dd0.s`
+Output: `asm/title/FUN_80021dd0.s`
 
 ---
 
@@ -279,7 +279,7 @@ docker run --rm -v "$(pwd):/project" -w /project dbz-legends-build /bin/bash -c 
 
 5. **Compare**: Check prologue first (frame size, saved regs), then body
 
-6. **Iterate**: Max 10 attempts, then mark NON_MATCHING
+6. **Iterate**: Max 30 attempts, then mark NON_MATCHING
 
 ### Key Rules
 
