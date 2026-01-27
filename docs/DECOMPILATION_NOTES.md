@@ -148,8 +148,8 @@ Look for jump tables (`jr` with computed address) or cascading `beq`/`bne`.
 | 0x80071648 | FUN_80071648 | `void FUN_80071648(s32)` | Unknown, takes 0 |
 | 0x80071a4c | FUN_80071a4c | `void FUN_80071a4c(s32)` | Unknown, takes 0 |
 | 0x80070e44 | FUN_80070e44 | `void FUN_80070e44(void)` | Display-related |
-| 0x800742cc | FUN_800742cc | `void FUN_800742cc(s32, s32)` | Takes (960, 256) - screen setup |
-| 0x80074370 | FUN_80074370 | `s32 FUN_80074370(s32,s32,s32,s32,s32,s32)` | Returns value stored globally |
+| 0x800742cc | FntLoad | `void FntLoad(s32, s32)` | Takes (960, 256) - screen setup |
+| 0x80074370 | FntOpen | `s32 FntOpen(s32,s32,s32,s32,s32,s32)` | Returns value stored globally |
 
 ### SDK Function Patterns
 
@@ -177,7 +177,7 @@ SetDefDrawEnv(&drawEnv[1], 0, 0, 320, 240);
 
 | Address | Name | Type | Notes |
 |---------|------|------|-------|
-| 0x80083498 | DAT_80083498 | u32 | Result from FUN_80074370 |
+| 0x80083498 | DAT_80083498 | u32 | Result from FntOpen |
 | 0x80083504 | DAT_80083504 | u32 | Cleared in main loop |
 | 0x800ef10e | DAT_800ef10e | u16 | Frame counter (0-2 range) |
 | 0x801ff100 | GPU_STATUS | u16* | GPU status/control write |

@@ -8,6 +8,8 @@
  * the decompilation project.
  */
 
+#define NON_MATCHING
+
 #ifndef NULL
 #define NULL 0
 #endif

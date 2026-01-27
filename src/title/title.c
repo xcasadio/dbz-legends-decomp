@@ -119,6 +119,37 @@ void FUN_80068f0c(s16 arg0) {
 }
 
 /* ============================================================================
+ * FUN_80023290 - 0x80023290, size: 0x90 (144 bytes)
+ * Initializes screen fade variables and POLY_F4 for full-screen black quad
+ * ============================================================================ */
+#ifndef NON_MATCHING
+// TODO: Generated assembly doesn't match due to different addressing modes
+// The original uses absolute addressing with lui/addiu for struct fields
+// while the compiled version uses relative addressing
+INCLUDE_ASM("asm/title/nonmatchings", FUN_80023290);
+#else
+void FUN_80023290(void) {
+    POLY_F4* poly;
+    
+    DAT_8008331c = 0;
+    DAT_80083320 = 0;
+    poly = &POLY_F4_800836bc;
+    SetPolyF4(poly);
+    poly->x0 = 0;
+    poly->y0 = 0;
+    poly->x1 = 0x140;
+    poly->y1 = 0;
+    poly->x2 = 0;
+    poly->y2 = 0x100;
+    poly->x3 = 0x140;
+    poly->y3 = 0x100;
+    poly->r0 = 0;
+    poly->g0 = 0;
+    poly->b0 = 0;
+}
+#endif
+
+/* ============================================================================
  * FUN_80023320 - 0x80023320, size: 0x28 (40 bytes)
  * EQUIVALENT - Clears two GP vars and calls FUN_8002339c
  * ============================================================================ */
@@ -1162,9 +1193,9 @@ void main(void) {
     InitHeap((void*)0x10000, 0x10000);
     srand(seed);
     FUN_80070e44();
-    FUN_800742cc(0x3c0, 0x100);
+    FntLoad(0x3c0, 0x100);
 
-    DAT_80083498 = FUN_80074370(0x10, 0x10, 0x100, 200, 0, 0x200);
+    DAT_80083498 = FntOpen(0x10, 0x10, 0x100, 200, 0, 0x200);
     DAT_8008344c = 0;
     DAT_80083450 = 0;
     DAT_80083448 = 0;

@@ -64,19 +64,46 @@ typedef struct {
  * Title Overlay Types (TITLE.EXE)
  *===========================================================================*/
 
+/* Character slot data structure (12 slots total: 6 left team + 6 right team) */
+typedef struct {
+    void* object_ptr;       /* +0x00 - Pointer to character object */
+    u16 flags;              /* +0x04 - Status flags (0x200=active, 0x1000=special state, 0x81 mask) */
+    s16 pos_x;              /* +0x06 - X coordinate (clamped 0-1600) */
+    s16 pos_y;              /* +0x08 - Y coordinate (clamped 0-16000) */
+    s16 pos_z;              /* +0x0A - Z coordinate (clamped 0-20000) */
+    s16 scale_factor;       /* +0x0C - Scaling calculation value */
+    s16 counter;            /* +0x0E - Counter (clamped 0-99) */
+    u8 pad_10[0x04];        /* +0x10 - Padding to 0x14 stride */
+} CharacterSlot;            /* Total size: 0x14 (20 bytes) */
+
 typedef struct {
     u8 pad_00[0x02];
-    s16 blink_timer;        /* 0x02 - decremented each frame, often set to 0x10 */
+    s16 blink_timer;        /* 0x02 - Decremented each frame, often set to 0x10 */
     u8 pad_04[0x02];
-    s16 countdown_06;       /* 0x06 - observed countdown (often compared to 0x0F) */
+    s16 countdown_06;       /* 0x06 - Countdown timer (often compared to 0x0F) */
     u8 pad_08[0x08];
-    u32 flags_10;           /* 0x10 - bitfield used heavily in menu logic */
-    u16 cursor_left;        /* 0x14 - typically constrained to [0..5] */
-    u16 cursor_right;       /* 0x16 - typically constrained to [6..11] */
-    u16 selected_index;     /* 0x18 - observed as current selection index */
-    u16 active_index;       /* 0x1A - set from FUN_80053020 result */
-    u8 pad_1C[0x302C - 0x1C];
-    s32 side_balance_302C;  /* 0x302C - clamped to +/-30000, compared to 30000 */
+    u32 flags_10;           /* 0x10 - Control flags (0x18000008, 0x10000000) */
+    u16 cursor_left;        /* 0x14 - Left team cursor [0..5] */
+    u16 cursor_right;       /* 0x16 - Right team cursor [6..11] */
+    u16 selected_index;     /* 0x18 - Current selection index */
+    u16 active_index;       /* 0x1A - Active selection (from FUN_80053020) */
+    u8 pad_1C[0x04];        /* 0x1C - Padding before character data */
+    
+    /* Character slot management (0x1504 - 0x15A9) */
+    u8 pad_20[0x14E4];      /* 0x20 - Gap to character data */
+    void* char_objects[12]; /* 0x1504 - Pointers to 12 character objects (4 bytes each) */
+    u8 pad_1534[0x60];      /* 0x1534 - Gap to slot data */
+    CharacterSlot slots[12];/* 0x1594 - 12 character slots (0x14 bytes each) */
+    
+    /* Animation control (0x3008 - 0x300F) */
+    u8 pad_2684[0xA74];     /* 0x2684 - Gap to animation data */
+    u16 rotation_angle_1;   /* 0x3008 - Rotation angle (&= 0x7F, cyclic) */
+    u16 rotation_angle_2;   /* 0x300A - Rotation angle (&= 0x7F, cyclic) */
+    s16 fade_counter_1;     /* 0x300C - Fade animation counter (1-8) */
+    s16 fade_counter_2;     /* 0x300E - Fade animation counter (1-8) */
+    u8 pad_3010[0x1C];      /* 0x3010 - Padding to side_balance */
+    
+    s32 side_balance_302C;  /* 0x302C - Team balance (-30000 to +30000, adjusted by ±0xEB/frame) */
 } TitleMenuState;
 
 typedef struct {

@@ -115,8 +115,8 @@ extern void ChangeClearPAD(long val);
 extern void FUN_80057e40(CdlFILE* cdlFile, u8* buffer, u16 mode);        /* 0x80057e40 */
 void FUN_80057df4(char* fileName, u8* buffer, u16 mode);                 /* 0x80057df4 */
 extern void FUN_80070e44(void);           /* 0x80070e44 */
-extern void FUN_800742cc(s32 arg0, s32 arg1);  /* 0x800742cc */
-extern s32 FUN_80074370(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
+extern void FntLoad(s32 arg0, s32 arg1);  /* 0x800742cc */
+extern s32 FntOpen(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80074370 */
 extern void FUN_80057674(s32 arg0, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8, s32 arg9);  /* 0x80057674 */
 extern void* FUN_80049504(void* callback, s32 arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5);  /* 0x80049504 */
 extern void FUN_80057c80(void* arg0);     /* 0x80057c80 */
@@ -126,7 +126,6 @@ extern s16 FUN_80038228(s32 arg0, s32 arg1);  /* 0x80038228 */
 extern void FUN_80058d64(void);           /* 0x80058d64 */
 extern void FUN_80021dd0(void);           /* 0x80021dd0 */
 extern void FUN_80022c94(void);           /* 0x80022c94 */
-extern void FUN_80023290(void);           /* 0x80023290 */
 
 extern void FUN_8002339c(void);
 extern void FUN_800688b0(s16 arg0);
@@ -142,7 +141,7 @@ extern s32 FUN_80064368(s32 arg0, s16 arg1, s32 arg2, s32 arg3);   /* 0x80064368
 extern void FUN_80067c74(s16 arg0, s32 arg1);  /* 0x80067c74 */
 extern void FUN_800678b4(s16 arg0, s32 arg1, u8 arg2, s16 arg3);   /* 0x800678b4 */
 extern void FUN_80068e34(s16 arg0, s32 arg1);  /* 0x80068e34 */
-extern s16 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
+extern u16 FUN_8003bcc4(s16 arg0);             /* 0x8003bcc4 */
 extern void FUN_8004be40(void* arg0, u16 arg1); /* 0x8004be40 */
 extern void FUN_80050744(void* arg0);          /* 0x80050744 */
 extern void FUN_8005286c(void* arg0);          /* 0x8005286c */
@@ -183,7 +182,7 @@ extern void FUN_8005c214(s32 arg0);
  * External Global Variables
  * ============================================================================ */
 
-extern u32 DAT_80083498;   /* Result from FUN_80074370 */
+extern u32 DAT_80083498;   /* Result from FntOpen */
 extern s32 DAT_8008344c;
 extern s32 DAT_80083450;
 extern s32 DAT_80083448;
@@ -269,6 +268,9 @@ extern s16 DAT_gp_02dc;    /* GP + 0x2DC = 732 */
 
 extern s16 DAT_80083314;  /* GP + 0x160 = 352 */
 extern s16 DAT_80083318;  /* GP + 0x164 = 356 */
+extern s16 DAT_8008331c;  /* GP + 0x168 = 360 */
+extern s16 DAT_80083320;  /* GP + 0x16C = 364 */
+extern POLY_F4 POLY_F4_800836bc;
 extern s32 DAT_8007b000;
 extern s32 DAT_8007affc;
 
