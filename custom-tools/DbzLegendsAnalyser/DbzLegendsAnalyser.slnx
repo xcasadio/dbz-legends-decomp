@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../MonoGame.ImGuiNet/MonoGame.ImGuiNet/Monogame.ImGuiNet.csproj" />
+  <Project Path="DbzLegendsAnalyser/DbzLegendsAnalyser.csproj" />
+</Solution>
