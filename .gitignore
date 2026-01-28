@@ -53,3 +53,7 @@ reference/
 data/
 ghidra/
 /bin/psyq4.0/*
+
+bin/
+.vs/
+obj/
