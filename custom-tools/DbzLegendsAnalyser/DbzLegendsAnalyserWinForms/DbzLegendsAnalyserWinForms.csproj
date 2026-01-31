@@ -13,6 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Controls\FACE_B_Control.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\EFF_AUTO_B_Control.cs" />
+    <Compile Update="Controls\STG_TX_Control.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="Controls\LOAD_B_Control.cs">
       <SubType>UserControl</SubType>
     </Compile>

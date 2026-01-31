@@ -2,7 +2,7 @@
 
 namespace DbzLegendsAnalyserWinForms.Controls;
 
-public partial class OV_CHR_A_Control : UserControl
+public partial class OV_CHR_A_Control : AnalyserControl
 {
     private readonly Dictionary<string, Bitmap> _extractedImages = new();
 
@@ -19,10 +19,9 @@ public partial class OV_CHR_A_Control : UserControl
         }
     }
 
-    public void Initialize(string gamePath)
+    public override void Initialize(string fileName)
     {
-        var ovChrAPath = Path.Combine(gamePath, "CHR_DATA", "OV_CHR_A.B");
-        var file = File.ReadAllBytes(ovChrAPath);
+        var file = File.ReadAllBytes(fileName);
         var decomp = LzssDecompressor.Decompress(file);
 
         if (decomp.Length < 0x7400)

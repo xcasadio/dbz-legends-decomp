@@ -1,6 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Update="Controls\AnalyserControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\EFF_AUTO_B_Control.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="Controls\OV_CHR_A_Control.cs">
       <SubType>UserControl</SubType>
     </Compile>

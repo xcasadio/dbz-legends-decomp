@@ -2,7 +2,7 @@
 
 namespace DbzLegendsAnalyserWinForms.Controls;
 
-public partial class LOAD_B_Control : UserControl
+public partial class LOAD_B_Control : AnalyserControl
 {
     private readonly Dictionary<string, Bitmap> _extractedImages = new();
 
@@ -19,10 +19,9 @@ public partial class LOAD_B_Control : UserControl
         }
     }
 
-    public void Initialize(string gamePath)
+    public override void Initialize(string fileName)
     {
-        var filePath = Path.Combine(gamePath, "CHR_DATA", "LOAD.B");
-        var file = File.ReadAllBytes(filePath);
+        var file = File.ReadAllBytes(fileName);
 
         // LOAD.B structure: multiple sections of 20480 bytes (10 CD sectors)
         // Each section:
@@ -33,7 +32,6 @@ public partial class LOAD_B_Control : UserControl
         const int PaletteSize = 0x200; // 512 bytes = 256 colors
         const int CompressedDataOffset = 0x200;
 
-        // Calculate number of sections, including partial last section
         int numSections = (file.Length + SectionSize - 1) / SectionSize;
 
         _extractedImages.Clear();
@@ -41,9 +39,6 @@ public partial class LOAD_B_Control : UserControl
         for (int sectionIndex = 0; sectionIndex < numSections; sectionIndex++)
         {
             int sectionStart = sectionIndex * SectionSize;
-            
-            // Extract palette (256 colors total, 16-bit each)
-            // Trying 8bpp mode with 256 color palette
             var paletteColors = BinaryReaderHelper.ReadUShortArrayFast(
                 file, 
                 sectionStart + PaletteOffset, 
@@ -77,11 +72,8 @@ public partial class LOAD_B_Control : UserControl
                 continue;
             }
 
-            // Decode image as 160x240 (VRAM units), 8bpp
-            // 76800 bytes in 8bpp (1 byte/pixel) = 76800 pixels = 320×240
-            // In VRAM units for 8bpp: 320 pixels ÷ 2 = 160 VRAM units
-            const int ImageWidth = 160;    // 160 VRAM units (320 pixels)
-            const int ImageHeight = 240;   // 240 pixels
+            const int ImageWidth = 160; // 160 VRAM units (320 pixels)
+            const int ImageHeight = 240;
 
             try
             {
@@ -97,7 +89,6 @@ public partial class LOAD_B_Control : UserControl
             }
             catch (Exception ex)
             {
-                // Skip if decode fails
                 continue;
             }
         }
