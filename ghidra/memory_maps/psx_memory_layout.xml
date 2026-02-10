@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DBZ Legends - PSX Memory Layout for Ghidra
+  
+  This XML file defines the PlayStation 1 memory layout for use in Ghidra.
+  Import this using: File -> Import File... and select this XML file.
+  
+  Based on standard PSX memory mapping and DBZ Legends specific requirements.
+-->
+<memory_layout>
+    <description>PlayStation 1 Memory Layout for DBZ Legends</description>
+    
+    <!-- Main RAM (2MB) -->
+    <memory_block name="RAM" start_address="0x80000000" length="0x200000" 
+                  permissions="rwx" initialized="true" overlay="false">
+        <description>Main system RAM (2MB) - Cached</description>
+    </memory_block>
+    
+    <!-- Uncached RAM mirror -->
+    <memory_block name="RAM_UNCACHED" start_address="0xA0000000" length="0x200000" 
+                  permissions="rwx" initialized="true" overlay="false">
+        <description>Main system RAM (2MB) - Uncached mirror</description>
+    </memory_block>
+    
+    <!-- Scratchpad RAM (1KB) -->
+    <memory_block name="SCRATCHPAD" start_address="0x1F800000" length="0x400" 
+                  permissions="rwx" initialized="true" overlay="false">
+        <description>Scratchpad RAM (1KB) - Fast local memory</description>
+    </memory_block>
+    
+    <!-- Hardware Registers -->
+    <memory_block name="HW_REGS" start_address="0x1F801000" length="0x2000" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>Hardware control registers</description>
+    </memory_block>
+    
+    <!-- Expansion Region 1 -->
+    <memory_block name="EXPANSION1" start_address="0x1F000000" length="0x800000" 
+                  permissions="rwx" initialized="false" overlay="false">
+        <description>Expansion Region 1 (8MB)</description>
+    </memory_block>
+    
+    <!-- Expansion Region 2 -->
+    <memory_block name="EXPANSION2" start_address="0x1F802000" length="0x66000" 
+                  permissions="rwx" initialized="false" overlay="false">
+        <description>Expansion Region 2</description>
+    </memory_block>
+    
+    <!-- BIOS ROM -->
+    <memory_block name="BIOS" start_address="0xBFC00000" length="0x80000" 
+                  permissions="rx" initialized="true" overlay="false">
+        <description>BIOS ROM (512KB)</description>
+    </memory_block>
+    
+    <!-- I/O Ports -->
+    <memory_block name="IO_PORTS" start_address="0x1F801040" length="0x20" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>I/O Port registers</description>
+    </memory_block>
+    
+    <!-- Memory Control -->
+    <memory_block name="MEM_CONTROL" start_address="0x1F801000" length="0x40" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>Memory control registers</description>
+    </memory_block>
+    
+    <!-- Peripheral I/O -->
+    <memory_block name="PERIPHERAL_IO" start_address="0x1F801070" length="0x10" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>Peripheral I/O registers</description>
+    </memory_block>
+    
+    <!-- DMA Registers -->
+    <memory_block name="DMA_REGS" start_address="0x1F801080" length="0x80" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>DMA control registers</description>
+    </memory_block>
+    
+    <!-- Timer Registers -->
+    <memory_block name="TIMER_REGS" start_address="0x1F801100" length="0x30" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>Timer control registers</description>
+    </memory_block>
+    
+    <!-- CD-ROM Registers -->
+    <memory_block name="CDROM_REGS" start_address="0x1F801800" length="0x4" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>CD-ROM control registers</description>
+    </memory_block>
+    
+    <!-- GPU Registers -->
+    <memory_block name="GPU_REGS" start_address="0x1F801810" length="0x8" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>GPU control registers</description>
+    </memory_block>
+    
+    <!-- MDEC Registers -->
+    <memory_block name="MDEC_REGS" start_address="0x1F801820" length="0x8" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>MDEC (Motion Decoder) registers</description>
+    </memory_block>
+    
+    <!-- SPU Registers -->
+    <memory_block name="SPU_REGS" start_address="0x1F801C00" length="0x280" 
+                  permissions="rw" initialized="true" overlay="false">
+        <description>SPU (Sound Processing Unit) registers</description>
+    </memory_block>
+    
+    <!-- Expansion Region 3 (usually for save data) -->
+    <memory_block name="EXPANSION3" start_address="0x1FA00000" length="0x200000" 
+                  permissions="rwx" initialized="false" overlay="false">
+        <description>Expansion Region 3 (2MB) - Memory cards</description>
+    </memory_block>
+    
+    <!-- DBZ Legends specific overlays -->
+    <overlay_regions>
+        <overlay name="main" base_address="0x80020000" description="Main executable (SLPS_003.55)"/>
+        <overlay name="game" base_address="0x80020000" description="Game overlay (GAME.EXE)"/>
+        <overlay name="title" base_address="0x80020000" description="Title screen overlay (TITLE.EXE)"/>
+        <overlay name="select" base_address="0x80020000" description="Select screen overlay (SELECT.EXE)"/>
+        <overlay name="vs" base_address="0x80020000" description="VS mode overlay (VS.EXE)"/>
+        <overlay name="sp" base_address="0x80020000" description="Special mode overlay (SP.EXE)"/>
+        <overlay name="demo" base_address="0x80020000" description="Demo overlay (DEMO.EXE)"/>
+        <overlay name="movie" base_address="0x80020000" description="Movie player overlay (MOVIE.EXE)"/>
+        <overlay name="ending" base_address="0x80010000" description="Ending overlay (ENDING.EXE)"/>
+    </overlay_regions>
+</memory_layout>
