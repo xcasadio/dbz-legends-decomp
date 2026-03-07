@@ -61,6 +61,7 @@ namespace DbzLegendsAnalyser
         // Layout
         private MGWindow _mainWindow;
         private MGListBox<string> _fileListBox;
+        private MGListBox<string> _imageListBox;  // sub-list for images within a file
         private MGDockPanel _contentPanel; // right side — content area placeholder
 
         // Data
@@ -69,6 +70,7 @@ namespace DbzLegendsAnalyser
 
         // Active viewer
         private IAnalyserView? _activeViewer;
+        private List<string> _imageItems = new(); // items currently shown in _imageListBox
 
         // Viewer factories: viewer-type string → constructor
         private readonly Dictionary<string, Func<IAnalyserView>> _viewerFactories = new()
@@ -205,11 +207,23 @@ namespace DbzLegendsAnalyser
             splitGrid.AddColumn(GridLength.CreateWeightedLength(1));  // right: content
             splitGrid.AddRow(GridLength.CreateWeightedLength(1));     // single row
 
-            // Left: file list box
+            // Left: two-row grid — file list (top) + image list (bottom)
+            var leftGrid = new MGGrid(_mainWindow);
+            leftGrid.AddColumn(GridLength.CreateWeightedLength(1));
+            leftGrid.AddRow(GridLength.CreateWeightedLength(1));   // file list
+            leftGrid.AddRow(GridLength.CreatePixelLength(180));    // image sub-list
+
             _fileListBox = new MGListBox<string>(_mainWindow);
             _fileListBox.SelectionMode = ListBoxSelectionMode.Single;
             _fileListBox.SelectionChanged += OnFileSelected;
-            splitGrid.TryAddChild(0, 0, _fileListBox);
+            leftGrid.TryAddChild(0, 0, _fileListBox);
+
+            _imageListBox = new MGListBox<string>(_mainWindow);
+            _imageListBox.SelectionMode = ListBoxSelectionMode.Single;
+            _imageListBox.SelectionChanged += OnImageSelected;
+            leftGrid.TryAddChild(0, 1, _imageListBox);
+
+            splitGrid.TryAddChild(0, 0, leftGrid);
 
             // Right: content placeholder (DockPanel that will hold viewer content)
             _contentPanel = new MGDockPanel(_mainWindow, true);
@@ -278,9 +292,11 @@ namespace DbzLegendsAnalyser
                 return;
             }
 
-            // Dispose previous viewer
+            // Dispose previous viewer and clear image list
             _activeViewer?.Dispose();
             _activeViewer = null;
+            _imageItems.Clear();
+            _imageListBox.SetItemsSource(_imageItems);
 
             try
             {
@@ -290,15 +306,27 @@ namespace DbzLegendsAnalyser
                     viewer.Initialize(fullPath, GraphicsDevice);
                     _activeViewer = viewer;
 
-                    // Update file list box with viewer's list items
+                    // Populate image sub-list
                     var items = viewer.GetListItems();
                     Debug.WriteLine($"[Viewer] Loaded {viewerType} — {items.Length} items");
+                    _imageItems = items.ToList();
+                    _imageListBox.SetItemsSource(_imageItems);
+                    if (_imageItems.Count > 0)
+                        _imageListBox.SelectItem(_imageItems[0], true);
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[Viewer] Error loading {selectedFile}: {ex.Message}");
             }
+        }
+
+        private void OnImageSelected(object sender, ReadOnlyCollection<MGListBoxItem<string>> selection)
+        {
+            if (_activeViewer == null || selection == null || selection.Count == 0) return;
+            int index = _imageItems.IndexOf(selection[0].Data);
+            if (index >= 0)
+                _activeViewer.OnItemSelected(index);
         }
 
         protected override void Update(GameTime gameTime)
