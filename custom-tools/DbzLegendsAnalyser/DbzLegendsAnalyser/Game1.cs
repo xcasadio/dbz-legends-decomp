@@ -1,4 +1,30 @@
-﻿using Microsoft.Xna.Framework;
+﻿// ─────────────────────────────────────────────────────────────────────────────
+//  MGUI ↔ WinForms mapping for DbzLegendsAnalyser conversion
+//
+//  WinForms Control         →  MGUI Equivalent
+//  ──────────────────────────────────────────────────────────────
+//  MenuStrip                →  MGMenuBar + MGContextMenu
+//  SplitContainer           →  MGGrid + GridLength (columns)
+//  ListBox                  →  MGListBox<string>
+//  Label                    →  MGTextBlock
+//  Button                   →  MGButton
+//  CheckBox                 →  MGCheckBox
+//  FolderBrowserDialog      →  System.Windows.Forms.FolderBrowserDialog (interop)
+//  ImageViewerControl       →  Custom SpriteBatch rendering (pan/zoom)
+//  GDI+ 3D wireframe        →  MonoGame BasicEffect + LineList primitives
+//  AnalyserControl (base)   →  IAnalyserView interface
+//
+//  Initialization:
+//    Game1 : Game, IObservableUpdate
+//    → GameRenderHost<Game1> → MainRenderer → MGDesktop
+//    → MGWindow (borderless, fills screen) → MGDockPanel (layout)
+//    → Desktop.Update() in Update(), Desktop.Draw() in Draw()
+//
+//  Font setup:
+//    FontStashSharp with arial.ttf from MGUI.Core/Content/Fonts/ttf/
+// ─────────────────────────────────────────────────────────────────────────────
+
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
@@ -11,8 +37,6 @@ namespace DbzLegendsAnalyser
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
 
-        public static bool ShowDemo = false;
-
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -22,8 +46,7 @@ namespace DbzLegendsAnalyser
             _graphics.PreferredBackBufferWidth = 1024;
             _graphics.PreferredBackBufferHeight = 768;
 
-            Window.AllowUserResizing = true; // true;
-            //Window.ClientSizeChanged += delegate { WasResized = true; };
+            Window.AllowUserResizing = true;
         }
 
         protected override void Initialize()
