@@ -9,3 +9,7 @@
 [submodule "tools/maspsx"]
 	path = tools/maspsx
 	url = https://github.com/mkst/maspsx.git
+[submodule "custom-tools/MGUI"]
+	path = custom-tools/MGUI
+	url = https://github.com/xcasadio/MGUI.git
+	branch = develop

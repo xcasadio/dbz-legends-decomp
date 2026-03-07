@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/MGUI/">
+    <Project Path="../MGUI/MGUI.Core/MGUI.Core.csproj" />
+    <Project Path="../MGUI/MGUI.FontStashSharp/MGUI.FontStashSharp.csproj" />
+    <Project Path="../MGUI/MGUI.Shared/MGUI.Shared.csproj" />
+  </Folder>
   <Project Path="DbzLegendsAnalyser/DbzLegendsAnalyser.csproj" />
   <Project Path="DbzLegendsAnalyserWinForms/DbzLegendsAnalyserWinForms.csproj" Id="b7211ab8-870a-440a-9600-dc9bb35b0ac2" />
   <Project Path="PsxTools/PsxTools.csproj" />

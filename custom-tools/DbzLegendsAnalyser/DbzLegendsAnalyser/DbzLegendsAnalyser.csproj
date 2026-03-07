@@ -17,7 +17,10 @@
     <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.*" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MonoGame.ImGuiNet\MonoGame.ImGuiNet\Monogame.ImGuiNet.csproj" />
+    <ProjectReference Include="..\..\MGUI\MGUI.Core\MGUI.Core.csproj" />
+    <ProjectReference Include="..\..\MGUI\MGUI.FontStashSharp\MGUI.FontStashSharp.csproj" />
+    <ProjectReference Include="..\..\MGUI\MGUI.Shared\MGUI.Shared.csproj" />
+    <ProjectReference Include="..\PsxTools\PsxTools.csproj" />
   </ItemGroup>
   <Target Name="RestoreDotnetTools" BeforeTargets="CollectPackageReferences">
     <Message Text="Restoring dotnet tools (this might take a while depending on your internet speed and should only happen upon building your project for the first time, or after upgrading MonoGame, or clearing your nuget cache)" Importance="High" />
