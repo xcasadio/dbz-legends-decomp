@@ -221,7 +221,7 @@ namespace DbzLegendsAnalyser
             _imageListBox = new MGListBox<string>(_mainWindow);
             _imageListBox.SelectionMode = ListBoxSelectionMode.Single;
             _imageListBox.SelectionChanged += OnImageSelected;
-            leftGrid.TryAddChild(0, 1, _imageListBox);
+            leftGrid.TryAddChild(1, 0, _imageListBox);
 
             splitGrid.TryAddChild(0, 0, leftGrid);
 
