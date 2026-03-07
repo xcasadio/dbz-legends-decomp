@@ -1,0 +1,28 @@
+[
+  {
+	"filename":"CHR_DATA\\OV_CHR_A.B",
+	"iscompressed":true,
+	"data": [
+	  {
+	    "type": "image",
+	    "offset": 768,
+	    "length": 8192,
+	    "width": 32,
+	    "height": 128,
+	    "bpp": 4,
+	    "numberofpalette": 8,
+	    "clutoffset": 0
+	  },
+	  {
+	    "type": "image",
+	    "offset": 768,
+	    "length": 8192,
+	    "width": 32,
+	    "height": 128,
+	    "bpp": 4,
+	    "numberofpalette": 8,
+	    "clutoffset": 0
+	  },
+    ]
+  }
+]
