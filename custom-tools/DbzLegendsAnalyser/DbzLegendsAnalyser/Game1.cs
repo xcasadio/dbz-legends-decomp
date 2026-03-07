@@ -1,20 +1,4 @@
 ﻿#pragma warning disable CS8632 // nullable annotation without #nullable enable
-// ─────────────────────────────────────────────────────────────────────────────
-//  MGUI ↔ WinForms mapping for DbzLegendsAnalyser conversion
-//
-//  WinForms Control         →  MGUI Equivalent
-//  ──────────────────────────────────────────────────────────────
-//  MenuStrip                →  MGMenuBar + MGContextMenu
-//  SplitContainer           →  MGGrid + GridLength (columns)
-//  ListBox                  →  MGListBox<string>
-//  Label                    →  MGTextBlock
-//  Button                   →  MGButton
-//  CheckBox                 →  MGCheckBox
-//  FolderBrowserDialog      →  System.Windows.Forms.FolderBrowserDialog (interop)
-//  ImageViewerControl       →  Custom SpriteBatch rendering (pan/zoom)
-//  GDI+ 3D wireframe        →  MonoGame BasicEffect + LineList primitives
-//  AnalyserControl (base)   →  IAnalyserView interface
-// ─────────────────────────────────────────────────────────────────────────────
 
 using FontStashSharp;
 using MGUI.Core.UI;
@@ -62,7 +46,8 @@ namespace DbzLegendsAnalyser
         private MGWindow _mainWindow;
         private MGListBox<string> _fileListBox;
         private MGListBox<string> _imageListBox;  // sub-list for images within a file
-        private MGDockPanel _contentPanel; // right side — content area placeholder
+        private MGDockPanel _contentPanel; // right side — content area
+        private MGTextBlock _placeholder;   // "Open a game data folder" hint, hidden once folder is open
 
         // Data
         private string _gamePath;
@@ -201,38 +186,33 @@ namespace DbzLegendsAnalyser
             });
             dockPanel.TryAddChild(menuBar, Dock.Top);
 
-            // ── Split Grid: file list (left) | content area (right) ──
+            // ── Split Grid: file list | image list | content area ──
             var splitGrid = new MGGrid(_mainWindow);
-            splitGrid.AddColumn(GridLength.CreatePixelLength(250));   // left: file list
-            splitGrid.AddColumn(GridLength.CreateWeightedLength(1));  // right: content
+            splitGrid.AddColumn(GridLength.CreatePixelLength(200));   // col 0: file list
+            splitGrid.AddColumn(GridLength.CreatePixelLength(200));   // col 1: image list
+            splitGrid.AddColumn(GridLength.CreateWeightedLength(1));  // col 2: content
             splitGrid.AddRow(GridLength.CreateWeightedLength(1));     // single row
 
-            // Left: two-row grid — file list (top) + image list (bottom)
-            var leftGrid = new MGGrid(_mainWindow);
-            leftGrid.AddColumn(GridLength.CreateWeightedLength(1));
-            leftGrid.AddRow(GridLength.CreateWeightedLength(1));   // file list
-            leftGrid.AddRow(GridLength.CreatePixelLength(180));    // image sub-list
-
+            // Col 0: file list
             _fileListBox = new MGListBox<string>(_mainWindow);
             _fileListBox.SelectionMode = ListBoxSelectionMode.Single;
             _fileListBox.SelectionChanged += OnFileSelected;
-            leftGrid.TryAddChild(0, 0, _fileListBox);
+            splitGrid.TryAddChild(0, 0, _fileListBox);
 
+            // Col 1: image sub-list
             _imageListBox = new MGListBox<string>(_mainWindow);
             _imageListBox.SelectionMode = ListBoxSelectionMode.Single;
             _imageListBox.SelectionChanged += OnImageSelected;
-            leftGrid.TryAddChild(1, 0, _imageListBox);
+            splitGrid.TryAddChild(0, 1, _imageListBox);
 
-            splitGrid.TryAddChild(0, 0, leftGrid);
-
-            // Right: content placeholder (DockPanel that will hold viewer content)
+            // Col 2: content placeholder
             _contentPanel = new MGDockPanel(_mainWindow, true);
-            var placeholder = new MGTextBlock(_mainWindow,
+            _placeholder = new MGTextBlock(_mainWindow,
                 "[i]Open a game data folder to begin[/i]", Color.Gray, 12);
-            placeholder.HorizontalAlignment = HorizontalAlignment.Center;
-            placeholder.VerticalAlignment = VerticalAlignment.Center;
-            _contentPanel.TryAddChild(placeholder, Dock.Top);
-            splitGrid.TryAddChild(0, 1, _contentPanel);
+            _placeholder.HorizontalAlignment = HorizontalAlignment.Center;
+            _placeholder.VerticalAlignment = VerticalAlignment.Center;
+            _contentPanel.TryAddChild(_placeholder, Dock.Top);
+            splitGrid.TryAddChild(0, 2, _contentPanel);
 
             dockPanel.TryAddChild(splitGrid, Dock.Top); // fills remaining space (LastChildFill)
 
@@ -257,6 +237,7 @@ namespace DbzLegendsAnalyser
 
             _gamePath = dialog.SelectedPath;
             Window.Title = $"DBZ Legends Analyser — {_gamePath}";
+            _placeholder.Visibility = Visibility.Collapsed;
 
             // Populate list with files that actually exist on disk
             _fileEntries.Clear();
