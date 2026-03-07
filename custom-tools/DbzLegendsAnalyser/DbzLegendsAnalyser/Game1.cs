@@ -303,7 +303,7 @@ namespace DbzLegendsAnalyser
             if (Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
-            // Keep main window sized to viewport
+            // Keep main window sized to viewport (handles OS window resize)
             if (_mainWindow != null)
             {
                 var vp = GraphicsDevice.Viewport;
@@ -313,6 +313,7 @@ namespace DbzLegendsAnalyser
                     _mainWindow.Top = 0;
                     _mainWindow.WindowWidth = vp.Width;
                     _mainWindow.WindowHeight = vp.Height;
+                    _mainWindow.QueueLayoutRefresh = true; // force MGUI layout recalculation
                 }
             }
 
