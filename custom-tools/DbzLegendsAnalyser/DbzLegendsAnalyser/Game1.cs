@@ -1,4 +1,5 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+﻿#pragma warning disable CS8632 // nullable annotation without #nullable enable
+// ─────────────────────────────────────────────────────────────────────────────
 //  MGUI ↔ WinForms mapping for DbzLegendsAnalyser conversion
 //
 //  WinForms Control         →  MGUI Equivalent
@@ -38,6 +39,16 @@ using Color = Microsoft.Xna.Framework.Color;
 
 namespace DbzLegendsAnalyser
 {
+    /// <summary>
+    /// Main game class for DbzLegendsAnalyser — a MonoGame + MGUI port of the WinForms
+    /// PSX game data viewer for Dragon Ball Z: Legends.
+    ///
+    /// Architecture:
+    ///   - MGUI provides the UI chrome: menu bar, file list (left panel), content area (right panel).
+    ///   - File viewers (<see cref="IAnalyserView"/>) render their content into the right panel
+    ///     via direct <see cref="SpriteBatch"/>/<see cref="BasicEffect"/> rendering, drawn on top of MGUI.
+    ///   - <see cref="System.Windows.Forms.FolderBrowserDialog"/> is used for the folder picker (WinForms interop).
+    /// </summary>
     public class Game1 : Game, IObservableUpdate
     {
         private GraphicsDeviceManager _graphics;

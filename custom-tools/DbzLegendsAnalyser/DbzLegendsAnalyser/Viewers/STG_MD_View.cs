@@ -1,3 +1,4 @@
+#pragma warning disable CS8632 // nullable annotation without #nullable enable
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -43,7 +44,6 @@ namespace DbzLegendsAnalyser.Viewers
         // ── MonoGame resources ────────────────────────────────────────────────
         private GraphicsDevice _graphicsDevice;
         private BasicEffect _basicEffect;
-        private SpriteFont _debugFont; // may be null
 
         // ── Input ─────────────────────────────────────────────────────────────
         private MouseState _prevMouse;
