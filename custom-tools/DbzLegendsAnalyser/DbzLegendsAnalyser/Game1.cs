@@ -120,14 +120,10 @@ namespace DbzLegendsAnalyser
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            // Create MGUI renderer and desktop
             MGUIRenderer = new MainRenderer(new GameRenderHost<Game1>(this));
             Desktop = new MGDesktop(MGUIRenderer);
 
-            // Initialize FontStashSharp text engine
             InitializeFonts();
-
-            // Build main UI layout
             BuildMainLayout();
 
             base.Initialize();
@@ -138,14 +134,12 @@ namespace DbzLegendsAnalyser
             try
             {
                 // Fonts are in MGUI.Core/Content/Fonts/ttf/ — resolve relative to exe
-                string ttfDir = Path.GetFullPath(
-                    Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\..\MGUI\MGUI.Core\Content\Fonts\ttf"));
+                string ttfDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\..\MGUI\MGUI.Core\Content\Fonts\ttf"));
 
                 if (!Directory.Exists(ttfDir))
                 {
                     // Try alternate path for development
-                    ttfDir = Path.GetFullPath(
-                        Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\MGUI\MGUI.Core\Content\Fonts\ttf"));
+                    ttfDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\MGUI\MGUI.Core\Content\Fonts\ttf"));
                 }
 
                 if (!Directory.Exists(ttfDir))
