@@ -2,11 +2,11 @@
 
 namespace DbzLegendsAnalyserWinForms.Controls;
 
-public partial class EFF_AUTO_B_Control : AnalyserControl
+public partial class TITLE_B_Control : AnalyserControl
 {
     private readonly Dictionary<string, Bitmap> _extractedImages = new();
 
-    public EFF_AUTO_B_Control()
+    public TITLE_B_Control()
     {
         InitializeComponent();
     }
@@ -16,6 +16,30 @@ public partial class EFF_AUTO_B_Control : AnalyserControl
         _extractedImages.Clear();
         
         var file = File.ReadAllBytes(fileName);
+
+        /*
+        - Entry 0 (image)
+            dataOffset=0x5D8, vram=(384,0), widthWords=0xA0, h=0xF0, isClut=0
+            8bpp (car palette CLUT256 juste après)
+            Dimensions pixels : 320×240
+        - Entry 1 (palette)
+            dataOffset=0x1B8, vram=(384,240), widthWords=0x100, h=1, isClut=1
+            CLUT256 (512 bytes)
+        - Entry 2 (image)
+            dataOffset=0x131D8, vram=(384,256), widthWords=0x80, h=0x100, isClut=0
+            8bpp
+            Dimensions pixels : 256×256
+        - Entry 3 (palette)
+            dataOffset=0x3B8, vram=(384,241), widthWords=0x100, h=1, isClut=1
+            CLUT256 (512 bytes) (non compressée : elle commence par 0x0000 = couleur 0)
+        - Entry 4 (image)
+            dataOffset=0x231D8, vram=(704,256), widthWords=0x40, h=0x80, isClut=0
+            4bpp, compressée via FUN_80034e34 (décompresse pile en 0x4000 bytes)
+            Dimensions pixels : 256×128
+        - Entry 5 (palette)
+            dataOffset=0x5B8, vram=(704,384), widthWords=0x10, h=1, isClut=1
+            CLUT16 (32 bytes)
+         */
 
         // Extract palette (80 colors)
         const int PaletteOffset = 0x00;
@@ -58,31 +82,6 @@ public partial class EFF_AUTO_B_Control : AnalyserControl
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Image 1: Failed to decode - {ex.Message}");
-        }
-
-        // Image 2: after image 1 (estimate position)
-        try
-        {
-            const int Image2Offset = 0x355C;
-            var buffer = file.AsSpan(Image2Offset).ToArray();
-            var decompressed2 = LzssDecompressor.Decompress(buffer);
-            
-            for (int i = 0; i < 5; i++)
-            {
-                var bitmap2 = PsxImageLoader.DecodeToBitmap(
-                    decompressed2,
-                    new PsxImageLoader.PsxImageLayout(ImageWidth, ImageHeight),
-                    new PsxImageLoader.PsxImageFormat(PsxImageLoader.PsxPixelMode.Bpp4),
-                    palettes[i],
-                    paletteIndex: 0
-                );
-                
-                _extractedImages.Add($"Image_2_AutoEffect_{i}", bitmap2);
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Image 2: Failed to decode - {ex.Message}");
         }
 
         listBoxOffsets.SuspendLayout();

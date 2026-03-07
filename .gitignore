@@ -48,10 +48,9 @@ Thumbs.db
 *.bak
 *~
 
-# Reference folder (FF7 decomp reference)
+# Reference folder
 reference/
 data/
-ghidra/
 /bin/psyq4.0/*
 
 bin/

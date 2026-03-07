@@ -10,6 +10,14 @@ namespace DbzLegendsAnalyserWinForms
             { "CHR_DATA\\LOAD.B", typeof(LOAD_B_Control) },
             { "CHR_DATA\\FACE.B", typeof(FACE_B_Control) },
             { "CHR_DATA\\EFF_AUTO.B", typeof(EFF_AUTO_B_Control) },
+            { "STG\\STG1MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG2MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG3MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG4MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG5MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG6MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG7MD.B", typeof(STG_MD_Control) },
+            { "STG\\STG8MD.B", typeof(STG_MD_Control) },
             { "STG\\STG1TX.B", typeof(STG_TX_Control) },
             { "STG\\STG2TX.B", typeof(STG_TX_Control) },
             { "STG\\STG3TX.B", typeof(STG_TX_Control) },
@@ -17,7 +25,8 @@ namespace DbzLegendsAnalyserWinForms
             { "STG\\STG5TX.B", typeof(STG_TX_Control) },
             { "STG\\STG6TX.B", typeof(STG_TX_Control) },
             { "STG\\STG7TX.B", typeof(STG_TX_Control) },
-            { "STG\\STG8TX.B", typeof(STG_TX_Control) }
+            { "STG\\STG8TX.B", typeof(STG_TX_Control) },
+            { "SUB\\TITLE.B", typeof(TITLE_B_Control) }
         };
 
         private string _gamePath;

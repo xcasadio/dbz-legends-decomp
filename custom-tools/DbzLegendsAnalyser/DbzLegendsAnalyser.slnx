@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="../MonoGame.ImGuiNet/MonoGame.ImGuiNet/Monogame.ImGuiNet.csproj" />
   <Project Path="DbzLegendsAnalyser/DbzLegendsAnalyser.csproj" />
   <Project Path="DbzLegendsAnalyserWinForms/DbzLegendsAnalyserWinForms.csproj" Id="b7211ab8-870a-440a-9600-dc9bb35b0ac2" />
   <Project Path="PsxTools/PsxTools.csproj" />
