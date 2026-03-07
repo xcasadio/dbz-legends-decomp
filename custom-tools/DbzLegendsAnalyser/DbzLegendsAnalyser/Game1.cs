@@ -209,17 +209,36 @@ namespace DbzLegendsAnalyser
         {
             using var dialog = new System.Windows.Forms.FolderBrowserDialog();
             dialog.Description = "Select the game data folder";
-            dialog.InitialDirectory = Path.GetFullPath(
-                Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\..\data"));
 
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK
-                && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            // Default to the repo 'data' directory if it exists
+            string defaultPath = Path.GetFullPath(
+                Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\..\data"));
+            if (Directory.Exists(defaultPath))
+                dialog.InitialDirectory = defaultPath;
+
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK
+                || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                return;
+
+            _gamePath = dialog.SelectedPath;
+            Window.Title = $"DBZ Legends Analyser — {_gamePath}";
+
+            // Populate list with files that actually exist on disk
+            _fileEntries.Clear();
+            foreach (var key in _controlTypes.Keys.OrderBy(k => k))
             {
-                _gamePath = dialog.SelectedPath;
-                _fileEntries.Clear();
-                _fileEntries.AddRange(_controlTypes.Keys.OrderBy(k => k));
-                _fileListBox.SetItemsSource(_fileEntries);
+                string fullPath = Path.Combine(_gamePath, key);
+                if (File.Exists(fullPath))
+                    _fileEntries.Add(key);
             }
+
+            if (_fileEntries.Count == 0)
+            {
+                // Show all entries even if files don't exist (lets user see what's expected)
+                _fileEntries.AddRange(_controlTypes.Keys.OrderBy(k => k));
+            }
+
+            _fileListBox.SetItemsSource(_fileEntries);
         }
 
         private void OnFileSelected(object sender, ReadOnlyCollection<MGListBoxItem<string>> selection)
