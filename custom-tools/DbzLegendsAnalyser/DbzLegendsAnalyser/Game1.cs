@@ -27,6 +27,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using MonoGame.Extended;
+using DbzLegendsAnalyser.Viewers;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -54,6 +55,21 @@ namespace DbzLegendsAnalyser
         // Data
         private string _gamePath;
         private readonly List<string> _fileEntries = new();
+
+        // Active viewer
+        private IAnalyserView? _activeViewer;
+
+        // Viewer factories: viewer-type string → constructor
+        private readonly Dictionary<string, Func<IAnalyserView>> _viewerFactories = new()
+        {
+            { "OV_CHR_A",   () => new OV_CHR_A_View() },
+            { "LOAD_B",     () => new LOAD_B_View() },
+            { "FACE_B",     () => new FACE_B_View() },
+            { "EFF_AUTO_B", () => new EFF_AUTO_B_View() },
+            { "TITLE_B",   () => new TITLE_B_View() },
+            { "STG_TX",    () => new STG_TX_View() },
+            { "STG_MD",    () => new STG_MD_View() },
+        };
 
         // File pattern → viewer type mapping (mirrors WinForms _controlTypes)
         private readonly Dictionary<string, string> _controlTypes = new()
@@ -247,9 +263,37 @@ namespace DbzLegendsAnalyser
                 return;
 
             var selectedFile = selection[0].Data;
-            Debug.WriteLine($"[UI] Selected: {selectedFile}");
+            string? viewerType = _controlTypes.GetValueOrDefault(selectedFile);
+            if (viewerType == null || _gamePath == null) return;
 
-            // TODO: Task 1.3+ — instantiate the appropriate viewer panel
+            string fullPath = Path.Combine(_gamePath, selectedFile);
+            if (!File.Exists(fullPath))
+            {
+                Debug.WriteLine($"[Viewer] File not found: {fullPath}");
+                return;
+            }
+
+            // Dispose previous viewer
+            _activeViewer?.Dispose();
+            _activeViewer = null;
+
+            try
+            {
+                if (_viewerFactories.TryGetValue(viewerType, out var factory))
+                {
+                    var viewer = factory();
+                    viewer.Initialize(fullPath, GraphicsDevice);
+                    _activeViewer = viewer;
+
+                    // Update file list box with viewer's list items
+                    var items = viewer.GetListItems();
+                    Debug.WriteLine($"[Viewer] Loaded {viewerType} — {items.Length} items");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Viewer] Error loading {selectedFile}: {ex.Message}");
+            }
         }
 
         protected override void Update(GameTime gameTime)
@@ -274,6 +318,13 @@ namespace DbzLegendsAnalyser
 
             Desktop.Update();
 
+            // Update active viewer (uses MGUI layout bounds after Desktop.Update)
+            if (_activeViewer != null && _contentPanel != null)
+            {
+                var bounds = _contentPanel.LayoutBounds;
+                _activeViewer.Update(gameTime, bounds);
+            }
+
             base.Update(gameTime);
             EndUpdate?.Invoke(this, EventArgs.Empty);
         }
@@ -282,9 +333,31 @@ namespace DbzLegendsAnalyser
         {
             GraphicsDevice.Clear(new Color(30, 30, 40));
 
+            // Draw MGUI (menu bar, panels, list box, etc.)
             Desktop.Draw();
 
+            // Draw the active viewer's content into the right-side content panel
+            if (_activeViewer != null && _contentPanel != null)
+            {
+                var bounds = _contentPanel.LayoutBounds;
+                if (bounds.Width > 0 && bounds.Height > 0)
+                {
+                    _spriteBatch.Begin(SpriteSortMode.Deferred,
+                        BlendState.AlphaBlend, SamplerState.PointClamp);
+                    _activeViewer.Draw(_spriteBatch, bounds);
+                    // Viewer.Draw() restarts the SpriteBatch; end it here
+                    _spriteBatch.End();
+                }
+            }
+
             base.Draw(gameTime);
+        }
+
+        protected override void UnloadContent()
+        {
+            _activeViewer?.Dispose();
+            _activeViewer = null;
+            base.UnloadContent();
         }
     }
 }
