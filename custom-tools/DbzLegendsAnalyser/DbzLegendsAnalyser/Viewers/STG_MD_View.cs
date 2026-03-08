@@ -14,8 +14,8 @@ namespace DbzLegendsAnalyser.Viewers
     /// 3D viewer for STG\STGxMD.B stage mesh files.
     ///
     /// Controls:
-    ///   Left-drag         — arcball rotate (orbit around target)
-    ///   L+R drag          — pan target (horizontal strafe + world-Y lift)
+    ///   Left-drag         — FPS look-around (pivot on camera position, not target)
+    ///   L+R drag          — pan camera (horizontal strafe + world-Y lift)
     ///   Arrows / WASD     — move camera target (forward/back/strafe)
     ///   Scroll wheel      — zoom (change orbit distance)
     ///   R                 — reset view
@@ -162,14 +162,18 @@ namespace DbzLegendsAnalyser.Viewers
                 _target -= camRight   * mdx * panSpd;   // horizontal strafe
                 _target.Y += mdy * panSpd;              // world-Y lift
             }
-            // ── Left-only drag → arcball rotate ───────────────────────────────
+            // ── Left-only drag → FPS look-around (pivot around camera position) ──
             else if (lbHeld && !rbHeld)
             {
+                // Keep camera world position fixed; only change viewing direction.
+                Vector3 camPos = ComputeCameraPos();
                 _azimuth   -= mdx * 0.008f;
                 _elevation += mdy * 0.008f;
                 _elevation  = MathHelper.Clamp(_elevation,
                     -MathHelper.PiOver2 + 0.02f,
                      MathHelper.PiOver2 - 0.02f);
+                // Recompute target so camera stays in place and only looks elsewhere
+                _target = camPos + ComputeForward() * _distance;
             }
 
             // ── Scroll → zoom (change orbit distance) ─────────────────────────
@@ -591,9 +595,8 @@ namespace DbzLegendsAnalyser.Viewers
 
         /// <summary>
         /// Find the TX entry that contains the texel (tpageX, tpageY, uv).
-        /// Multiple entries can share the same tpage but occupy different Y bands
-        /// (e.g. two 128-tall textures at vramY=0 and vramY=128 in tpageY=0).
-        /// Using the actual V value avoids returning the wrong sub-texture.
+        /// Returns null when no entry actually covers the UV — callers must skip those
+        /// triangles rather than apply a wrong texture.
         /// </summary>
         private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv)
         {
@@ -624,7 +627,9 @@ namespace DbzLegendsAnalyser.Viewers
                 }
             }
 
-            return entries.Count > 0 ? entries[0] : null;
+            // No valid entry found — caller should skip this triangle.
+            // Do NOT fall back to entries[0]; that would apply a wrong texture.
+            return null;
         }
 
         /// <summary>Convert raw PSX UV byte into [0,1] texture coord.</summary>
