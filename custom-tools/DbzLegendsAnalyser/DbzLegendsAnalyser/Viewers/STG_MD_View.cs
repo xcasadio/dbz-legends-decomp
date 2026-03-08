@@ -299,33 +299,34 @@ namespace DbzLegendsAnalyser.Viewers
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearWrap;
                 // Draw sky panorama first (furthest back).
-                // Pass 1 (opaque): solid sky-blue fill — gives the cloud texture a background
-                //   to add onto.  BasicEffect uses vertex colours from _skySolidVerts.
-                // Pass 2 (additive): cloud texture — black pixels (RGB=0) add 0 = transparent;
-                //   grey/white cloud pixels brighten the blue base, matching PSX semi-trans.
-                if (_skySolidVerts.Length >= 3 || _skyTexGroups.Count > 0)
+                // Sky panels: draw texture opaque — the texture IS the sky background.
+                // (Additive or semi-transparent effects are for layers on TOP, not the base.)
+                if (_skyTexGroups.Count > 0 || _skySolidVerts.Length >= 3)
                 {
-                    // Pass 1 — opaque solid sky colour
-                    ApplyMatrices(_basicEffect, _bounds);
-                    gd.BlendState = BlendState.Opaque;
-                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        if (_skySolidVerts.Length >= 3)
-                            gd.DrawUserPrimitives(PrimitiveType.TriangleList,
-                                _skySolidVerts, 0, _skySolidVerts.Length / 3);
-                    }
-                    // Pass 2 — additive cloud texture on top
                     ApplyMatrices(_texEffect, _bounds);
-                    gd.BlendState = BlendState.Additive;
-                    foreach (var (tex, verts) in _skyTexGroups)
-                    {
-                        if (verts.Length < 3) continue;
-                        _texEffect.Texture = tex;
-                        foreach (var pass in _texEffect.CurrentTechnique.Passes)
-                        { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
-                    }
                     gd.BlendState = BlendState.Opaque;
+                    if (_skyTexGroups.Count > 0)
+                    {
+                        foreach (var (tex, verts) in _skyTexGroups)
+                        {
+                            if (verts.Length < 3) continue;
+                            _texEffect.Texture = tex;
+                            foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                            { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: solid colour when no sky texture available
+                        ApplyMatrices(_basicEffect, _bounds);
+                        foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+                        {
+                            pass.Apply();
+                            if (_skySolidVerts.Length >= 3)
+                                gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                                    _skySolidVerts, 0, _skySolidVerts.Length / 3);
+                        }
+                    }
                 }
                 // Draw background billboard sprites on top of sky
                 foreach (var (tex, verts) in _bgTexGroups)
@@ -805,8 +806,16 @@ namespace DbzLegendsAnalyser.Viewers
             var skyTx = FindTexture(txEntries, 15, 0, new StgUV(0, 0));
 
             const float R       = 7000f;   // ring radius (well outside the stage)
-            const float PanelH  = 3000f;   // panel height (tall enough to fill vertical FOV)
-            const float PanelYC =  500f;   // Y centre of panels
+            // Y values from InitSkyBackgroundQuads (Ghidra):
+            //   PSX Y_top = 0xff84 = -124   → viewer Y = +(-124 × -7) = +868  (Y-flip, scale=7)
+            //   PSX Y_bot = 0x0004 =   +4   → viewer Y = +(  4 × -7) =  -28
+            const float PanelYTop = 868f;  // = -(-124) × 7
+            const float PanelYBot = -28f;  // = -(   4) × 7
+            const float PanelH  = PanelYTop - PanelYBot;   // 896  = 128 px × 7
+            // World matrix has CreateScale(1,-1,1) → screen_Y = -code_Y.
+            // So code_Y must be NEGATIVE to appear above floor on screen.
+            // PanelYC = -420 → screen centre = +420 (above floor)
+            const float PanelYC = -((PanelYTop + PanelYBot) * 0.5f);  // -420
 
             // Sky blue: matches the background clear colour used on PSX stages.
             var wireColor  = new Color(140, 160, 220);
