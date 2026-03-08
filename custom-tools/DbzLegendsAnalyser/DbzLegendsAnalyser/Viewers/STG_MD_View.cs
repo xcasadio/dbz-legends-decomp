@@ -44,6 +44,14 @@ namespace DbzLegendsAnalyser.Viewers
         private VertexPositionColor[]   _floorSolidVerts = Array.Empty<VertexPositionColor>();
         private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _floorTexGroups = new();
 
+        // ── Background billboards ─────────────────────────────────────────────
+        // 80 world-space billboard instances from DrawBackgroundBillboards (0x800410cc)
+        // Template: 88×40 px, tpage=0x2E (tpX=14,tpY=1,4bpp) – NOT in STGxTX.B.
+        // Parallax wrapping: posX/Z snap to floor(cam/2000)*2000 at runtime.
+        // Rendered here as solid-colored quads facing radially outward from origin.
+        private VertexPositionColor[]   _bgWireVerts  = Array.Empty<VertexPositionColor>();
+        private VertexPositionColor[]   _bgSolidVerts = Array.Empty<VertexPositionColor>();
+
         // ── Arcball camera ────────────────────────────────────────────────────
         // Camera orbits _target in spherical coordinates.
         // _azimuth   : horizontal angle around Y (radians)
@@ -110,6 +118,7 @@ namespace DbzLegendsAnalyser.Viewers
 
             BuildGeometry(worldTris, txEntries);
             BuildFloor(txEntries);
+            BuildBillboards();
             ResetView();
         }
 
@@ -240,6 +249,9 @@ namespace DbzLegendsAnalyser.Viewers
                     if (_floorWireVerts.Length >= 2)
                         gd.DrawUserPrimitives(PrimitiveType.LineList,
                             _floorWireVerts, 0, _floorWireVerts.Length / 2);
+                    if (_bgWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList,
+                            _bgWireVerts, 0, _bgWireVerts.Length / 2);
                 }
             }
             else if (_displayMode == DisplayMode.Solid)
@@ -253,10 +265,19 @@ namespace DbzLegendsAnalyser.Viewers
                     if (_solidVerts.Length >= 3)
                         gd.DrawUserPrimitives(PrimitiveType.TriangleList,
                             _solidVerts, 0, _solidVerts.Length / 3);
+                    if (_bgSolidVerts.Length >= 3)
+                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                            _bgSolidVerts, 0, _bgSolidVerts.Length / 3);
                 }
             }
             else if (_displayMode == DisplayMode.Textured)
             {
+                // Draw billboard outlines over everything (wireframe overlay)
+                ApplyMatrices(_basicEffect, _bounds);
+                if (_bgWireVerts.Length >= 2)
+                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.LineList, _bgWireVerts, 0, _bgWireVerts.Length / 2); }
+
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearClamp;
                 // Draw floor first (behind meshes)
@@ -566,6 +587,102 @@ namespace DbzLegendsAnalyser.Viewers
             _floorWireVerts  = wire.ToArray();
             _floorSolidVerts = solid.ToArray();
             _floorTexGroups  = texBuckets.Select(kv => (kv.Key, kv.Value.ToArray())).ToList();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Background billboards
+        // ─────────────────────────────────────────────────────────────────────
+        // 80 billboard world positions decoded from INT_ARRAY_80087dac in RAM.
+        // Format: (posX, posY, posZ) in PSX units (Y negative = above floor).
+        // The 80 instances form a 4-fold XZ-symmetric array around the origin:
+        //   Group 0 (0-19):  X<0 Z<0 | Group 1 (20-39): X<0 Z>0
+        //   Group 2 (40-59): X>0 Z<0 | Group 3 (60-79): X>0 Z>0
+        private static readonly (short X, short Y, short Z)[] BgBillboardPositions =
+        {
+            ( -600, -100,  -600), (-1800, -200,  -400), ( -800, -400, -1200), (-1600, -600, -1000),
+            (-2600, -100,  -800), (-1400, -300, -1400), ( -400, -600, -1800), (-3800, -700,  -400),
+            (-3400, -500, -1000), ( -400, -100, -3400), (-1000, -900, -2600), (-1200, -500, -3600),
+            (-1800, -200, -2400), (-1800, -600, -3200), (-2200, -900, -1800), (-3000, -400, -1600),
+            (-3600, -300, -2200), (-2800, -800, -2800), (-2800, -400, -3600), (-3800, -200, -3600),
+            ( -600, -100,   600), (-1800, -200,   400), ( -800, -400,  1200), (-1600, -600,  1000),
+            (-2600, -100,   800), (-1400, -300,  1400), ( -400, -600,  1800), (-3800, -700,   400),
+            (-3400, -500,  1000), ( -400, -100,  3400), (-1000, -900,  2600), (-1200, -500,  3600),
+            (-1800, -200,  2400), (-1800, -600,  3200), (-2200, -900,  1800), (-3000, -400,  1600),
+            (-3600, -300,  2200), (-2800, -800,  2800), (-2800, -400,  3600), (-3800, -200,  3600),
+            (  600, -100,  -600), ( 1800, -200,  -400), (  800, -400, -1200), ( 1600, -600, -1000),
+            ( 2600, -100,  -800), ( 1400, -300, -1400), (  400, -600, -1800), ( 3800, -700,  -400),
+            ( 3400, -500, -1000), (  400, -100, -3400), ( 1000, -900, -2600), ( 1200, -500, -3600),
+            ( 1800, -200, -2400), ( 1800, -600, -3200), ( 2200, -900, -1800), ( 3000, -400, -1600),
+            ( 3600, -300, -2200), ( 2800, -800, -2800), ( 2800, -400, -3600), ( 3800, -200, -3600),
+            (  600, -100,   600), ( 1800, -200,   400), (  800, -400,  1200), ( 1600, -600,  1000),
+            ( 2600, -100,   800), ( 1400, -300,  1400), (  400, -600,  1800), ( 3800, -700,   400),
+            ( 3400, -500,  1000), (  400, -100,  3400), ( 1000, -900,  2600), ( 1200, -500,  3600),
+            ( 1800, -200,  2400), ( 1800, -600,  3200), ( 2200, -900,  1800), ( 3000, -400,  1600),
+            ( 3600, -300,  2200), ( 2800, -800,  2800), ( 2800, -400,  3600), ( 3800, -200,  3600),
+        };
+
+        /// <summary>
+        /// Build billboard geometry at the 80 background instance positions.
+        /// Each billboard is a vertical quad oriented radially outward from origin.
+        /// Sprite size from PSX data: 88×40 px (tpage=0x2E, NOT in STGxTX.B).
+        /// Width/height inflated for visibility in the scene scale.
+        /// </summary>
+        private void BuildBillboards()
+        {
+            // Sprite pixel size: 88 wide × 40 tall.  Use a 5× world-size multiplier
+            // to make them visible at their distance from origin (400–3800 PSX units).
+            const float W = 88f * 5f;   // 440 PSX units wide
+            const float H = 40f * 5f;   // 200 PSX units tall
+
+            var fillColor = new Color(80, 130, 180);     // muted sky-blue
+            var wireColor = new Color(60, 120, 180);     // bright blue outline
+
+            var wire  = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
+            var solid = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
+
+            foreach (var (px, py, pz) in BgBillboardPositions)
+            {
+                var center = new Vector3(px, py, pz);
+
+                // Orient the quad to face radially outward from origin.
+                // right = cross(worldUp, radial).  If on the Y-axis, fall back to +X.
+                var radial = new Vector3(px, 0f, pz);
+                float rLen = radial.Length();
+                Vector3 right = rLen > 1f
+                    ? Vector3.Cross(Vector3.UnitY, radial / rLen)
+                    : Vector3.UnitX;
+                right = Vector3.Normalize(right);
+                // PSX Y-down: negative Y = above floor.
+                // The world matrix flips Y, so build quads in PSX-space with -UnitY as "up".
+                var up = -Vector3.UnitY;
+
+                // Quad corners (CCW from front)
+                var v00 = center - right * (W * 0.5f);                   // bottom-left
+                var v10 = center + right * (W * 0.5f);                   // bottom-right
+                var v01 = center - right * (W * 0.5f) + up * H;         // top-left
+                var v11 = center + right * (W * 0.5f) + up * H;         // top-right
+
+                // ── Wireframe: 4 edges ──────────────────────────────────────
+                wire.Add(new VertexPositionColor(v00, wireColor));
+                wire.Add(new VertexPositionColor(v10, wireColor));
+                wire.Add(new VertexPositionColor(v10, wireColor));
+                wire.Add(new VertexPositionColor(v11, wireColor));
+                wire.Add(new VertexPositionColor(v11, wireColor));
+                wire.Add(new VertexPositionColor(v01, wireColor));
+                wire.Add(new VertexPositionColor(v01, wireColor));
+                wire.Add(new VertexPositionColor(v00, wireColor));
+
+                // ── Solid: 2 tris ───────────────────────────────────────────
+                solid.Add(new VertexPositionColor(v00, fillColor));
+                solid.Add(new VertexPositionColor(v10, fillColor));
+                solid.Add(new VertexPositionColor(v01, fillColor));
+                solid.Add(new VertexPositionColor(v10, fillColor));
+                solid.Add(new VertexPositionColor(v11, fillColor));
+                solid.Add(new VertexPositionColor(v01, fillColor));
+            }
+
+            _bgWireVerts  = wire.ToArray();
+            _bgSolidVerts = solid.ToArray();
         }
 
         private static Vector2 FlipY(Vector2 uv) => new Vector2(uv.X, 1f - uv.Y);
