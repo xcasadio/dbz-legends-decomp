@@ -26,13 +26,14 @@ namespace DbzLegendsAnalyser.Viewers
     public class STG_MD_View : IAnalyserView
     {
         // ── Display mode ──────────────────────────────────────────────────────
-        private enum DisplayMode { Wireframe, Solid }
+        private enum DisplayMode { Wireframe, Solid, Textured }
         private DisplayMode _displayMode = DisplayMode.Wireframe;
 
         // ── Model ─────────────────────────────────────────────────────────────
         private StgModelFile? _model;
-        private VertexPositionColor[] _lineVerts  = Array.Empty<VertexPositionColor>();
-        private VertexPositionColor[] _solidVerts = Array.Empty<VertexPositionColor>();
+        private VertexPositionColor[]   _lineVerts      = Array.Empty<VertexPositionColor>();
+        private VertexPositionColor[]   _solidVerts     = Array.Empty<VertexPositionColor>();
+        private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _texGroups = new();
         private Vec3  _sceneCenter;
         private float _sceneScale = 1f;
 
@@ -53,6 +54,8 @@ namespace DbzLegendsAnalyser.Viewers
         private GraphicsDevice _graphicsDevice;
         private BasicEffect    _basicEffect;
         private BasicEffect    _axesEffect;
+        private BasicEffect    _texEffect;   // textured mode
+        private List<Texture2D> _ownedTextures = new(); // textures to dispose
 
         // ── Input ─────────────────────────────────────────────────────────────
         private MouseState    _prevMouse;
@@ -78,24 +81,51 @@ namespace DbzLegendsAnalyser.Viewers
                 LightingEnabled    = false,
                 TextureEnabled     = false,
             };
+            _texEffect = new BasicEffect(graphicsDevice)
+            {
+                VertexColorEnabled = false,
+                LightingEnabled    = false,
+                TextureEnabled     = true,
+            };
 
             _model = StgMdLoader.Load(filePath);
             var worldTris = _model.GetWorldTriangles().ToArray();
 
             ComputeSceneTransform(worldTris);
-            BuildGeometry(worldTris);
+
+            // Try to load the companion TX file: STG1MD.B → STG1TX.B
+            string txPath = Path.Combine(
+                Path.GetDirectoryName(filePath) ?? string.Empty,
+                Path.GetFileName(filePath).Replace("MD.B", "TX.B", StringComparison.OrdinalIgnoreCase));
+            var txEntries = File.Exists(txPath)
+                ? LoadTxTextures(txPath, graphicsDevice)
+                : new List<TxEntry>();
+
+            BuildGeometry(worldTris, txEntries);
             ResetView();
         }
 
-        public string[] GetListItems() => new[]
+        public string[] GetListItems()
         {
-            _displayMode == DisplayMode.Wireframe ? "[•] Wireframe" : "[ ] Wireframe",
-            _displayMode == DisplayMode.Solid     ? "[•] Solid"     : "[ ] Solid",
-        };
+            bool hasTex = _texGroups.Count > 0;
+            return new[]
+            {
+                _displayMode == DisplayMode.Wireframe ? "[\u2022] Wireframe" : "[ ] Wireframe",
+                _displayMode == DisplayMode.Solid     ? "[\u2022] Solid"     : "[ ] Solid",
+                hasTex
+                    ? (_displayMode == DisplayMode.Textured ? "[\u2022] Textured" : "[ ] Textured")
+                    : "[ ] Textured (no TX file)",
+            };
+        }
 
         public void OnItemSelected(int index)
         {
-            _displayMode = index == 1 ? DisplayMode.Solid : DisplayMode.Wireframe;
+            _displayMode = index switch
+            {
+                1 => DisplayMode.Solid,
+                2 when _texGroups.Count > 0 => DisplayMode.Textured,
+                _ => DisplayMode.Wireframe,
+            };
         }
 
         public void Update(GameTime gameTime, Rectangle contentBounds)
@@ -192,6 +222,22 @@ namespace DbzLegendsAnalyser.Viewers
                         _solidVerts, 0, _solidVerts.Length / 3);
                 }
             }
+            else if (_displayMode == DisplayMode.Textured && _texGroups.Count > 0)
+            {
+                ApplyMatrices(_texEffect, _bounds);
+                gd.SamplerStates[0] = SamplerState.LinearClamp;
+                foreach (var (tex, verts) in _texGroups)
+                {
+                    if (verts.Length < 3) continue;
+                    _texEffect.Texture = tex;
+                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                    {
+                        pass.Apply();
+                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                            verts, 0, verts.Length / 3);
+                    }
+                }
+            }
 
             // ── XYZ axes gizmo ────────────────────────────────────────────────
             DrawAxesOverlay(gd);
@@ -210,6 +256,9 @@ namespace DbzLegendsAnalyser.Viewers
         {
             _basicEffect?.Dispose();
             _axesEffect?.Dispose();
+            _texEffect?.Dispose();
+            foreach (var t in _ownedTextures) t?.Dispose();
+            _ownedTextures.Clear();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -337,12 +386,15 @@ namespace DbzLegendsAnalyser.Viewers
             _sceneScale  = extent > 0 ? 400f / extent : 1f;
         }
 
-        private void BuildGeometry(StgTriangle[] tris)
+        private void BuildGeometry(StgTriangle[] tris, List<TxEntry> txEntries)
         {
             var wireColor = new Color(60, 160, 240);
 
             var lines = new List<VertexPositionColor>(tris.Length * 6);
             var solid = new List<VertexPositionColor>(tris.Length * 3);
+
+            // Textured: group by texture
+            var texBuckets = new Dictionary<Texture2D, List<VertexPositionTexture>>();
 
             foreach (var tri in tris)
             {
@@ -350,7 +402,7 @@ namespace DbzLegendsAnalyser.Viewers
                 var p1 = new Vector3(tri.V1.X, tri.V1.Y, tri.V1.Z);
                 var p2 = new Vector3(tri.V2.X, tri.V2.Y, tri.V2.Z);
 
-                // Wireframe: 3 edges (6 verts)
+                // Wireframe
                 lines.Add(new VertexPositionColor(p0, wireColor));
                 lines.Add(new VertexPositionColor(p1, wireColor));
                 lines.Add(new VertexPositionColor(p1, wireColor));
@@ -358,19 +410,191 @@ namespace DbzLegendsAnalyser.Viewers
                 lines.Add(new VertexPositionColor(p2, wireColor));
                 lines.Add(new VertexPositionColor(p0, wireColor));
 
-                // Solid: filled triangle with brightened vertex/face color
+                // Solid
                 solid.Add(new VertexPositionColor(p0, Brighten(tri.C0)));
                 solid.Add(new VertexPositionColor(p1, Brighten(tri.C1)));
                 solid.Add(new VertexPositionColor(p2, Brighten(tri.C2)));
+
+                // Textured
+                if (txEntries.Count > 0 && tri.HasUV)
+                {
+                    var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY);
+                    if (tx != null)
+                    {
+                        var uv0 = ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY);
+                        var uv1 = ComputeUV(tx, tri.UV1, tri.TPageX, tri.TPageY);
+                        var uv2 = ComputeUV(tx, tri.UV2, tri.TPageX, tri.TPageY);
+                        // Note: UV.y is flipped here to compensate for the Y-scale(-1) world transform
+                        uv0 = new Vector2(uv0.X, 1f - uv0.Y);
+                        uv1 = new Vector2(uv1.X, 1f - uv1.Y);
+                        uv2 = new Vector2(uv2.X, 1f - uv2.Y);
+
+                        if (!texBuckets.TryGetValue(tx.Texture, out var bucket))
+                            texBuckets[tx.Texture] = bucket = new List<VertexPositionTexture>();
+                        bucket.Add(new VertexPositionTexture(p0, uv0));
+                        bucket.Add(new VertexPositionTexture(p1, uv1));
+                        bucket.Add(new VertexPositionTexture(p2, uv2));
+                    }
+                }
             }
 
             _lineVerts  = lines.ToArray();
             _solidVerts = solid.ToArray();
+            _texGroups  = texBuckets.Select(kv => (kv.Key, kv.Value.ToArray())).ToList();
         }
 
         private static Color Brighten(Color c) => new Color(
             Math.Min(255, c.R * 2 + 40),
             Math.Min(255, c.G * 2 + 40),
             Math.Min(255, c.B * 2 + 40));
+
+        // ─────────────────────────────────────────────────────────────────────
+        // TX texture loading + UV math
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>Decoded texture + its position in PSX VRAM (16bpp word units).</summary>
+        private sealed class TxEntry
+        {
+            public Texture2D Texture;
+            public int VramX16;        // VRAM X in 16bpp word units
+            public int VramY;          // VRAM Y in scanlines (= pixel Y)
+            public int Is8bpp;         // 1 = 8bpp, 0 = 4bpp (affects U→pixel conversion)
+
+            public int PixelX => Is8bpp == 1 ? VramX16 * 2 : VramX16 * 4;
+            public int TPageX => PixelX / (Is8bpp == 1 ? 128 : 256);
+            public int TPageY => VramY / 256;
+        }
+
+        private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY)
+        {
+            // First: exact tpage match
+            foreach (var e in entries)
+                if (e.TPageX == tpageX && e.TPageY == tpageY) return e;
+            // Fallback: any entry that covers the absolute pixel range
+            int pagePixW = 128; // assume 8bpp
+            int absPixX0 = tpageX * pagePixW;
+            int absPixY0 = tpageY * 256;
+            foreach (var e in entries)
+            {
+                int pw = e.Is8bpp == 1 ? 128 : 256;
+                int epx = e.TPageX * pw;
+                if (epx <= absPixX0 && absPixX0 < epx + e.Texture.Width
+                 && e.VramY <= absPixY0 && absPixY0 < e.VramY + e.Texture.Height)
+                    return e;
+            }
+            return entries.Count > 0 ? entries[0] : null;
+        }
+
+        /// <summary>Convert raw PSX UV byte into [0,1] texture coord.</summary>
+        private static Vector2 ComputeUV(TxEntry tx, StgUV uv, int tpageX, int tpageY)
+        {
+            int pagePixW = tx.Is8bpp == 1 ? 128 : 256;
+            int absPixX  = tpageX * pagePixW + uv.U;
+            int absPixY  = tpageY * 256       + uv.V;
+            float u = (absPixX - tx.PixelX) / (float)Math.Max(1, tx.Texture.Width);
+            float v = (absPixY - tx.VramY)  / (float)Math.Max(1, tx.Texture.Height);
+            return new Vector2(MathHelper.Clamp(u, 0f, 1f),
+                               MathHelper.Clamp(v, 0f, 1f));
+        }
+
+        /// <summary>
+        /// Load all non-CLUT textures from a STGxTX.B file.
+        /// Mirrors the decoding logic in STG_TX_View, but returns TxEntry records
+        /// keyed by their VRAM position for UV mapping.
+        /// </summary>
+        private List<TxEntry> LoadTxTextures(string txPath, GraphicsDevice gd)
+        {
+            var result = new List<TxEntry>();
+            try
+            {
+                byte[] file = File.ReadAllBytes(txPath);
+                if (file.Length < 4) return result;
+
+                uint count = BitConverter.ToUInt32(file, 0);
+
+                // Pass 1: collect CLUTs
+                var palettes = new Dictionary<int, PsxImageDecoder.PsxClut>();
+                for (int i = 0; i < count; i++)
+                {
+                    int e = 4 + i * 28;
+                    uint dataOff  = BitConverter.ToUInt32(file, e + 4);
+                    uint width    = BitConverter.ToUInt32(file, e + 16);
+                    uint isClut   = BitConverter.ToUInt32(file, e + 24);
+                    if (isClut != 1) continue;
+                    int colorCount = (int)width;
+                    if ((int)dataOff + colorCount * 2 > file.Length) continue;
+                    ushort[] c = BinaryReaderHelper.ReadUShortArrayFast(file, (int)dataOff, colorCount);
+                    int cpp = colorCount >= 256 ? 256 : 16;
+                    palettes[i] = new PsxImageDecoder.PsxClut(c, cpp);
+                }
+
+                var fallback = palettes.Count > 0
+                    ? palettes.Values.First()
+                    : new PsxImageDecoder.PsxClut(new ushort[16], 16);
+
+                // Pass 2: decode images
+                for (int i = 0; i < count; i++)
+                {
+                    int e = 4 + i * 28;
+                    try
+                    {
+                        uint compType = BitConverter.ToUInt32(file, e + 0);
+                        uint dataOff  = BitConverter.ToUInt32(file, e + 4);
+                        uint vramX    = BitConverter.ToUInt32(file, e + 8);
+                        uint vramY    = BitConverter.ToUInt32(file, e + 12);
+                        uint width    = BitConverter.ToUInt32(file, e + 16);
+                        uint height   = BitConverter.ToUInt32(file, e + 20);
+                        uint isClut   = BitConverter.ToUInt32(file, e + 24);
+                        if (isClut != 0) continue;
+
+                        int absOff  = (int)dataOff;
+                        int dataSize = i + 1 < count
+                            ? (int)(BitConverter.ToUInt32(file, 4 + (i + 1) * 28 + 4) - dataOff)
+                            : file.Length - absOff;
+                        if (dataSize <= 0) continue;
+
+                        byte[] imgData = compType == 0
+                            ? LzssDecompressor.Decompress(file[absOff..(absOff + dataSize)])
+                            : file[absOff..(absOff + dataSize)];
+
+                        // Find preceding palette
+                        PsxImageDecoder.PsxClut pal = fallback;
+                        for (int p = i - 1; p >= 0; p--)
+                            if (palettes.TryGetValue(p, out var found)) { pal = found; break; }
+
+                        bool is8bpp = pal.ColorsPerPalette == 256;
+                        var mode = is8bpp
+                            ? PsxImageDecoder.PsxPixelMode.Bpp8
+                            : PsxImageDecoder.PsxPixelMode.Bpp4;
+
+                        if (!is8bpp && pal.ColorsPerPalette != 16)
+                        {
+                            ushort[] c16 = new ushort[16];
+                            Array.Copy(pal.ColorsBgr555, c16, Math.Min(16, pal.ColorsBgr555.Length));
+                            pal = new PsxImageDecoder.PsxClut(c16, 16);
+                        }
+
+                        var tex = PsxImageDecoder.DecodeToTexture2D(gd, imgData,
+                            new PsxImageDecoder.PsxImageLayout((int)width, (int)height),
+                            new PsxImageDecoder.PsxImageFormat(mode), pal, 0);
+
+                        _ownedTextures.Add(tex);
+                        result.Add(new TxEntry
+                        {
+                            Texture  = tex,
+                            VramX16  = (int)vramX,
+                            VramY    = (int)vramY,
+                            Is8bpp   = is8bpp ? 1 : 0,
+                        });
+                    }
+                    catch { /* skip bad entry */ }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TX] Failed to load: {ex.Message}");
+            }
+            return result;
+        }
     }
 }

@@ -144,9 +144,9 @@ public static class StgMdLoader
 
     private static List<StgTriangle> ExtractTriangles(byte[] data, int sectionStart, int count, int primType)
     {
-        bool isQuad  = IsQuad(primType);
+        bool isQuad   = IsQuad(primType);
         int  primSize = PrimitiveSizes[primType];
-        var  tris    = new List<StgTriangle>(count * (isQuad ? 2 : 1));
+        var  tris     = new List<StgTriangle>(count * (isQuad ? 2 : 1));
 
         for (int p = 0; p < count; p++)
         {
@@ -159,14 +159,48 @@ public static class StgMdLoader
             var v3 = isQuad ? ReadVec3(data, off + 24) : default;
 
             var (c0, c1, c2, c3) = ReadColors(data, off, primType);
+            var (uv0, uv1, uv2, uv3, tpage) = ReadUVs(data, off, primType);
 
-            tris.Add(new StgTriangle(v0, v1, v2, c0, c1, c2));
+            tris.Add(new StgTriangle(v0, v1, v2, c0, c1, c2, uv0, uv1, uv2, tpage));
 
             if (isQuad)
-                tris.Add(new StgTriangle(v1, v3, v2, c1, c3, c2));
+                tris.Add(new StgTriangle(v1, v3, v2, c1, c3, c2, uv1, uv3, uv2, tpage));
         }
 
         return tris;
+    }
+
+    /// <summary>
+    /// Extract UV coordinates and texture page info for textured primitive types (0-3).
+    /// Returns raw UV bytes (0-255 within the tpage) and the raw TSB word.
+    /// Non-textured types (4-7) return all zeros.
+    /// UV layout within the primitive data:
+    ///   FT3 (type 0): uvBase = off+32 | FT4 (type 1): uvBase = off+40
+    ///   GT3 (type 2): uvBase = off+48 | GT4 (type 3): uvBase = off+64
+    ///   Each UV block: u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,pad(2)  [quads: UV3 = UV2]
+    /// </summary>
+    private static (StgUV uv0, StgUV uv1, StgUV uv2, StgUV uv3, ushort tpage)
+        ReadUVs(byte[] data, int off, int primType)
+    {
+        int uvBase = primType switch
+        {
+            0 => off + 32,
+            1 => off + 40,
+            2 => off + 48,
+            3 => off + 64,
+            _ => -1
+        };
+        if (uvBase < 0 || uvBase + 10 > data.Length)
+            return (default, default, default, default, 0);
+
+        var uv0 = new StgUV(data[uvBase + 0], data[uvBase + 1]);
+        // uvBase+2,3 = CBA
+        var uv1 = new StgUV(data[uvBase + 4], data[uvBase + 5]);
+        ushort tpage = LE16(data, uvBase + 6);   // TSB: tpageX=bits[3:0], tpageY=bit[4]
+        var uv2 = new StgUV(data[uvBase + 8], data[uvBase + 9]);
+        var uv3 = uv2; // quads: 4th UV is missing from source data, reuse uv2
+
+        return (uv0, uv1, uv2, uv3, tpage);
     }
 
     private static (Color c0, Color c1, Color c2, Color c3) ReadColors(byte[] data, int off, int primType)
@@ -259,8 +293,30 @@ public class StgMeshSection
     public List<StgTriangle> Triangles      { get; init; } = new();
 }
 
-public record struct StgTriangle(Vec3 V0, Vec3 V1, Vec3 V2, Color C0, Color C1, Color C2)
+public record struct StgTriangle
 {
+    public Vec3  V0, V1, V2;
+    public Color C0, C1, C2;
+    public StgUV UV0, UV1, UV2;
+    public ushort TPage;  // raw TSB: tpageX=bits[3:0], tpageY=bit[4], colorMode=bits[8:7]
+
+    public StgTriangle(Vec3 v0, Vec3 v1, Vec3 v2,
+                       Color c0, Color c1, Color c2,
+                       StgUV uv0 = default, StgUV uv1 = default, StgUV uv2 = default,
+                       ushort tpage = 0)
+    {
+        V0 = v0; V1 = v1; V2 = v2;
+        C0 = c0; C1 = c1; C2 = c2;
+        UV0 = uv0; UV1 = uv1; UV2 = uv2;
+        TPage = tpage;
+    }
+
+    public int TPageX => TPage & 0xF;
+    public int TPageY => (TPage >> 4) & 1;
+    /// <summary>Color mode: 0=4bpp, 1=8bpp, 2=15bpp.</summary>
+    public int ColorMode => (TPage >> 7) & 3;
+    public bool HasUV => TPage != 0 || UV0.U != 0 || UV0.V != 0;
+
     public StgTriangle Translate(float dx, float dy, float dz) => this with
     {
         V0 = V0.Add(dx, dy, dz),
@@ -278,6 +334,13 @@ public record struct Vec3(float X, float Y, float Z)
 {
     public Vec3 Add(float dx, float dy, float dz) => new(X + dx, Y + dy, Z + dz);
 }
+
+/// <summary>
+/// Raw PSX texture UV coordinate (0–255) within the texture page.
+/// Convert to normalized [0,1] by computing the absolute pixel position using TPageX/TPageY
+/// and the TX file's vramX/vramY entry.
+/// </summary>
+public record struct StgUV(byte U, byte V);
 
 public enum StgPrimitiveType
 {
