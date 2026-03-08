@@ -159,12 +159,12 @@ public static class StgMdLoader
             var v3 = isQuad ? ReadVec3(data, off + 24) : default;
 
             var (c0, c1, c2, c3) = ReadColors(data, off, primType);
-            var (uv0, uv1, uv2, uv3, tpage) = ReadUVs(data, off, primType);
+            var (uv0, uv1, uv2, uv3, tpage, cba) = ReadUVs(data, off, primType);
 
-            tris.Add(new StgTriangle(v0, v1, v2, c0, c1, c2, uv0, uv1, uv2, tpage));
+            tris.Add(new StgTriangle(v0, v1, v2, c0, c1, c2, uv0, uv1, uv2, tpage, cba));
 
             if (isQuad)
-                tris.Add(new StgTriangle(v1, v3, v2, c1, c3, c2, uv1, uv3, uv2, tpage));
+                tris.Add(new StgTriangle(v1, v3, v2, c1, c3, c2, uv1, uv3, uv2, tpage, cba));
         }
 
         return tris;
@@ -191,7 +191,7 @@ public static class StgMdLoader
     /// structure layout — NOT the mesh source data. In the source data CBA/TSB come first,
     /// then all UV pairs follow. Confusing the two caused wrong TPage IDs and UV offsets.
     /// </summary>
-    private static (StgUV uv0, StgUV uv1, StgUV uv2, StgUV uv3, ushort tpage)
+    private static (StgUV uv0, StgUV uv1, StgUV uv2, StgUV uv3, ushort tpage, ushort cba)
         ReadUVs(byte[] data, int off, int primType)
     {
         int uvBase = primType switch
@@ -203,9 +203,12 @@ public static class StgMdLoader
             _ => -1
         };
         if (uvBase < 0 || uvBase + 12 > data.Length)
-            return (default, default, default, default, 0);
+            return (default, default, default, default, 0, 0);
 
-        // +0,+1 = CBA (not used for rendering — palette is resolved at texture-load time)
+        // +0,+1 = CBA (CLUT Base Address — encodes VRAM position of the sub-palette):
+        //   bits[5:0]  = clutVramX / 16  (multiply by 16 to get the X in 16bpp VRAM units)
+        //   bits[14:6] = clutVramY        (scanline)
+        ushort cba   = LE16(data, uvBase + 0);
         ushort tpage = LE16(data, uvBase + 2);   // TSB: tpageX=bits[3:0], tpageY=bit[4], tp=bits[8:7]
         var uv0 = new StgUV(data[uvBase + 4], data[uvBase + 5]);
         var uv1 = new StgUV(data[uvBase + 6], data[uvBase + 7]);
@@ -217,7 +220,7 @@ public static class StgMdLoader
             ? new StgUV(data[uvBase + 10], data[uvBase + 11])
             : uv2;
 
-        return (uv0, uv1, uv2, uv3, tpage);
+        return (uv0, uv1, uv2, uv3, tpage, cba);
     }
 
     private static (Color c0, Color c1, Color c2, Color c3) ReadColors(byte[] data, int off, int primType)
@@ -316,16 +319,24 @@ public record struct StgTriangle
     public Color C0, C1, C2;
     public StgUV UV0, UV1, UV2;
     public ushort TPage;  // raw TSB: tpageX=bits[3:0], tpageY=bit[4], colorMode=bits[8:7]
+    /// <summary>
+    /// CLUT Base Address — encodes which 16-color sub-palette to use:
+    ///   bits[5:0]  = clutVramX / 16  (X position of palette in 16bpp VRAM words)
+    ///   bits[14:6] = clutVramY        (Y scanline of palette in VRAM)
+    /// Use ClutVramX / ClutVramY helpers to decode.
+    /// </summary>
+    public ushort CBA;
 
     public StgTriangle(Vec3 v0, Vec3 v1, Vec3 v2,
                        Color c0, Color c1, Color c2,
                        StgUV uv0 = default, StgUV uv1 = default, StgUV uv2 = default,
-                       ushort tpage = 0)
+                       ushort tpage = 0, ushort cba = 0)
     {
         V0 = v0; V1 = v1; V2 = v2;
         C0 = c0; C1 = c1; C2 = c2;
         UV0 = uv0; UV1 = uv1; UV2 = uv2;
         TPage = tpage;
+        CBA = cba;
     }
 
     public int TPageX => TPage & 0xF;
@@ -333,6 +344,11 @@ public record struct StgTriangle
     /// <summary>Color mode: 0=4bpp, 1=8bpp, 2=15bpp.</summary>
     public int ColorMode => (TPage >> 7) & 3;
     public bool HasUV => TPage != 0 || UV0.U != 0 || UV0.V != 0;
+
+    /// <summary>VRAM X of the CLUT sub-palette in 16bpp word units (= (CBA &amp; 0x3F) * 16).</summary>
+    public int ClutVramX => (CBA & 0x3F) * 16;
+    /// <summary>VRAM Y (scanline) of the CLUT sub-palette.</summary>
+    public int ClutVramY => (CBA >> 6) & 0x1FF;
 
     public StgTriangle Translate(float dx, float dy, float dz) => this with
     {

@@ -461,7 +461,7 @@ namespace DbzLegendsAnalyser.Viewers
                 // Textured — use UV0 as representative to pick the correct sub-texture
                 if (txEntries.Count > 0 && tri.HasUV)
                 {
-                    var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY, tri.UV0);
+                    var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY, tri.UV0, tri.CBA);
                     if (tx != null)
                     {
                         var uv0 = ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY);
@@ -586,6 +586,14 @@ namespace DbzLegendsAnalyser.Viewers
             public int VramX16;        // VRAM X in 16bpp word units
             public int VramY;          // VRAM Y in scanlines (= pixel Y)
             public int Is8bpp;         // 1 = 8bpp, 0 = 4bpp (affects U→pixel conversion)
+            /// <summary>
+            /// VRAM X (16bpp units) of the sub-palette used to decode this texture copy.
+            /// Matches the ClutVramX property of primitives that reference this sub-palette
+            /// via their CBA field: CBA.ClutVramX = (CBA &amp; 0x3F) * 16.
+            /// </summary>
+            public int SubPaletteX;
+            /// <summary>VRAM Y (scanline) of the CLUT this sub-palette belongs to.</summary>
+            public int SubPaletteY;
 
             public int PixelX => Is8bpp == 1 ? VramX16 * 2 : VramX16 * 4;
             public int TPageX => PixelX / (Is8bpp == 1 ? 128 : 256);
@@ -593,30 +601,40 @@ namespace DbzLegendsAnalyser.Viewers
         }
 
         /// <summary>
-        /// Find the TX entry that contains the texel (tpageX, tpageY, uv).
+        /// Find the TX entry that contains the texel (tpageX, tpageY, uv) for the given CBA sub-palette.
         ///
-        /// All STGxMD.B stages reference only tpageX=12 and/or tpageX=13, and all
-        /// STGxTX.B files include entries at exactly those TPages — so Pass 1 should
-        /// succeed for every valid textured primitive once the UV block is parsed
-        /// correctly (CBA first, TSB second).  Passes 2-4 are kept as a safety net
-        /// for any edge cases or future stages not yet analysed.
+        /// Priority order:
+        ///   Pass 1 — exact tpageX + V-range + sub-palette VRAM XY match (preferred: correct colors)
+        ///   Pass 2 — exact tpageX + V-range (any sub-palette — floor/fallback)
+        ///   Pass 3 — tpageX + tpageY only
+        ///   Pass 4 — bpp-aware X coverage + V-range
+        ///   Pass 5 — V-range-only last-resort
         /// </summary>
-        private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv)
+        private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv, ushort cba = 0)
         {
-            int absY = tpageY * 256 + uv.V;
+            int absY      = tpageY * 256 + uv.V;
+            int clutVramX = (cba & 0x3F) * 16;
+            int clutVramY = (cba >> 6) & 0x1FF;
 
-            // Pass 1: exact tpageX column + V falls within entry's scanline band
+            // Pass 1: exact tpageX + V-range + sub-palette VRAM position match
+            foreach (var e in entries)
+                if (e.TPageX == tpageX
+                 && e.VramY <= absY && absY < e.VramY + e.Texture.Height
+                 && e.SubPaletteX == clutVramX && e.SubPaletteY == clutVramY)
+                    return e;
+
+            // Pass 2: exact tpageX + V-range (any sub-palette — floor, fallback, unindexed)
             foreach (var e in entries)
                 if (e.TPageX == tpageX
                  && e.VramY <= absY && absY < e.VramY + e.Texture.Height)
                     return e;
 
-            // Pass 2: entry covers the tpage column, relax Y to any overlap
+            // Pass 3: entry covers the tpage column, relax Y to any overlap
             foreach (var e in entries)
                 if (e.TPageX == tpageX && e.TPageY == tpageY)
                     return e;
 
-            // Pass 3: coverage check with bpp-aware X, matching V band
+            // Pass 4: coverage check with bpp-aware X, matching V band
             foreach (int pagePixW in new[] { 256, 128 })
             {
                 int absPixX = tpageX * pagePixW + uv.U;
@@ -630,10 +648,7 @@ namespace DbzLegendsAnalyser.Viewers
                 }
             }
 
-            // Pass 4: V-range-only fallback (tpageX mismatch tolerated).
-            // Should not normally be reached after the ReadUVs parser fix (TSB is now read
-            // from the correct byte offset, giving the real tpageX which IS in the TX file).
-            // Kept as a safety net for any unforeseen edge cases.
+            // Pass 5: V-range-only fallback
             TxEntry? best = null;
             foreach (var e in entries)
                 if (e.VramY <= absY && absY < e.VramY + e.Texture.Height)
@@ -672,8 +687,13 @@ namespace DbzLegendsAnalyser.Viewers
 
         /// <summary>
         /// Load all non-CLUT textures from a STGxTX.B file.
-        /// Mirrors the decoding logic in STG_TX_View, but returns TxEntry records
-        /// keyed by their VRAM position for UV mapping.
+        /// Each 4bpp image is decoded once per 16-color sub-palette packed in its associated
+        /// CLUT block, so that FindTexture can select the exact sub-palette indicated by each
+        /// primitive's CBA field.
+        ///
+        /// Example: STG1TX CLUT #0 has 80 colors = 5 sub-palettes at VRAM X = 0, 16, 32, 48, 64.
+        /// Mesh primitives with CBA=0x7942 use sub-palette at X=32 (clutX=(2)*16=32).
+        /// Each image is decoded 5 times; FindTexture picks the copy whose SubPaletteX matches.
         /// </summary>
         private List<TxEntry> LoadTxTextures(string txPath, GraphicsDevice gd)
         {
@@ -685,27 +705,27 @@ namespace DbzLegendsAnalyser.Viewers
 
                 uint count = BitConverter.ToUInt32(file, 0);
 
-                // Pass 1: collect CLUTs
-                var palettes = new Dictionary<int, PsxImageDecoder.PsxClut>();
+                // Pass 1: collect all CLUT entries with their raw color arrays and VRAM positions
+                var clutByIndex = new Dictionary<int, (ushort[] Colors, int VramX, int VramY, int ColorCount)>();
                 for (int i = 0; i < count; i++)
                 {
                     int e = 4 + i * 28;
-                    uint dataOff  = BitConverter.ToUInt32(file, e + 4);
-                    uint width    = BitConverter.ToUInt32(file, e + 16);
-                    uint isClut   = BitConverter.ToUInt32(file, e + 24);
-                    if (isClut != 1) continue;
-                    int colorCount = (int)width;
-                    if ((int)dataOff + colorCount * 2 > file.Length) continue;
-                    ushort[] c = BinaryReaderHelper.ReadUShortArrayFast(file, (int)dataOff, colorCount);
-                    int cpp = colorCount >= 256 ? 256 : 16;
-                    palettes[i] = new PsxImageDecoder.PsxClut(c, cpp);
+                    if (BitConverter.ToUInt32(file, e + 24) != 1) continue; // isClut check
+                    uint dataOff = BitConverter.ToUInt32(file, e + 4);
+                    uint vramX   = BitConverter.ToUInt32(file, e + 8);
+                    uint vramY   = BitConverter.ToUInt32(file, e + 12);
+                    uint width   = BitConverter.ToUInt32(file, e + 16);
+                    int  colCnt  = (int)width;
+                    if ((int)dataOff + colCnt * 2 > file.Length) continue;
+                    ushort[] c = BinaryReaderHelper.ReadUShortArrayFast(file, (int)dataOff, colCnt);
+                    clutByIndex[i] = (c, (int)vramX, (int)vramY, colCnt);
                 }
 
-                var fallback = palettes.Count > 0
-                    ? palettes.Values.First()
-                    : new PsxImageDecoder.PsxClut(new ushort[16], 16);
+                var fallbackClut = clutByIndex.Count > 0
+                    ? clutByIndex.Values.First()
+                    : (Colors: new ushort[16], VramX: 0, VramY: 0, ColorCount: 16);
 
-                // Pass 2: decode images
+                // Pass 2: decode images — one TxEntry copy per sub-palette
                 for (int i = 0; i < count; i++)
                 {
                     int e = 4 + i * 28;
@@ -730,35 +750,54 @@ namespace DbzLegendsAnalyser.Viewers
                             ? LzssDecompressor.Decompress(file[absOff..(absOff + dataSize)])
                             : file[absOff..(absOff + dataSize)];
 
-                        // Find preceding palette
-                        PsxImageDecoder.PsxClut pal = fallback;
+                        // Find the preceding CLUT entry for this image
+                        var pal = fallbackClut;
                         for (int p = i - 1; p >= 0; p--)
-                            if (palettes.TryGetValue(p, out var found)) { pal = found; break; }
+                            if (clutByIndex.TryGetValue(p, out var found)) { pal = found; break; }
 
-                        bool is8bpp = pal.ColorsPerPalette == 256;
-                        var mode = is8bpp
-                            ? PsxImageDecoder.PsxPixelMode.Bpp8
-                            : PsxImageDecoder.PsxPixelMode.Bpp4;
+                        int  cpp    = pal.ColorCount >= 256 ? 256 : 16;
+                        bool is8bpp = cpp == 256;
+                        var  mode   = is8bpp ? PsxImageDecoder.PsxPixelMode.Bpp8 : PsxImageDecoder.PsxPixelMode.Bpp4;
+                        var  layout = new PsxImageDecoder.PsxImageLayout((int)width, (int)height);
+                        var  fmt    = new PsxImageDecoder.PsxImageFormat(mode);
 
-                        if (!is8bpp && pal.ColorsPerPalette != 16)
+                        // For 4bpp: decode once per 16-color sub-palette packed in this CLUT.
+                        // For 8bpp: only a single 256-color palette.
+                        int numSubs = is8bpp ? 1 : Math.Max(1, pal.ColorCount / 16);
+
+                        for (int sp = 0; sp < numSubs; sp++)
                         {
-                            ushort[] c16 = new ushort[16];
-                            Array.Copy(pal.ColorsBgr555, c16, Math.Min(16, pal.ColorsBgr555.Length));
-                            pal = new PsxImageDecoder.PsxClut(c16, 16);
+                            PsxImageDecoder.PsxClut subPal;
+                            if (!is8bpp)
+                            {
+                                int srcOff = sp * 16;
+                                int avail  = Math.Max(0, pal.Colors.Length - srcOff);
+                                var c16    = new ushort[16];
+                                if (avail > 0) Array.Copy(pal.Colors, srcOff, c16, 0, Math.Min(16, avail));
+                                subPal = new PsxImageDecoder.PsxClut(c16, 16);
+                            }
+                            else
+                            {
+                                ushort[] c256 = new ushort[256];
+                                Array.Copy(pal.Colors, c256, Math.Min(256, pal.Colors.Length));
+                                subPal = new PsxImageDecoder.PsxClut(c256, 256);
+                            }
+
+                            var tex = PsxImageDecoder.DecodeToTexture2D(gd, imgData, layout, fmt, subPal, 0);
+                            _ownedTextures.Add(tex);
+
+                            // Sub-palette VRAM position: base X + sp*16 (each sub-palette is 16 entries wide)
+                            int subPalVramX = pal.VramX + (is8bpp ? 0 : sp * 16);
+                            result.Add(new TxEntry
+                            {
+                                Texture     = tex,
+                                VramX16     = (int)vramX,
+                                VramY       = (int)vramY,
+                                Is8bpp      = is8bpp ? 1 : 0,
+                                SubPaletteX = subPalVramX,
+                                SubPaletteY = pal.VramY,
+                            });
                         }
-
-                        var tex = PsxImageDecoder.DecodeToTexture2D(gd, imgData,
-                            new PsxImageDecoder.PsxImageLayout((int)width, (int)height),
-                            new PsxImageDecoder.PsxImageFormat(mode), pal, 0);
-
-                        _ownedTextures.Add(tex);
-                        result.Add(new TxEntry
-                        {
-                            Texture  = tex,
-                            VramX16  = (int)vramX,
-                            VramY    = (int)vramY,
-                            Is8bpp   = is8bpp ? 1 : 0,
-                        });
                     }
                     catch { /* skip bad entry */ }
                 }
