@@ -47,8 +47,11 @@ namespace DbzLegendsAnalyser.Viewers
         // ── Background billboards ─────────────────────────────────────────────
         // 80 world-space billboard instances from DrawBackgroundBillboards (0x800410cc)
         // Background texture = 3rd-from-last image in every STGxTX.B file:
-        //   always 8bpp, vramX=960 (16bpp words), W=64 words=128px, H=256px
-        //   “2 textures stacked” = the 256-row image shows sky (top) + horizon (bottom)
+        //   always 8bpp, vramX=960 (16bpp words), W=128px, H=256px
+        //   CONTAINS TWO INDEPENDENT 128×128 sub-textures stacked:
+        //     top half    (rows   0–127): used by these 80 billboard instances
+        //     bottom half (rows 128–255): used by a SEPARATE set of billboard meshes
+        //                                (not yet identified in the code)
         // Parallax wrapping: posX/Z snap to floor(cam/2000)*2000 at runtime.
         private VertexPositionColor[]   _bgWireVerts  = Array.Empty<VertexPositionColor>();
         private VertexPositionColor[]   _bgSolidVerts = Array.Empty<VertexPositionColor>();
@@ -634,34 +637,39 @@ namespace DbzLegendsAnalyser.Viewers
         /// <summary>
         /// Build billboard geometry at the 80 background instance positions.
         /// Each billboard is a vertical quad oriented radially outward from origin.
-        /// Texture: 3rd-from-last image in STGxTX.B — always 8bpp, 128×256 px (vramX=960).
-        /// “2 textures stacked”: the 256-row image shows sky(top) + horizon (bottom).
-        /// World size: 128px×5 = 640 wide, 256px×5 = 1280 tall (PSX units).
+        /// Texture: 3rd-from-last image in STGxTX.B — 8bpp, 128×256 px (vramX=960).
+        /// The 128×256 image contains TWO independent 128×128 sub-textures stacked.
+        /// These 80 instances use the TOP half (rows 0–127, V=0.0–0.5 inside the 256-tall image).
+        /// The bottom half (rows 128–255) is used by a separate set of meshes not yet decoded.
+        /// World size per quad: 128px×5 = 640 wide, 128px×5 = 640 tall (PSX units).
         /// </summary>
         private void BuildBillboards(List<TxEntry> txEntries)
         {
             // 3rd-from-last image = unique 8bpp entry (vramX=960, 128×256 pixels)
             var bgTx = txEntries.FirstOrDefault(e => e.Is8bpp == 1);
 
-            // Full-texture billboard size: 128px wide × 256px tall at 5× scale
+            // One sub-texture size: 128px wide × 128px tall at 5× world scale
             const float W = 128f * 5f;   // 640 PSX units wide
-            const float H = 256f * 5f;   // 1280 PSX units tall
+            const float H = 128f * 5f;   // 640 PSX units tall
 
             var fillColor = new Color(80, 130, 180);     // muted sky-blue (fallback)
             var wireColor = new Color(60, 120, 180);     // bright blue outline
 
-            var wire      = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
-            var solid     = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
-            var texVerts  = bgTx != null ? new List<VertexPositionTexture>(BgBillboardPositions.Length * 6) : null;
+            var wire     = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
+            var solid    = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
+            var texVerts = bgTx != null ? new List<VertexPositionTexture>(BgBillboardPositions.Length * 6) : null;
 
-            // Full-texture UV corners (computed once, same for every billboard)
-            // v00/v10 = bottom of billboard in view = bottom of texture (V≈1)
-            // v01/v11 = top of billboard in view    = top of texture    (V=0)
+            // UV corners for the TOP half of the 128×256 image (rows 0–127):
+            //   V = row / 256.0   →  top=0/256=0.0, bottom-of-top-half=127/256≈0.498
+            // v00/v10 = bottom edge of this billboard in view = row 127 (V≈0.498)
+            // v01/v11 = top    edge of this billboard in view = row   0 (V=0.0)
             Vector2 uvBL = Vector2.Zero, uvBR = Vector2.Zero, uvTL = Vector2.Zero, uvTR = Vector2.Zero;
             if (bgTx != null)
             {
-                uvBL = ComputeUV(bgTx, new StgUV(0,   255), bgTx.TPageX, bgTx.TPageY);
-                uvBR = ComputeUV(bgTx, new StgUV(127, 255), bgTx.TPageX, bgTx.TPageY);
+                // row 127 = bottom of top sub-texture
+                uvBL = ComputeUV(bgTx, new StgUV(0,   127), bgTx.TPageX, bgTx.TPageY);
+                uvBR = ComputeUV(bgTx, new StgUV(127, 127), bgTx.TPageX, bgTx.TPageY);
+                // row 0 = top of top sub-texture
                 uvTL = ComputeUV(bgTx, new StgUV(0,   0),   bgTx.TPageX, bgTx.TPageY);
                 uvTR = ComputeUV(bgTx, new StgUV(127, 0),   bgTx.TPageX, bgTx.TPageY);
             }
