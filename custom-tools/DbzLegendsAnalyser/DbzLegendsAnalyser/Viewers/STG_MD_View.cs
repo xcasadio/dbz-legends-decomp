@@ -158,7 +158,7 @@ namespace DbzLegendsAnalyser.Viewers
                 if (fwdXZp.LengthSquared() > 0.0001f) fwdXZp = Vector3.Normalize(fwdXZp);
                 else fwdXZp = Vector3.Forward;
                 Vector3 camRight = Vector3.Normalize(Vector3.Cross(fwdXZp, Vector3.Up));
-                float panSpd = _distance * 0.002f;
+                float panSpd = _distance * 0.0005f;
                 _target -= camRight   * mdx * panSpd;   // horizontal strafe
                 _target.Y += mdy * panSpd;              // world-Y lift
             }
@@ -167,7 +167,7 @@ namespace DbzLegendsAnalyser.Viewers
             {
                 // Keep camera world position fixed; only change viewing direction.
                 Vector3 camPos = ComputeCameraPos();
-                _azimuth   -= mdx * 0.008f;
+                _azimuth   += mdx * 0.008f;
                 _elevation -= mdy * 0.008f;
                 _elevation  = MathHelper.Clamp(_elevation,
                     -MathHelper.PiOver2 + 0.02f,
@@ -180,7 +180,7 @@ namespace DbzLegendsAnalyser.Viewers
             if (inBounds)
             {
                 int scroll = mouse.ScrollWheelValue - _prevMouse.ScrollWheelValue;
-                if (scroll > 0) _distance *= 0.88f;
+                if (scroll > 0) _distance *= 0.44f;
                 else if (scroll < 0) _distance *= 1.12f;
                 _distance = MathHelper.Clamp(_distance, 1f, 500000f);
             }
@@ -192,7 +192,7 @@ namespace DbzLegendsAnalyser.Viewers
             else fwdXZ = Vector3.Forward;
 
             Vector3 right = Vector3.Normalize(Vector3.Cross(fwdXZ, Vector3.Up));
-            float speed = _distance * dt * 0.6f;
+            float speed = _distance * dt * 0.3f;
 
             if (keyboard.IsKeyDown(Keys.Up)    || keyboard.IsKeyDown(Keys.W)) _target += fwdXZ * speed;
             if (keyboard.IsKeyDown(Keys.Down)  || keyboard.IsKeyDown(Keys.S)) _target -= fwdXZ * speed;
