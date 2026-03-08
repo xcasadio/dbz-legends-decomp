@@ -594,8 +594,12 @@ namespace DbzLegendsAnalyser.Viewers
 
         /// <summary>
         /// Find the TX entry that contains the texel (tpageX, tpageY, uv).
-        /// Falls back to a V-range-only match when tpageX is not found in the TX file
-        /// (common: stage mesh primitives reference character VRAM pages not in STGxTX.B).
+        ///
+        /// All STGxMD.B stages reference only tpageX=12 and/or tpageX=13, and all
+        /// STGxTX.B files include entries at exactly those TPages — so Pass 1 should
+        /// succeed for every valid textured primitive once the UV block is parsed
+        /// correctly (CBA first, TSB second).  Passes 2-4 are kept as a safety net
+        /// for any edge cases or future stages not yet analysed.
         /// </summary>
         private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv)
         {
@@ -627,10 +631,9 @@ namespace DbzLegendsAnalyser.Viewers
             }
 
             // Pass 4: V-range-only fallback (tpageX mismatch tolerated).
-            // Stage mesh primitives often reference character VRAM pages that are not
-            // present in STGxTX.B.  Rather than hiding those faces, find the TX entry
-            // whose scanline band covers absY, preferring the most specific (shortest)
-            // entry.  ComputeUV will detect the tpageX mismatch and normalise U directly.
+            // Should not normally be reached after the ReadUVs parser fix (TSB is now read
+            // from the correct byte offset, giving the real tpageX which IS in the TX file).
+            // Kept as a safety net for any unforeseen edge cases.
             TxEntry? best = null;
             foreach (var e in entries)
                 if (e.VramY <= absY && absY < e.VramY + e.Texture.Height)
@@ -649,15 +652,17 @@ namespace DbzLegendsAnalyser.Viewers
             float u;
             if (tx.TPageX == tpageX)
             {
-                // Exact match: compute U from the primitive's absolute VRAM pixel X.
+                // Normal path: compute U from the primitive's absolute VRAM pixel X.
+                // absPixX = tpageX * pagePixW + U  (e.g. 12*256+16 = 3088)
+                // tx.PixelX = VramX16 * 4            (e.g. 768*4  = 3072)
+                // u = (3088-3072)/256 = 0.0625  → pixel 16 inside the 256-px-wide texture
                 int absPixX = tpageX * pagePixW + uv.U;
                 u = (absPixX - tx.PixelX) / (float)Math.Max(1, tx.Texture.Width);
             }
             else
             {
-                // Fallback (tpageX mismatch): the primitive references a character VRAM
-                // page not present in the TX file.  Normalise U directly within the VRAM
-                // page width so the UV range stays in [0,1] across the matched texture.
+                // Pass-4 fallback: tpageX mismatch (should not normally occur after the
+                // ReadUVs parser fix).  Normalise U within the page width as a best effort.
                 u = uv.U / (float)pagePixW;
             }
 

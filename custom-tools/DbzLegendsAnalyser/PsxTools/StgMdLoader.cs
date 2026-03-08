@@ -174,35 +174,46 @@ public static class StgMdLoader
     /// Extract UV coordinates and texture page info for textured primitive types (0-3).
     /// Returns raw UV bytes (0-255 within the tpage) and the raw TSB word.
     /// Non-textured types (4-7) return all zeros.
-    /// UV layout within the primitive data:
+    ///
+    /// UV block start offsets within the primitive:
     ///   FT3 (type 0): uvBase = off+32 | FT4 (type 1): uvBase = off+40
     ///   GT3 (type 2): uvBase = off+48 | GT4 (type 3): uvBase = off+64
-    ///   Tri UV block  (12 bytes): u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,pad(2)
-    ///   Quad UV block (12 bytes): u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,u3,v3  ← 4th UV exists!
+    ///
+    /// Actual source data layout (confirmed via Ghidra RenderMesh @ 0x80051CF4):
+    ///   +0,+1  : CBA  (CLUT base address — 2 bytes, skip for rendering)
+    ///   +2,+3  : TSB  (Texture Status Bits = tpage word)
+    ///   +4     : u0   +5  : v0
+    ///   +6     : u1   +7  : v1
+    ///   +8     : u2   +9  : v2
+    ///   +10,+11: u3,v3 (quads only; tris have 2 pad bytes here)
+    ///
+    /// IMPORTANT: the old comment "u0,v0,CBA,u1,v1,TSB" described the PSX POLY *output*
+    /// structure layout — NOT the mesh source data. In the source data CBA/TSB come first,
+    /// then all UV pairs follow. Confusing the two caused wrong TPage IDs and UV offsets.
     /// </summary>
     private static (StgUV uv0, StgUV uv1, StgUV uv2, StgUV uv3, ushort tpage)
         ReadUVs(byte[] data, int off, int primType)
     {
         int uvBase = primType switch
         {
-            0 => off + 32,
-            1 => off + 40,
-            2 => off + 48,
-            3 => off + 64,
+            0 => off + 32,   // FT3
+            1 => off + 40,   // FT4
+            2 => off + 48,   // GT3
+            3 => off + 64,   // GT4
             _ => -1
         };
-        if (uvBase < 0 || uvBase + 10 > data.Length)
+        if (uvBase < 0 || uvBase + 12 > data.Length)
             return (default, default, default, default, 0);
 
-        var uv0 = new StgUV(data[uvBase + 0], data[uvBase + 1]);
-        // uvBase+2,3 = CBA
-        var uv1 = new StgUV(data[uvBase + 4], data[uvBase + 5]);
-        ushort tpage = LE16(data, uvBase + 6);   // TSB: tpageX=bits[3:0], tpageY=bit[4]
+        // +0,+1 = CBA (not used for rendering — palette is resolved at texture-load time)
+        ushort tpage = LE16(data, uvBase + 2);   // TSB: tpageX=bits[3:0], tpageY=bit[4], tp=bits[8:7]
+        var uv0 = new StgUV(data[uvBase + 4], data[uvBase + 5]);
+        var uv1 = new StgUV(data[uvBase + 6], data[uvBase + 7]);
         var uv2 = new StgUV(data[uvBase + 8], data[uvBase + 9]);
-        // For quads (FT4 type 1, GT4 type 3), the actual 4th UV pair follows immediately.
-        // Tri types (FT3 type 0, GT3 type 2) have 2 pad bytes here instead — reuse uv2.
+        // Quads (FT4 type 1, GT4 type 3) have u3,v3 at +10,+11.
+        // Tris (FT3 type 0, GT3 type 2) have 2 pad bytes there — reuse uv2.
         bool isQuadType = primType == 1 || primType == 3;
-        var uv3 = isQuadType && uvBase + 12 <= data.Length
+        var uv3 = isQuadType
             ? new StgUV(data[uvBase + 10], data[uvBase + 11])
             : uv2;
 
