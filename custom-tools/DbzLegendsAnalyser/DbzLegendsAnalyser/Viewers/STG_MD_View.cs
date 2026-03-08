@@ -328,16 +328,10 @@ namespace DbzLegendsAnalyser.Viewers
                         }
                     }
                 }
-                // Draw background billboard sprites on top of sky
-                foreach (var (tex, verts) in _bgTexGroups)
-                {
-                    if (verts.Length < 3) continue;
-                    _texEffect.Texture = tex;
-                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
-                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
-                }
                 gd.SamplerStates[0] = SamplerState.LinearClamp;
-                // Draw floor next
+                // Draw floor next (opaque)
+                ApplyMatrices(_texEffect, _bounds);
+                gd.BlendState = BlendState.Opaque;
                 foreach (var (tex, verts) in _floorTexGroups)
                 {
                     if (verts.Length < 3) continue;
@@ -345,7 +339,8 @@ namespace DbzLegendsAnalyser.Viewers
                     foreach (var pass in _texEffect.CurrentTechnique.Passes)
                     { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
                 }
-                // Draw meshes on top
+                // Draw stage mesh (rocks etc.) — opaque geometry.
+                gd.BlendState = BlendState.Opaque;
                 foreach (var (tex, verts) in _texGroups)
                 {
                     if (verts.Length < 3) continue;
@@ -353,6 +348,21 @@ namespace DbzLegendsAnalyser.Viewers
                     foreach (var pass in _texEffect.CurrentTechnique.Passes)
                     { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
                 }
+                // Draw background billboards LAST with additive blend + no depth write.
+                // DepthStencilState.None = ignore depth entirely → billboards always brighten
+                // whatever is underneath (sky, floor, rocks), matching PSX additive sprites.
+                ApplyMatrices(_texEffect, _bounds);
+                gd.BlendState        = BlendState.Additive;
+                gd.DepthStencilState = DepthStencilState.None;
+                foreach (var (tex, verts) in _bgTexGroups)
+                {
+                    if (verts.Length < 3) continue;
+                    _texEffect.Texture = tex;
+                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                }
+                gd.DepthStencilState = DepthStencilState.Default;
+                gd.BlendState        = BlendState.Opaque;
                 // Overlay wireframe grid + billboard outlines for orientation
                 ApplyMatrices(_basicEffect, _bounds);
                 foreach (var pass in _basicEffect.CurrentTechnique.Passes)
@@ -480,10 +490,15 @@ namespace DbzLegendsAnalyser.Viewers
 
         private void ResetView()
         {
-            _target    = Vector3.Zero;
+            // Floor centre in viewer space: world matrix = T(-sceneCenter)*S(sceneScale)*S(1,-1,1)
+            // PSX (0,0,0) maps to viewer (-scC.X*s,  scC.Y*s, -scC.Z*s)
+            float s = _sceneScale;
+            _target    = new Vector3(-_sceneCenter.X * s,
+                                      _sceneCenter.Y * s,
+                                     -_sceneCenter.Z * s);
             _azimuth   = 0.4f;
             _elevation = 0.25f;
-            _distance  = 800f;
+            _distance  = 400f;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -577,9 +592,12 @@ namespace DbzLegendsAnalyser.Viewers
         // ─────────────────────────────────────────────────────────────────────
         private void BuildFloor(List<TxEntry> txEntries)
         {
-            const int TILES    = 23;
+            // PSX floor: 23×23 tiles × 256 units (confirmed from FUN_80041640, loop while iVar9 < 0x17).
+            // In the viewer the sky ring sits at R=7000, so we extend the tile count outward
+            // to fill the gap: ceil(2×7000/256)=55 → use 56 tiles, HALF=7168 ≥ 7000.
+            const int TILES    = 56;
             const float TILE_W = 256f;                    // PSX units
-            const float HALF   = TILES * TILE_W / 2f;    // 2944 — center the grid at origin
+            const float HALF   = TILES * TILE_W / 2f;    // 7168 — fills to sky ring
 
             var floorWire = new Color(50, 80, 50);
             var floorFill = new Color(40, 60, 40);
