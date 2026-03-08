@@ -235,7 +235,7 @@ while (numSections != 0) {
 | 0    | POLY_FT3      | 44                | 3×SVECTOR(8) + normal(8) + clut+tpage+3×UV(12) |
 | 1    | POLY_FT4      | 52                | 4×SVECTOR(8) + normal(8) + clut+tpage+4×UV(16) |
 | 2    | POLY_GT3      | 60                | 3×SVECTOR(8) + 3×normal(8) + clut+tpage+3×UV(12) |
-| 3    | POLY_GT4      | 76                | 4×SVECTOR(8) + 4×normal(8) + clut+tpage+4×UV(20) |
+| 3    | POLY_GT4      | 76                | 4×SVECTOR(8) + 4×normal(8) + clut+tpage+4×UV(12) |
 | 4    | POLY_F3       | 36                | 3×SVECTOR(8) + normal(8) + color(4) |
 | 5    | POLY_F4       | 44                | 4×SVECTOR(8) + normal(8) + color(4) |
 | 6    | POLY_G3       | 60                | 3×SVECTOR(8) + 3×normal(8) + 3×color(12) |
