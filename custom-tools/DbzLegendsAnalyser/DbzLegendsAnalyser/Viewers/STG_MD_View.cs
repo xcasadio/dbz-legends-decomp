@@ -38,6 +38,12 @@ namespace DbzLegendsAnalyser.Viewers
         private Vec3  _sceneCenter;
         private float _sceneScale = 1f;
 
+        // ── Floor grid ────────────────────────────────────────────────────────
+        // 23×23 flat tiles at Y=0, 256 PSX units each (tpage=0x000B from FUN_80041640)
+        private VertexPositionColor[]   _floorWireVerts = Array.Empty<VertexPositionColor>();
+        private VertexPositionColor[]   _floorSolidVerts = Array.Empty<VertexPositionColor>();
+        private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _floorTexGroups = new();
+
         // ── Arcball camera ────────────────────────────────────────────────────
         // Camera orbits _target in spherical coordinates.
         // _azimuth   : horizontal angle around Y (radians)
@@ -103,6 +109,7 @@ namespace DbzLegendsAnalyser.Viewers
                 : new List<TxEntry>();
 
             BuildGeometry(worldTris, txEntries);
+            BuildFloor(txEntries);
             ResetView();
         }
 
@@ -218,39 +225,57 @@ namespace DbzLegendsAnalyser.Viewers
 
             ApplyMatrices(_basicEffect, _bounds);
 
-            if (_displayMode == DisplayMode.Wireframe && _lineVerts.Length > 0)
+            if (_displayMode == DisplayMode.Wireframe)
             {
                 foreach (var pass in _basicEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();
-                    gd.DrawUserPrimitives(PrimitiveType.LineList,
-                        _lineVerts, 0, _lineVerts.Length / 2);
+                    if (_lineVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList,
+                            _lineVerts, 0, _lineVerts.Length / 2);
+                    if (_floorWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList,
+                            _floorWireVerts, 0, _floorWireVerts.Length / 2);
                 }
             }
-            else if (_displayMode == DisplayMode.Solid && _solidVerts.Length > 0)
+            else if (_displayMode == DisplayMode.Solid)
             {
                 foreach (var pass in _basicEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();
-                    gd.DrawUserPrimitives(PrimitiveType.TriangleList,
-                        _solidVerts, 0, _solidVerts.Length / 3);
+                    if (_floorSolidVerts.Length >= 3)
+                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                            _floorSolidVerts, 0, _floorSolidVerts.Length / 3);
+                    if (_solidVerts.Length >= 3)
+                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                            _solidVerts, 0, _solidVerts.Length / 3);
                 }
             }
-            else if (_displayMode == DisplayMode.Textured && _texGroups.Count > 0)
+            else if (_displayMode == DisplayMode.Textured)
             {
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearClamp;
+                // Draw floor first (behind meshes)
+                foreach (var (tex, verts) in _floorTexGroups)
+                {
+                    if (verts.Length < 3) continue;
+                    _texEffect.Texture = tex;
+                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                }
+                // Draw meshes on top
                 foreach (var (tex, verts) in _texGroups)
                 {
                     if (verts.Length < 3) continue;
                     _texEffect.Texture = tex;
                     foreach (var pass in _texEffect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
-                            verts, 0, verts.Length / 3);
-                    }
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
                 }
+                // Overlay the floor wireframe grid for orientation
+                ApplyMatrices(_basicEffect, _bounds);
+                if (_floorWireVerts.Length >= 2)
+                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.LineList, _floorWireVerts, 0, _floorWireVerts.Length / 2); }
             }
 
             // ── XYZ axes gizmo ────────────────────────────────────────────────
@@ -435,13 +460,10 @@ namespace DbzLegendsAnalyser.Viewers
                     var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY, tri.UV0);
                     if (tx != null)
                     {
-                        var uv0 = ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY);
-                        var uv1 = ComputeUV(tx, tri.UV1, tri.TPageX, tri.TPageY);
-                        var uv2 = ComputeUV(tx, tri.UV2, tri.TPageX, tri.TPageY);
-                        // Note: UV.y is flipped here to compensate for the Y-scale(-1) world transform
-                        uv0 = new Vector2(uv0.X, 1f - uv0.Y);
-                        uv1 = new Vector2(uv1.X, 1f - uv1.Y);
-                        uv2 = new Vector2(uv2.X, 1f - uv2.Y);
+                        var uv0 = FlipY(ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY));
+                        var uv1 = FlipY(ComputeUV(tx, tri.UV1, tri.TPageX, tri.TPageY));
+                        var uv2 = FlipY(ComputeUV(tx, tri.UV2, tri.TPageX, tri.TPageY));
+                        // UV.y flipped to compensate for the Y-scale(-1) world transform
 
                         if (!texBuckets.TryGetValue(tx.Texture, out var bucket))
                             texBuckets[tx.Texture] = bucket = new List<VertexPositionTexture>();
@@ -456,6 +478,94 @@ namespace DbzLegendsAnalyser.Viewers
             _solidVerts = solid.ToArray();
             _texGroups  = texBuckets.Select(kv => (kv.Key, kv.Value.ToArray())).ToList();
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Floor grid builder
+        // ─────────────────────────────────────────────────────────────────────
+        // 23×23 POLY_FT4 tiles at Y=0, 256 PSX-units per tile.
+        // Source: FUN_80041640 → FUN_80066870(tpage=0xb, uv=(x%2)*32,(z%2)*32, size=31×31)
+        // TX tile texture: entry[9] vramX=704 words → 4bpp → 64 px wide × 64 px tall
+        // UV mapping: tile(ix,iz) →  u=[ix%2 * 32 .. +31], v=[iz%2 * 32 .. +31]
+        // ─────────────────────────────────────────────────────────────────────
+        private void BuildFloor(List<TxEntry> txEntries)
+        {
+            const int TILES    = 23;
+            const float TILE_W = 256f;                    // PSX units
+            const float HALF   = TILES * TILE_W / 2f;    // 2944 — center the grid at origin
+
+            var floorWire = new Color(50, 80, 50);
+            var floorFill = new Color(40, 60, 40);
+
+            var wire  = new List<VertexPositionColor>(TILES * TILES * 8);
+            var solid = new List<VertexPositionColor>(TILES * TILES * 6);
+            var texBuckets = new Dictionary<Texture2D, List<VertexPositionTexture>>();
+
+            // Representative UV to find the correct TxEntry (tpageX=11, tpageY=0)
+            var floorTx = FindTexture(txEntries, 11, 0, new StgUV(0, 0));
+
+            for (int iz = 0; iz < TILES; iz++)
+            for (int ix = 0; ix < TILES; ix++)
+            {
+                float x0 = ix * TILE_W - HALF;
+                float x1 = x0 + TILE_W;
+                float z0 = iz * TILE_W - HALF;
+                float z1 = z0 + TILE_W;
+
+                var v00 = new Vector3(x0, 0f, z0);
+                var v10 = new Vector3(x1, 0f, z0);
+                var v01 = new Vector3(x0, 0f, z1);
+                var v11 = new Vector3(x1, 0f, z1);
+
+                // ── Wireframe: 4 edges per tile ────────────────────────────
+                wire.Add(new VertexPositionColor(v00, floorWire));
+                wire.Add(new VertexPositionColor(v10, floorWire));
+                wire.Add(new VertexPositionColor(v10, floorWire));
+                wire.Add(new VertexPositionColor(v11, floorWire));
+                wire.Add(new VertexPositionColor(v11, floorWire));
+                wire.Add(new VertexPositionColor(v01, floorWire));
+                wire.Add(new VertexPositionColor(v01, floorWire));
+                wire.Add(new VertexPositionColor(v00, floorWire));
+
+                // ── Solid: 2 tris ──────────────────────────────────────────
+                solid.Add(new VertexPositionColor(v00, floorFill));
+                solid.Add(new VertexPositionColor(v10, floorFill));
+                solid.Add(new VertexPositionColor(v01, floorFill));
+                solid.Add(new VertexPositionColor(v10, floorFill));
+                solid.Add(new VertexPositionColor(v11, floorFill));
+                solid.Add(new VertexPositionColor(v01, floorFill));
+
+                // ── Textured: 2 tris with 2×2 tiling UV ───────────────────
+                if (floorTx != null)
+                {
+                    // UV origin for this tile (2×2 repeating, 32-texel tiles within 64×64 sheet)
+                    byte uOff = (byte)((ix % 2) * 32);
+                    byte vOff = (byte)((iz % 2) * 32);
+
+                    // PSX UV layout per POLY_FT4 winding (v00,v10,v01,v11)
+                    // u1=u0+31 per FUN_80066870 (last inclusive texel of the 32-wide tile)
+                    var fuv00 = FlipY(ComputeUV(floorTx, new StgUV(uOff,      vOff),      11, 0));
+                    var fuv10 = FlipY(ComputeUV(floorTx, new StgUV((byte)(uOff + 31), vOff),      11, 0));
+                    var fuv01 = FlipY(ComputeUV(floorTx, new StgUV(uOff,      (byte)(vOff + 31)), 11, 0));
+                    var fuv11 = FlipY(ComputeUV(floorTx, new StgUV((byte)(uOff + 31), (byte)(vOff + 31)), 11, 0));
+
+                    if (!texBuckets.TryGetValue(floorTx.Texture, out var bucket))
+                        texBuckets[floorTx.Texture] = bucket = new List<VertexPositionTexture>();
+
+                    bucket.Add(new VertexPositionTexture(v00, fuv00));
+                    bucket.Add(new VertexPositionTexture(v10, fuv10));
+                    bucket.Add(new VertexPositionTexture(v01, fuv01));
+                    bucket.Add(new VertexPositionTexture(v10, fuv10));
+                    bucket.Add(new VertexPositionTexture(v11, fuv11));
+                    bucket.Add(new VertexPositionTexture(v01, fuv01));
+                }
+            }
+
+            _floorWireVerts  = wire.ToArray();
+            _floorSolidVerts = solid.ToArray();
+            _floorTexGroups  = texBuckets.Select(kv => (kv.Key, kv.Value.ToArray())).ToList();
+        }
+
+        private static Vector2 FlipY(Vector2 uv) => new Vector2(uv.X, 1f - uv.Y);
 
         private static Color Brighten(Color c) => new Color(
             Math.Min(255, c.R * 2 + 40),
