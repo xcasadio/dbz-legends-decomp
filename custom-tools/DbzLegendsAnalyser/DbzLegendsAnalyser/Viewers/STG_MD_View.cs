@@ -594,8 +594,8 @@ namespace DbzLegendsAnalyser.Viewers
 
         /// <summary>
         /// Find the TX entry that contains the texel (tpageX, tpageY, uv).
-        /// Returns null when no entry actually covers the UV — callers must skip those
-        /// triangles rather than apply a wrong texture.
+        /// Falls back to a V-range-only match when tpageX is not found in the TX file
+        /// (common: stage mesh primitives reference character VRAM pages not in STGxTX.B).
         /// </summary>
         private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv)
         {
@@ -626,19 +626,41 @@ namespace DbzLegendsAnalyser.Viewers
                 }
             }
 
-            // No valid entry found — caller should skip this triangle.
-            // Do NOT fall back to entries[0]; that would apply a wrong texture.
-            return null;
+            // Pass 4: V-range-only fallback (tpageX mismatch tolerated).
+            // Stage mesh primitives often reference character VRAM pages that are not
+            // present in STGxTX.B.  Rather than hiding those faces, find the TX entry
+            // whose scanline band covers absY, preferring the most specific (shortest)
+            // entry.  ComputeUV will detect the tpageX mismatch and normalise U directly.
+            TxEntry? best = null;
+            foreach (var e in entries)
+                if (e.VramY <= absY && absY < e.VramY + e.Texture.Height)
+                    if (best == null || e.Texture.Height < best.Texture.Height)
+                        best = e;
+            return best;
         }
 
         /// <summary>Convert raw PSX UV byte into [0,1] texture coord.</summary>
         private static Vector2 ComputeUV(TxEntry tx, StgUV uv, int tpageX, int tpageY)
         {
             int pagePixW = tx.Is8bpp == 1 ? 128 : 256;
-            int absPixX  = tpageX * pagePixW + uv.U;
-            int absPixY  = tpageY * 256       + uv.V;
-            float u = (absPixX - tx.PixelX) / (float)Math.Max(1, tx.Texture.Width);
-            float v = (absPixY - tx.VramY)  / (float)Math.Max(1, tx.Texture.Height);
+            int absPixY  = tpageY * 256 + uv.V;
+            float v = (absPixY - tx.VramY) / (float)Math.Max(1, tx.Texture.Height);
+
+            float u;
+            if (tx.TPageX == tpageX)
+            {
+                // Exact match: compute U from the primitive's absolute VRAM pixel X.
+                int absPixX = tpageX * pagePixW + uv.U;
+                u = (absPixX - tx.PixelX) / (float)Math.Max(1, tx.Texture.Width);
+            }
+            else
+            {
+                // Fallback (tpageX mismatch): the primitive references a character VRAM
+                // page not present in the TX file.  Normalise U directly within the VRAM
+                // page width so the UV range stays in [0,1] across the matched texture.
+                u = uv.U / (float)pagePixW;
+            }
+
             return new Vector2(MathHelper.Clamp(u, 0f, 1f),
                                MathHelper.Clamp(v, 0f, 1f));
         }
