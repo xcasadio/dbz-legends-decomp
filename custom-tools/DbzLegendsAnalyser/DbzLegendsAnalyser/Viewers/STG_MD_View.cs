@@ -14,10 +14,11 @@ namespace DbzLegendsAnalyser.Viewers
     /// 3D viewer for STG\STGxMD.B stage mesh files.
     ///
     /// Controls:
-    ///   Left-drag        — arcball rotate (orbit around target)
-    ///   Arrows / WASD    — move camera target (forward/back/strafe)
-    ///   Scroll wheel     — zoom (change orbit distance)
-    ///   R                — reset view
+    ///   Left-drag         — arcball rotate (orbit around target)
+    ///   L+R drag          — pan target (horizontal strafe + world-Y lift)
+    ///   Arrows / WASD     — move camera target (forward/back/strafe)
+    ///   Scroll wheel      — zoom (change orbit distance)
+    ///   R                 — reset view
     ///
     /// List items (shown in image listbox):
     ///   index 0 "Wireframe" — blue edge-only rendering
@@ -137,14 +138,28 @@ namespace DbzLegendsAnalyser.Viewers
             bool inBounds = _bounds.Contains(mouse.Position);
             float dt      = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
-            // ── Left drag → arcball rotate ────────────────────────────────────
-            if (mouse.LeftButton == ButtonState.Pressed
-             && _prevMouse.LeftButton == ButtonState.Pressed)
+            bool lbHeld = mouse.LeftButton  == ButtonState.Pressed && _prevMouse.LeftButton  == ButtonState.Pressed;
+            bool rbHeld = mouse.RightButton == ButtonState.Pressed && _prevMouse.RightButton == ButtonState.Pressed;
+            int  mdx    = mouse.X - _prevMouse.X;
+            int  mdy    = mouse.Y - _prevMouse.Y;
+
+            // ── L+R drag → pan target (up/down world-Y, left/right camera-right) ─
+            if (lbHeld && rbHeld)
             {
-                int dx = mouse.X - _prevMouse.X;
-                int dy = mouse.Y - _prevMouse.Y;
-                _azimuth   -= dx * 0.008f;
-                _elevation += dy * 0.008f;
+                Vector3 fwdPan = ComputeForward();
+                var fwdXZp = new Vector3(fwdPan.X, 0f, fwdPan.Z);
+                if (fwdXZp.LengthSquared() > 0.0001f) fwdXZp = Vector3.Normalize(fwdXZp);
+                else fwdXZp = Vector3.Forward;
+                Vector3 camRight = Vector3.Normalize(Vector3.Cross(fwdXZp, Vector3.Up));
+                float panSpd = _distance * 0.002f;
+                _target -= camRight   * mdx * panSpd;   // horizontal strafe
+                _target.Y += mdy * panSpd;              // world-Y lift
+            }
+            // ── Left-only drag → arcball rotate ───────────────────────────────
+            else if (lbHeld && !rbHeld)
+            {
+                _azimuth   -= mdx * 0.008f;
+                _elevation += mdy * 0.008f;
                 _elevation  = MathHelper.Clamp(_elevation,
                     -MathHelper.PiOver2 + 0.02f,
                      MathHelper.PiOver2 - 0.02f);
@@ -161,7 +176,6 @@ namespace DbzLegendsAnalyser.Viewers
 
             // ── Arrow / WASD → pan target in horizontal plane ─────────────────
             Vector3 fwd = ComputeForward();
-            // Project forward onto XZ plane so arrows don't tilt the target vertically
             var fwdXZ = new Vector3(fwd.X, 0f, fwd.Z);
             if (fwdXZ.LengthSquared() > 0.0001f) fwdXZ = Vector3.Normalize(fwdXZ);
             else fwdXZ = Vector3.Forward;
@@ -415,10 +429,10 @@ namespace DbzLegendsAnalyser.Viewers
                 solid.Add(new VertexPositionColor(p1, Brighten(tri.C1)));
                 solid.Add(new VertexPositionColor(p2, Brighten(tri.C2)));
 
-                // Textured
+                // Textured — use UV0 as representative to pick the correct sub-texture
                 if (txEntries.Count > 0 && tri.HasUV)
                 {
-                    var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY);
+                    var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY, tri.UV0);
                     if (tx != null)
                     {
                         var uv0 = ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY);
@@ -465,27 +479,41 @@ namespace DbzLegendsAnalyser.Viewers
             public int TPageY => VramY / 256;
         }
 
-        private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY)
+        /// <summary>
+        /// Find the TX entry that contains the texel (tpageX, tpageY, uv).
+        /// Multiple entries can share the same tpage but occupy different Y bands
+        /// (e.g. two 128-tall textures at vramY=0 and vramY=128 in tpageY=0).
+        /// Using the actual V value avoids returning the wrong sub-texture.
+        /// </summary>
+        private static TxEntry? FindTexture(List<TxEntry> entries, int tpageX, int tpageY, StgUV uv)
         {
-            // First: exact tpage match
+            int absY = tpageY * 256 + uv.V;
+
+            // Pass 1: exact tpageX column + V falls within entry's scanline band
             foreach (var e in entries)
-                if (e.TPageX == tpageX && e.TPageY == tpageY) return e;
-            // Fallback: any entry covering the absolute pixel range.
-            // Try both 4bpp (256 texels/tpageX-unit) and 8bpp (128 texels/tpageX-unit) since
-            // we don't know the requesting primitive's bpp here.
-            int absPixY0 = tpageY * 256;
+                if (e.TPageX == tpageX
+                 && e.VramY <= absY && absY < e.VramY + e.Texture.Height)
+                    return e;
+
+            // Pass 2: entry covers the tpage column, relax Y to any overlap
+            foreach (var e in entries)
+                if (e.TPageX == tpageX && e.TPageY == tpageY)
+                    return e;
+
+            // Pass 3: coverage check with bpp-aware X, matching V band
             foreach (int pagePixW in new[] { 256, 128 })
             {
-                int absPixX0 = tpageX * pagePixW;
+                int absPixX = tpageX * pagePixW + uv.U;
                 foreach (var e in entries)
                 {
                     int pw  = e.Is8bpp == 1 ? 128 : 256;
                     int epx = e.TPageX * pw;
-                    if (epx <= absPixX0 && absPixX0 < epx + e.Texture.Width
-                     && e.VramY <= absPixY0 && absPixY0 < e.VramY + e.Texture.Height)
+                    if (epx <= absPixX && absPixX < epx + e.Texture.Width
+                     && e.VramY <= absY  && absY  < e.VramY + e.Texture.Height)
                         return e;
                 }
             }
+
             return entries.Count > 0 ? entries[0] : null;
         }
 
