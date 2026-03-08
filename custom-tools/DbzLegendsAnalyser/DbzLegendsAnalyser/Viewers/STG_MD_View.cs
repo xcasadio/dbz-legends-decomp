@@ -299,11 +299,24 @@ namespace DbzLegendsAnalyser.Viewers
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearWrap;
                 // Draw sky panorama first (furthest back).
-                // Additive blend: sky texture is mostly black (adds nothing) with grey cloud
-                // pixels that brighten what's already drawn — matches PSX semi-transparency
-                // behaviour where black (0,0,0) is transparent and grey/white adds light.
-                if (_skyTexGroups.Count > 0)
+                // Pass 1 (opaque): solid sky-blue fill — gives the cloud texture a background
+                //   to add onto.  BasicEffect uses vertex colours from _skySolidVerts.
+                // Pass 2 (additive): cloud texture — black pixels (RGB=0) add 0 = transparent;
+                //   grey/white cloud pixels brighten the blue base, matching PSX semi-trans.
+                if (_skySolidVerts.Length >= 3 || _skyTexGroups.Count > 0)
                 {
+                    // Pass 1 — opaque solid sky colour
+                    ApplyMatrices(_basicEffect, _bounds);
+                    gd.BlendState = BlendState.Opaque;
+                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+                    {
+                        pass.Apply();
+                        if (_skySolidVerts.Length >= 3)
+                            gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                                _skySolidVerts, 0, _skySolidVerts.Length / 3);
+                    }
+                    // Pass 2 — additive cloud texture on top
+                    ApplyMatrices(_texEffect, _bounds);
                     gd.BlendState = BlendState.Additive;
                     foreach (var (tex, verts) in _skyTexGroups)
                     {
@@ -792,30 +805,35 @@ namespace DbzLegendsAnalyser.Viewers
             var skyTx = FindTexture(txEntries, 15, 0, new StgUV(0, 0));
 
             const float R       = 7000f;   // ring radius (well outside the stage)
-            const float PanelW  =  640f;   // panel width  (matches billboard lateral scale)
-            const float PanelH  = 2000f;   // panel height (tall enough to fill vertical FOV)
-            const float PanelYC =  500f;   // PSX Y of panel centre (positive = above floor in viewer)
+            const float PanelH  = 3000f;   // panel height (tall enough to fill vertical FOV)
+            const float PanelYC =  500f;   // Y centre of panels
 
+            // Sky blue: matches the background clear colour used on PSX stages.
             var wireColor  = new Color(140, 160, 220);
-            var solidColor = new Color( 80, 100, 180, 160);
+            var solidColor = new Color( 60,  90, 160);   // opaque sky blue
 
             var wire     = new List<VertexPositionColor>(8 * 8);
             var solid    = new List<VertexPositionColor>(8 * 6);
             var texVerts = skyTx != null ? new List<VertexPositionTexture>(8 * 6) : null;
 
+            // Place panel corners ON the arc so adjacent panels touch with no gap.
+            // Each panel spans TwoPi/8 radians; left edge at angle - pi/8, right at angle + pi/8.
             for (int i = 0; i < 8; i++)
             {
-                float angle  = i * MathHelper.TwoPi / 8f;
-                var   fwd    = new Vector3(-(float)Math.Sin(angle), 0f, -(float)Math.Cos(angle));
-                var   right  = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, fwd));
-                var   center = -fwd * R;   // panel faces inward toward origin
-                center.Y = PanelYC;
+                float angleC = i * MathHelper.TwoPi / 8f;
+                float halfStep = MathHelper.TwoPi / 16f;   // half of TwoPi/8
 
-                // Quad corners: v00/v10 = bottom, v01/v11 = top
-                var v00 = center - right * PanelW * 0.5f - Vector3.UnitY * PanelH * 0.5f;
-                var v10 = center + right * PanelW * 0.5f - Vector3.UnitY * PanelH * 0.5f;
-                var v01 = center - right * PanelW * 0.5f + Vector3.UnitY * PanelH * 0.5f;
-                var v11 = center + right * PanelW * 0.5f + Vector3.UnitY * PanelH * 0.5f;
+                // Left and right edge positions on the ring (Y = ±PanelH/2)
+                float aL = angleC - halfStep;
+                float aR = angleC + halfStep;
+                var edgeL = new Vector3(-(float)Math.Sin(aL) * R, PanelYC, -(float)Math.Cos(aL) * R);
+                var edgeR = new Vector3(-(float)Math.Sin(aR) * R, PanelYC, -(float)Math.Cos(aR) * R);
+
+                // Quad corners: v00/v10 = bottom (−H/2), v01/v11 = top (+H/2)
+                var v00 = edgeL - Vector3.UnitY * PanelH * 0.5f;
+                var v10 = edgeR - Vector3.UnitY * PanelH * 0.5f;
+                var v01 = edgeL + Vector3.UnitY * PanelH * 0.5f;
+                var v11 = edgeR + Vector3.UnitY * PanelH * 0.5f;
 
                 // ── Wireframe ───────────────────────────────────────────────
                 wire.Add(new VertexPositionColor(v00, wireColor));
