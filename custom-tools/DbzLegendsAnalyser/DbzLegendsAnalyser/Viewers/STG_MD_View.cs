@@ -44,18 +44,30 @@ namespace DbzLegendsAnalyser.Viewers
         private VertexPositionColor[]   _floorSolidVerts = Array.Empty<VertexPositionColor>();
         private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _floorTexGroups = new();
 
-        // ── Background billboards ─────────────────────────────────────────────
-        // 80 world-space billboard instances from DrawBackgroundBillboards (0x800410cc)
-        // Background texture = 3rd-from-last image in every STGxTX.B file:
-        //   always 8bpp, vramX=960 (16bpp words), W=128px, H=256px
-        //   CONTAINS TWO INDEPENDENT 128×128 sub-textures stacked:
-        //     top half    (rows   0–127): used by these 80 billboard instances
-        //     bottom half (rows 128–255): used by a SEPARATE set of billboard meshes
-        //                                (not yet identified in the code)
+        // ── Background billboard sprites ──────────────────────────────────────
+        // 80 world-space billboard instances from DrawBackgroundBillboards (0x800410cc).
+        // Sprite texture: STGxTX.B entry[11] — 4bpp, 104×32 px at VRAM(896, 0).
+        //   tpage=0x2E (tpX=14, 4bpp, ABR=1), clut=0x7F00 → palette at VRAM(0, 508) [16-color].
+        //   Default template: u0=8, v0=0, w=96, h=32 (visible area u=8..103, v=0..31).
+        //   Stage-26 template: u0=0, v0=0, w=88, h=40.
         // Parallax wrapping: posX/Z snap to floor(cam/2000)*2000 at runtime.
         private VertexPositionColor[]   _bgWireVerts  = Array.Empty<VertexPositionColor>();
         private VertexPositionColor[]   _bgSolidVerts = Array.Empty<VertexPositionColor>();
         private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _bgTexGroups = new();
+
+        // ── Sky background panorama ───────────────────────────────────────────
+        // Rendered by FUN_80041c6c (0x80041c6c, init) + FUN_80041ee4 (0x80041ee4, per-frame).
+        // 8 screen-space POLY_FT4 quads; GPU: tpage=0x8F (8bpp, VRAM 960,0), clut=0x7900.
+        //   → palette VRAM(0, 484) [256-color] = STGxTX.B entry[6].
+        // Sky texture: STGxTX.B entry[7] — 8bpp, 128×256 px at VRAM(960, 0).
+        //   The 128×256 image contains TWO independent 128×128 sub-textures stacked:
+        //     top half    (rows   0–127): even quads  (i=0,2,4,6)  → v0=0,   v3=127
+        //     bottom half (rows 128–255): odd  quads  (i=1,3,5,7)  → v0=128, v3=255
+        //   FUN_80041ee4: uVar3 = (char)i * (-128) mod 256 → 0,128,0,128,… alternates halves.
+        //   RotAverage4 + camera-angle scroll; 8 quads span -512..+511 screen-X at width=128.
+        private VertexPositionColor[]   _skyWireVerts  = Array.Empty<VertexPositionColor>();
+        private VertexPositionColor[]   _skySolidVerts = Array.Empty<VertexPositionColor>();
+        private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _skyTexGroups = new();
 
         // ── Arcball camera ────────────────────────────────────────────────────
         // Camera orbits _target in spherical coordinates.
@@ -124,6 +136,7 @@ namespace DbzLegendsAnalyser.Viewers
             BuildGeometry(worldTris, txEntries);
             BuildFloor(txEntries);
             BuildBillboards(txEntries);
+            BuildSkyBackground(txEntries);
             ResetView();
         }
 
@@ -248,6 +261,9 @@ namespace DbzLegendsAnalyser.Viewers
                 foreach (var pass in _basicEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();
+                    if (_skyWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList,
+                            _skyWireVerts, 0, _skyWireVerts.Length / 2);
                     if (_lineVerts.Length >= 2)
                         gd.DrawUserPrimitives(PrimitiveType.LineList,
                             _lineVerts, 0, _lineVerts.Length / 2);
@@ -264,6 +280,9 @@ namespace DbzLegendsAnalyser.Viewers
                 foreach (var pass in _basicEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();
+                    if (_skySolidVerts.Length >= 3)
+                        gd.DrawUserPrimitives(PrimitiveType.TriangleList,
+                            _skySolidVerts, 0, _skySolidVerts.Length / 3);
                     if (_floorSolidVerts.Length >= 3)
                         gd.DrawUserPrimitives(PrimitiveType.TriangleList,
                             _floorSolidVerts, 0, _floorSolidVerts.Length / 3);
@@ -279,7 +298,15 @@ namespace DbzLegendsAnalyser.Viewers
             {
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearWrap;
-                // Draw background billboards first (furthest back)
+                // Draw sky panorama first (furthest back)
+                foreach (var (tex, verts) in _skyTexGroups)
+                {
+                    if (verts.Length < 3) continue;
+                    _texEffect.Texture = tex;
+                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                }
+                // Draw background billboard sprites on top of sky
                 foreach (var (tex, verts) in _bgTexGroups)
                 {
                     if (verts.Length < 3) continue;
@@ -311,6 +338,8 @@ namespace DbzLegendsAnalyser.Viewers
                     pass.Apply();
                     if (_floorWireVerts.Length >= 2)
                         gd.DrawUserPrimitives(PrimitiveType.LineList, _floorWireVerts, 0, _floorWireVerts.Length / 2);
+                    if (_skyTexGroups.Count == 0 && _skyWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList, _skyWireVerts, 0, _skyWireVerts.Length / 2);
                     if (_bgTexGroups.Count == 0 && _bgWireVerts.Length >= 2)
                         gd.DrawUserPrimitives(PrimitiveType.LineList, _bgWireVerts, 0, _bgWireVerts.Length / 2);
                 }
@@ -637,41 +666,40 @@ namespace DbzLegendsAnalyser.Viewers
         /// <summary>
         /// Build billboard geometry at the 80 background instance positions.
         /// Each billboard is a vertical quad oriented radially outward from origin.
-        /// Texture: 3rd-from-last image in STGxTX.B — 8bpp, 128×256 px (vramX=960).
-        /// The 128×256 image contains TWO independent 128×128 sub-textures stacked.
-        /// These 80 instances use the TOP half (rows 0–127, V=0.0–0.5 inside the 256-tall image).
-        /// The bottom half (rows 128–255) is used by a separate set of meshes not yet decoded.
-        /// World size per quad: 128px×5 = 640 wide, 128px×5 = 640 tall (PSX units).
+        /// Sprite texture: STGxTX.B entry[11] — 4bpp, 104×32 px at VRAM(896,0),
+        ///   tpage=0x2E (tpX=14, 4bpp, ABR semi-trans 1), clut=0x7F00 → VRAM(0,508) palette.
+        ///   Visible sprite area: u=8..103, v=0..31 (96×32 px region of the 104×32 sheet).
+        /// World size per quad: 480×160 PSX units (96px×5, 32px×5).
+        /// The sky background (8bpp entry[7]) is built separately in BuildSkyBackground.
         /// </summary>
         private void BuildBillboards(List<TxEntry> txEntries)
         {
-            // 3rd-from-last image = unique 8bpp entry (vramX=960, 128×256 pixels)
-            var bgTx = txEntries.FirstOrDefault(e => e.Is8bpp == 1);
+            // Billboard sprite: STGxTX.B entry[11] — 4bpp, 104×32 px, VRAM(896,0), tpX=14.
+            //   Template default: u0=8, v0=0, w=96, h=32 → visible area u=8..103, v=0..31.
+            //   Clut=0x7F00 → clutVramY=(0x7F00>>6)&0x1FF=508 → VRAM(0,508) 16-color palette.
+            var bgTx = FindTexture(txEntries, 14, 0, new StgUV(8, 0));
 
-            // One sub-texture size: 128px wide × 128px tall at 5× world scale
-            const float W = 128f * 5f;   // 640 PSX units wide
-            const float H = 128f * 5f;   // 640 PSX units tall
+            // World size: 96px×5 wide, 32px×5 tall (5 PSX-pixel-to-viewer-unit scale)
+            const float W = 96f * 5f;    // 480 PSX units wide
+            const float H = 32f * 5f;    // 160 PSX units tall
 
-            var fillColor = new Color(80, 130, 180);     // muted sky-blue (fallback)
-            var wireColor = new Color(60, 120, 180);     // bright blue outline
+            var fillColor = new Color(160, 140, 110);    // earthy/bark tone (fallback)
+            var wireColor = new Color(140, 120, 80);     // dark outline
 
             var wire     = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
             var solid    = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
             var texVerts = bgTx != null ? new List<VertexPositionTexture>(BgBillboardPositions.Length * 6) : null;
 
-            // UV corners for the TOP half of the 128×256 image (rows 0–127):
-            //   V = row / 256.0   →  top=0/256=0.0, bottom-of-top-half=127/256≈0.498
-            // v00/v10 = bottom edge of this billboard in view = row 127 (V≈0.498)
-            // v01/v11 = top    edge of this billboard in view = row   0 (V=0.0)
+            // UV corners: sprite area u=8..103, v=0..31 within the 104×32 sprite sheet.
+            // v00/v10 = bottom edge of billboard in view  = v=31
+            // v01/v11 = top    edge of billboard in view  = v=0
             Vector2 uvBL = Vector2.Zero, uvBR = Vector2.Zero, uvTL = Vector2.Zero, uvTR = Vector2.Zero;
             if (bgTx != null)
             {
-                // row 127 = bottom of top sub-texture
-                uvBL = ComputeUV(bgTx, new StgUV(0,   127), bgTx.TPageX, bgTx.TPageY);
-                uvBR = ComputeUV(bgTx, new StgUV(127, 127), bgTx.TPageX, bgTx.TPageY);
-                // row 0 = top of top sub-texture
-                uvTL = ComputeUV(bgTx, new StgUV(0,   0),   bgTx.TPageX, bgTx.TPageY);
-                uvTR = ComputeUV(bgTx, new StgUV(127, 0),   bgTx.TPageX, bgTx.TPageY);
+                uvBL = ComputeUV(bgTx, new StgUV(8,   31), 14, 0);  // bottom-left  (u=8,  v=31)
+                uvBR = ComputeUV(bgTx, new StgUV(103, 31), 14, 0);  // bottom-right (u=103,v=31)
+                uvTL = ComputeUV(bgTx, new StgUV(8,   0),  14, 0);  // top-left     (u=8,  v=0)
+                uvTR = ComputeUV(bgTx, new StgUV(103, 0),  14, 0);  // top-right    (u=103,v=0)
             }
 
             foreach (var (px, py, pz) in BgBillboardPositions)
@@ -730,6 +758,100 @@ namespace DbzLegendsAnalyser.Viewers
             _bgSolidVerts = solid.ToArray();
             _bgTexGroups  = bgTx != null && texVerts!.Count > 0
                 ? new List<(Texture2D, VertexPositionTexture[])> { (bgTx.Texture, texVerts!.ToArray()) }
+                : new List<(Texture2D, VertexPositionTexture[])>();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Sky background panorama
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Build the sky panorama from the 8bpp 128×256 sky texture (STGxTX.B entry[7]).
+        ///
+        /// The game (FUN_80041c6c / FUN_80041ee4) renders this as 8 screen-space POLY_FT4 quads:
+        ///   GPU tpage=0x8F (8bpp, VRAM 960,0), clut=0x7900 → palette VRAM(0,484) [256-color].
+        ///   Loop i=0..7: vTop=(i%2)*128   →  0, 128, 0, 128, 0, 128, 0, 128
+        ///                vBot= vTop+127   → 127, 255, 127, 255, 127, 255, 127, 255
+        ///   Even quads (i=0,2,4,6): TOP    half of the sky texture (rows   0–127).
+        ///   Odd  quads (i=1,3,5,7): BOTTOM half of the sky texture (rows 128–255).
+        ///
+        /// In the viewer we place 8 large panels in a ring at radius 7000 PSX units,
+        /// each panel 640 wide × 2000 tall, alternating the two UV bands.
+        /// </summary>
+        private void BuildSkyBackground(List<TxEntry> txEntries)
+        {
+            // tpageX=15 (8bpp at VRAM 960,0), tpageY=0; clut clutVramY=484 = entry[6]
+            var skyTx = FindTexture(txEntries, 15, 0, new StgUV(0, 0));
+
+            const float R       = 7000f;   // ring radius (well outside the stage)
+            const float PanelW  =  640f;   // panel width  (matches billboard lateral scale)
+            const float PanelH  = 2000f;   // panel height (tall enough to fill vertical FOV)
+            const float PanelYC =  500f;   // PSX Y of panel centre (positive = above floor in viewer)
+
+            var wireColor  = new Color(140, 160, 220);
+            var solidColor = new Color( 80, 100, 180, 160);
+
+            var wire     = new List<VertexPositionColor>(8 * 8);
+            var solid    = new List<VertexPositionColor>(8 * 6);
+            var texVerts = skyTx != null ? new List<VertexPositionTexture>(8 * 6) : null;
+
+            for (int i = 0; i < 8; i++)
+            {
+                float angle  = i * MathHelper.TwoPi / 8f;
+                var   fwd    = new Vector3(-(float)Math.Sin(angle), 0f, -(float)Math.Cos(angle));
+                var   right  = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, fwd));
+                var   center = -fwd * R;   // panel faces inward toward origin
+                center.Y = PanelYC;
+
+                // Quad corners: v00/v10 = bottom, v01/v11 = top
+                var v00 = center - right * PanelW * 0.5f - Vector3.UnitY * PanelH * 0.5f;
+                var v10 = center + right * PanelW * 0.5f - Vector3.UnitY * PanelH * 0.5f;
+                var v01 = center - right * PanelW * 0.5f + Vector3.UnitY * PanelH * 0.5f;
+                var v11 = center + right * PanelW * 0.5f + Vector3.UnitY * PanelH * 0.5f;
+
+                // ── Wireframe ───────────────────────────────────────────────
+                wire.Add(new VertexPositionColor(v00, wireColor));
+                wire.Add(new VertexPositionColor(v10, wireColor));
+                wire.Add(new VertexPositionColor(v10, wireColor));
+                wire.Add(new VertexPositionColor(v11, wireColor));
+                wire.Add(new VertexPositionColor(v11, wireColor));
+                wire.Add(new VertexPositionColor(v01, wireColor));
+                wire.Add(new VertexPositionColor(v01, wireColor));
+                wire.Add(new VertexPositionColor(v00, wireColor));
+
+                // ── Solid ───────────────────────────────────────────────────
+                solid.Add(new VertexPositionColor(v00, solidColor));
+                solid.Add(new VertexPositionColor(v10, solidColor));
+                solid.Add(new VertexPositionColor(v01, solidColor));
+                solid.Add(new VertexPositionColor(v10, solidColor));
+                solid.Add(new VertexPositionColor(v11, solidColor));
+                solid.Add(new VertexPositionColor(v01, solidColor));
+
+                // ── Textured: FUN_80041c6c UV alternation ──────────────────
+                // Even quads → top half    (vTop=0,  vBot=127): rows   0–127 of 256-tall image
+                // Odd  quads → bottom half (vTop=128, vBot=255): rows 128–255 of 256-tall image
+                if (texVerts != null && skyTx != null)
+                {
+                    byte vTop = (byte)((i % 2) * 128);          // 0 or 128
+                    byte vBot = (byte)(vTop + 127);              // 127 or 255
+                    var uvBL = ComputeUV(skyTx, new StgUV(  0, vBot), 15, 0);  // bottom-left
+                    var uvBR = ComputeUV(skyTx, new StgUV(127, vBot), 15, 0);  // bottom-right
+                    var uvTL = ComputeUV(skyTx, new StgUV(  0, vTop), 15, 0);  // top-left
+                    var uvTR = ComputeUV(skyTx, new StgUV(127, vTop), 15, 0);  // top-right
+
+                    texVerts.Add(new VertexPositionTexture(v00, uvBL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
+                    texVerts.Add(new VertexPositionTexture(v11, uvTR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
+                }
+            }
+
+            _skyWireVerts  = wire.ToArray();
+            _skySolidVerts = solid.ToArray();
+            _skyTexGroups  = skyTx != null && texVerts!.Count > 0
+                ? new List<(Texture2D, VertexPositionTexture[])> { (skyTx.Texture, texVerts!.ToArray()) }
                 : new List<(Texture2D, VertexPositionTexture[])>();
         }
 
