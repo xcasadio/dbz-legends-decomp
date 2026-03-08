@@ -470,17 +470,21 @@ namespace DbzLegendsAnalyser.Viewers
             // First: exact tpage match
             foreach (var e in entries)
                 if (e.TPageX == tpageX && e.TPageY == tpageY) return e;
-            // Fallback: any entry that covers the absolute pixel range
-            int pagePixW = 128; // assume 8bpp
-            int absPixX0 = tpageX * pagePixW;
+            // Fallback: any entry covering the absolute pixel range.
+            // Try both 4bpp (256 texels/tpageX-unit) and 8bpp (128 texels/tpageX-unit) since
+            // we don't know the requesting primitive's bpp here.
             int absPixY0 = tpageY * 256;
-            foreach (var e in entries)
+            foreach (int pagePixW in new[] { 256, 128 })
             {
-                int pw = e.Is8bpp == 1 ? 128 : 256;
-                int epx = e.TPageX * pw;
-                if (epx <= absPixX0 && absPixX0 < epx + e.Texture.Width
-                 && e.VramY <= absPixY0 && absPixY0 < e.VramY + e.Texture.Height)
-                    return e;
+                int absPixX0 = tpageX * pagePixW;
+                foreach (var e in entries)
+                {
+                    int pw  = e.Is8bpp == 1 ? 128 : 256;
+                    int epx = e.TPageX * pw;
+                    if (epx <= absPixX0 && absPixX0 < epx + e.Texture.Width
+                     && e.VramY <= absPixY0 && absPixY0 < e.VramY + e.Texture.Height)
+                        return e;
+                }
             }
             return entries.Count > 0 ? entries[0] : null;
         }

@@ -177,7 +177,8 @@ public static class StgMdLoader
     /// UV layout within the primitive data:
     ///   FT3 (type 0): uvBase = off+32 | FT4 (type 1): uvBase = off+40
     ///   GT3 (type 2): uvBase = off+48 | GT4 (type 3): uvBase = off+64
-    ///   Each UV block: u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,pad(2)  [quads: UV3 = UV2]
+    ///   Tri UV block  (12 bytes): u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,pad(2)
+    ///   Quad UV block (12 bytes): u0,v0,CBA(2), u1,v1,TSB(2), u2,v2,u3,v3  ← 4th UV exists!
     /// </summary>
     private static (StgUV uv0, StgUV uv1, StgUV uv2, StgUV uv3, ushort tpage)
         ReadUVs(byte[] data, int off, int primType)
@@ -198,7 +199,12 @@ public static class StgMdLoader
         var uv1 = new StgUV(data[uvBase + 4], data[uvBase + 5]);
         ushort tpage = LE16(data, uvBase + 6);   // TSB: tpageX=bits[3:0], tpageY=bit[4]
         var uv2 = new StgUV(data[uvBase + 8], data[uvBase + 9]);
-        var uv3 = uv2; // quads: 4th UV is missing from source data, reuse uv2
+        // For quads (FT4 type 1, GT4 type 3), the actual 4th UV pair follows immediately.
+        // Tri types (FT3 type 0, GT3 type 2) have 2 pad bytes here instead — reuse uv2.
+        bool isQuadType = primType == 1 || primType == 3;
+        var uv3 = isQuadType && uvBase + 12 <= data.Length
+            ? new StgUV(data[uvBase + 10], data[uvBase + 11])
+            : uv2;
 
         return (uv0, uv1, uv2, uv3, tpage);
     }
