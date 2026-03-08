@@ -46,11 +46,13 @@ namespace DbzLegendsAnalyser.Viewers
 
         // ── Background billboards ─────────────────────────────────────────────
         // 80 world-space billboard instances from DrawBackgroundBillboards (0x800410cc)
-        // Template: 88×40 px, tpage=0x2E (tpX=14,tpY=1,4bpp) – NOT in STGxTX.B.
+        // Background texture = 3rd-from-last image in every STGxTX.B file:
+        //   always 8bpp, vramX=960 (16bpp words), W=64 words=128px, H=256px
+        //   “2 textures stacked” = the 256-row image shows sky (top) + horizon (bottom)
         // Parallax wrapping: posX/Z snap to floor(cam/2000)*2000 at runtime.
-        // Rendered here as solid-colored quads facing radially outward from origin.
         private VertexPositionColor[]   _bgWireVerts  = Array.Empty<VertexPositionColor>();
         private VertexPositionColor[]   _bgSolidVerts = Array.Empty<VertexPositionColor>();
+        private List<(Texture2D Tex, VertexPositionTexture[] Verts)> _bgTexGroups = new();
 
         // ── Arcball camera ────────────────────────────────────────────────────
         // Camera orbits _target in spherical coordinates.
@@ -118,7 +120,7 @@ namespace DbzLegendsAnalyser.Viewers
 
             BuildGeometry(worldTris, txEntries);
             BuildFloor(txEntries);
-            BuildBillboards();
+            BuildBillboards(txEntries);
             ResetView();
         }
 
@@ -272,15 +274,18 @@ namespace DbzLegendsAnalyser.Viewers
             }
             else if (_displayMode == DisplayMode.Textured)
             {
-                // Draw billboard outlines over everything (wireframe overlay)
-                ApplyMatrices(_basicEffect, _bounds);
-                if (_bgWireVerts.Length >= 2)
-                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
-                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.LineList, _bgWireVerts, 0, _bgWireVerts.Length / 2); }
-
                 ApplyMatrices(_texEffect, _bounds);
+                gd.SamplerStates[0] = SamplerState.LinearWrap;
+                // Draw background billboards first (furthest back)
+                foreach (var (tex, verts) in _bgTexGroups)
+                {
+                    if (verts.Length < 3) continue;
+                    _texEffect.Texture = tex;
+                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                }
                 gd.SamplerStates[0] = SamplerState.LinearClamp;
-                // Draw floor first (behind meshes)
+                // Draw floor next
                 foreach (var (tex, verts) in _floorTexGroups)
                 {
                     if (verts.Length < 3) continue;
@@ -296,11 +301,16 @@ namespace DbzLegendsAnalyser.Viewers
                     foreach (var pass in _texEffect.CurrentTechnique.Passes)
                     { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
                 }
-                // Overlay the floor wireframe grid for orientation
+                // Overlay wireframe grid + billboard outlines for orientation
                 ApplyMatrices(_basicEffect, _bounds);
-                if (_floorWireVerts.Length >= 2)
-                    foreach (var pass in _basicEffect.CurrentTechnique.Passes)
-                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.LineList, _floorWireVerts, 0, _floorWireVerts.Length / 2); }
+                foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    if (_floorWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList, _floorWireVerts, 0, _floorWireVerts.Length / 2);
+                    if (_bgTexGroups.Count == 0 && _bgWireVerts.Length >= 2)
+                        gd.DrawUserPrimitives(PrimitiveType.LineList, _bgWireVerts, 0, _bgWireVerts.Length / 2);
+                }
             }
 
             // ── XYZ axes gizmo ────────────────────────────────────────────────
@@ -624,21 +634,37 @@ namespace DbzLegendsAnalyser.Viewers
         /// <summary>
         /// Build billboard geometry at the 80 background instance positions.
         /// Each billboard is a vertical quad oriented radially outward from origin.
-        /// Sprite size from PSX data: 88×40 px (tpage=0x2E, NOT in STGxTX.B).
-        /// Width/height inflated for visibility in the scene scale.
+        /// Texture: 3rd-from-last image in STGxTX.B — always 8bpp, 128×256 px (vramX=960).
+        /// “2 textures stacked”: the 256-row image shows sky(top) + horizon (bottom).
+        /// World size: 128px×5 = 640 wide, 256px×5 = 1280 tall (PSX units).
         /// </summary>
-        private void BuildBillboards()
+        private void BuildBillboards(List<TxEntry> txEntries)
         {
-            // Sprite pixel size: 88 wide × 40 tall.  Use a 5× world-size multiplier
-            // to make them visible at their distance from origin (400–3800 PSX units).
-            const float W = 88f * 5f;   // 440 PSX units wide
-            const float H = 40f * 5f;   // 200 PSX units tall
+            // 3rd-from-last image = unique 8bpp entry (vramX=960, 128×256 pixels)
+            var bgTx = txEntries.FirstOrDefault(e => e.Is8bpp == 1);
 
-            var fillColor = new Color(80, 130, 180);     // muted sky-blue
+            // Full-texture billboard size: 128px wide × 256px tall at 5× scale
+            const float W = 128f * 5f;   // 640 PSX units wide
+            const float H = 256f * 5f;   // 1280 PSX units tall
+
+            var fillColor = new Color(80, 130, 180);     // muted sky-blue (fallback)
             var wireColor = new Color(60, 120, 180);     // bright blue outline
 
-            var wire  = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
-            var solid = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
+            var wire      = new List<VertexPositionColor>(BgBillboardPositions.Length * 8);
+            var solid     = new List<VertexPositionColor>(BgBillboardPositions.Length * 6);
+            var texVerts  = bgTx != null ? new List<VertexPositionTexture>(BgBillboardPositions.Length * 6) : null;
+
+            // Full-texture UV corners (computed once, same for every billboard)
+            // v00/v10 = bottom of billboard in view = bottom of texture (V≈1)
+            // v01/v11 = top of billboard in view    = top of texture    (V=0)
+            Vector2 uvBL = Vector2.Zero, uvBR = Vector2.Zero, uvTL = Vector2.Zero, uvTR = Vector2.Zero;
+            if (bgTx != null)
+            {
+                uvBL = ComputeUV(bgTx, new StgUV(0,   255), bgTx.TPageX, bgTx.TPageY);
+                uvBR = ComputeUV(bgTx, new StgUV(127, 255), bgTx.TPageX, bgTx.TPageY);
+                uvTL = ComputeUV(bgTx, new StgUV(0,   0),   bgTx.TPageX, bgTx.TPageY);
+                uvTR = ComputeUV(bgTx, new StgUV(127, 0),   bgTx.TPageX, bgTx.TPageY);
+            }
 
             foreach (var (px, py, pz) in BgBillboardPositions)
             {
@@ -679,10 +705,24 @@ namespace DbzLegendsAnalyser.Viewers
                 solid.Add(new VertexPositionColor(v10, fillColor));
                 solid.Add(new VertexPositionColor(v11, fillColor));
                 solid.Add(new VertexPositionColor(v01, fillColor));
+
+                // ── Textured: 2 tris (v00/v10 = bottom of view = bottom of texture V≈1) ──
+                if (texVerts != null)
+                {
+                    texVerts.Add(new VertexPositionTexture(v00, uvBL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
+                    texVerts.Add(new VertexPositionTexture(v11, uvTR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
+                }
             }
 
             _bgWireVerts  = wire.ToArray();
             _bgSolidVerts = solid.ToArray();
+            _bgTexGroups  = bgTx != null && texVerts!.Count > 0
+                ? new List<(Texture2D, VertexPositionTexture[])> { (bgTx.Texture, texVerts!.ToArray()) }
+                : new List<(Texture2D, VertexPositionTexture[])>();
         }
 
         private static Vector2 FlipY(Vector2 uv) => new Vector2(uv.X, 1f - uv.Y);
