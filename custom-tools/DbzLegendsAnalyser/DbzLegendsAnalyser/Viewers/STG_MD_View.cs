@@ -298,13 +298,21 @@ namespace DbzLegendsAnalyser.Viewers
             {
                 ApplyMatrices(_texEffect, _bounds);
                 gd.SamplerStates[0] = SamplerState.LinearWrap;
-                // Draw sky panorama first (furthest back)
-                foreach (var (tex, verts) in _skyTexGroups)
+                // Draw sky panorama first (furthest back).
+                // Additive blend: sky texture is mostly black (adds nothing) with grey cloud
+                // pixels that brighten what's already drawn — matches PSX semi-transparency
+                // behaviour where black (0,0,0) is transparent and grey/white adds light.
+                if (_skyTexGroups.Count > 0)
                 {
-                    if (verts.Length < 3) continue;
-                    _texEffect.Texture = tex;
-                    foreach (var pass in _texEffect.CurrentTechnique.Passes)
-                    { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                    gd.BlendState = BlendState.Additive;
+                    foreach (var (tex, verts) in _skyTexGroups)
+                    {
+                        if (verts.Length < 3) continue;
+                        _texEffect.Texture = tex;
+                        foreach (var pass in _texEffect.CurrentTechnique.Passes)
+                        { pass.Apply(); gd.DrawUserPrimitives(PrimitiveType.TriangleList, verts, 0, verts.Length / 3); }
+                    }
+                    gd.BlendState = BlendState.Opaque;
                 }
                 // Draw background billboard sprites on top of sky
                 foreach (var (tex, verts) in _bgTexGroups)
@@ -830,21 +838,28 @@ namespace DbzLegendsAnalyser.Viewers
                 // ── Textured: FUN_80041c6c UV alternation ──────────────────
                 // Even quads → top half    (vTop=0,  vBot=127): rows   0–127 of 256-tall image
                 // Odd  quads → bottom half (vTop=128, vBot=255): rows 128–255 of 256-tall image
+                //
+                // UV inversion fix: world matrix flips Y (PSX Y-down → MG Y-up).
+                //   v00/v10 are built at -UnitY*H/2 → PSX Y small (above ground) → renders at SCREEN TOP.
+                //   v01/v11 are built at +UnitY*H/2 → PSX Y large (below ground) → renders at SCREEN BOTTOM.
+                //   Therefore v00 (screen top)    must receive uvTL/uvTR (vTop = PSX texture top).
+                //             v01 (screen bottom) must receive uvBL/uvBR (vBot = PSX texture bottom).
                 if (texVerts != null && skyTx != null)
                 {
                     byte vTop = (byte)((i % 2) * 128);          // 0 or 128
                     byte vBot = (byte)(vTop + 127);              // 127 or 255
-                    var uvBL = ComputeUV(skyTx, new StgUV(  0, vBot), 15, 0);  // bottom-left
-                    var uvBR = ComputeUV(skyTx, new StgUV(127, vBot), 15, 0);  // bottom-right
-                    var uvTL = ComputeUV(skyTx, new StgUV(  0, vTop), 15, 0);  // top-left
-                    var uvTR = ComputeUV(skyTx, new StgUV(127, vTop), 15, 0);  // top-right
+                    var uvBL = ComputeUV(skyTx, new StgUV(  0, vBot), 15, 0);  // bottom of texture sub-band
+                    var uvBR = ComputeUV(skyTx, new StgUV(127, vBot), 15, 0);
+                    var uvTL = ComputeUV(skyTx, new StgUV(  0, vTop), 15, 0);  // top of texture sub-band
+                    var uvTR = ComputeUV(skyTx, new StgUV(127, vTop), 15, 0);
 
-                    texVerts.Add(new VertexPositionTexture(v00, uvBL));
-                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
-                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
-                    texVerts.Add(new VertexPositionTexture(v10, uvBR));
-                    texVerts.Add(new VertexPositionTexture(v11, uvTR));
-                    texVerts.Add(new VertexPositionTexture(v01, uvTL));
+                    // v00/v10 = screen top → vTop;  v01/v11 = screen bottom → vBot
+                    texVerts.Add(new VertexPositionTexture(v00, uvTL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvTR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvBL));
+                    texVerts.Add(new VertexPositionTexture(v10, uvTR));
+                    texVerts.Add(new VertexPositionTexture(v11, uvBR));
+                    texVerts.Add(new VertexPositionTexture(v01, uvBL));
                 }
             }
 
