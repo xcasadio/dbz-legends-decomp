@@ -168,7 +168,7 @@ namespace DbzLegendsAnalyser.Viewers
                 // Keep camera world position fixed; only change viewing direction.
                 Vector3 camPos = ComputeCameraPos();
                 _azimuth   -= mdx * 0.008f;
-                _elevation += mdy * 0.008f;
+                _elevation -= mdy * 0.008f;
                 _elevation  = MathHelper.Clamp(_elevation,
                     -MathHelper.PiOver2 + 0.02f,
                      MathHelper.PiOver2 - 0.02f);
@@ -192,7 +192,7 @@ namespace DbzLegendsAnalyser.Viewers
             else fwdXZ = Vector3.Forward;
 
             Vector3 right = Vector3.Normalize(Vector3.Cross(fwdXZ, Vector3.Up));
-            float speed = _distance * dt * 1.2f;
+            float speed = _distance * dt * 0.6f;
 
             if (keyboard.IsKeyDown(Keys.Up)    || keyboard.IsKeyDown(Keys.W)) _target += fwdXZ * speed;
             if (keyboard.IsKeyDown(Keys.Down)  || keyboard.IsKeyDown(Keys.S)) _target -= fwdXZ * speed;
@@ -464,10 +464,9 @@ namespace DbzLegendsAnalyser.Viewers
                     var tx = FindTexture(txEntries, tri.TPageX, tri.TPageY, tri.UV0);
                     if (tx != null)
                     {
-                        var uv0 = FlipY(ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY));
-                        var uv1 = FlipY(ComputeUV(tx, tri.UV1, tri.TPageX, tri.TPageY));
-                        var uv2 = FlipY(ComputeUV(tx, tri.UV2, tri.TPageX, tri.TPageY));
-                        // UV.y flipped to compensate for the Y-scale(-1) world transform
+                        var uv0 = ComputeUV(tx, tri.UV0, tri.TPageX, tri.TPageY);
+                        var uv1 = ComputeUV(tx, tri.UV1, tri.TPageX, tri.TPageY);
+                        var uv2 = ComputeUV(tx, tri.UV2, tri.TPageX, tri.TPageY);
 
                         if (!texBuckets.TryGetValue(tx.Texture, out var bucket))
                             texBuckets[tx.Texture] = bucket = new List<VertexPositionTexture>();
@@ -547,10 +546,10 @@ namespace DbzLegendsAnalyser.Viewers
 
                     // PSX UV layout per POLY_FT4 winding (v00,v10,v01,v11)
                     // u1=u0+31 per FUN_80066870 (last inclusive texel of the 32-wide tile)
-                    var fuv00 = FlipY(ComputeUV(floorTx, new StgUV(uOff,      vOff),      11, 0));
-                    var fuv10 = FlipY(ComputeUV(floorTx, new StgUV((byte)(uOff + 31), vOff),      11, 0));
-                    var fuv01 = FlipY(ComputeUV(floorTx, new StgUV(uOff,      (byte)(vOff + 31)), 11, 0));
-                    var fuv11 = FlipY(ComputeUV(floorTx, new StgUV((byte)(uOff + 31), (byte)(vOff + 31)), 11, 0));
+                    var fuv00 = ComputeUV(floorTx, new StgUV(uOff,      vOff),      11, 0);
+                    var fuv10 = ComputeUV(floorTx, new StgUV((byte)(uOff + 31), vOff),      11, 0);
+                    var fuv01 = ComputeUV(floorTx, new StgUV(uOff,      (byte)(vOff + 31)), 11, 0);
+                    var fuv11 = ComputeUV(floorTx, new StgUV((byte)(uOff + 31), (byte)(vOff + 31)), 11, 0);
 
                     if (!texBuckets.TryGetValue(floorTx.Texture, out var bucket))
                         texBuckets[floorTx.Texture] = bucket = new List<VertexPositionTexture>();
