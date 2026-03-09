@@ -1,4 +1,4 @@
-# Structure des fichiers CH_x.BIN
+continue# Structure des fichiers CH_x.BIN
 
 **Date d'analyse :** Mars 2026  
 **Sources :** Ghidra/ReVa MCP, PCSX-Redux, analyse binaire directe  
@@ -1428,3 +1428,2410 @@ Les autres opcodes lisent ces bits via `indirect_flag=1` (mode g_animSharedVarTa
 **Constante 0x80021884** = table globale (utilisée par AnimCmd_EffSet et SpawnEffectTask).
 
 **CERTAIN** : décompilé, appel à 0x80021884 vérifié pour 5 des 7 callers.
+
+---
+
+## 24. Session continuation — EffectTaskMainLoop, AsyncLoadTexture, UVEntry, SpriteRecord
+
+### 24.1 EffectTaskMainLoop @ 0x8003fddc (renamed)
+
+Boucle principale d'une tâche d'effet créée par `SpawnEffectTask`. Appelée chaque frame par le scheduler.
+
+```
+1. ProcessEntityScript(gameState)             si !g_pauseFlag
+2. Si runtimePointers.polyF3Index & 4 == 0 → render l'effet:
+     - polyF4Index == 4 : scaleX/Y = DAT_8009ac5c[0/1] (camera scale)
+     - sinon            : scaleX/Y = 0x1000 (1.0 fixed-point 12.0)
+     - posX = runtimePointers.dataPtr2[0] - INT_1f8000b4 (screen offset X)
+     - posY = runtimePointers.dataPtr2[2]
+     - posZ = runtimePointers.polyFt3Index - INT_1f8000bc (screen offset Z)
+     - spriteList = charPointers[4]
+   → RenderTransformedSprites(spriteList, posX, posY, posZ, ...)
+3. State machine sur runtimePointers.polyF3Index :
+     0          → attendre polyFt4==0, puis zéro polyG3Index
+     bit[0]=0, bit[1]=0 → si bit[5]=1 : looping (recharge polyFt4)
+     autre      → RemoveTaskFromList(task, 0xB) = autodestruction
+```
+
+**CERTAIN** : décompilé, 1 caller (SpawnEffectTask via CreateTask).
+
+### 24.2 opcode 0x0B `tex_set` — AnimCmd_AsyncLoadTexture @ 0x80038d24
+
+Gestion asynchrone du chargement de texture VRAM via une table de 4 slots `ImageLoadRequest_ARRAY_800a67b0`.
+
+**Deux sous-modes selon b1.bit[7]** :
+
+#### Mode Poll/Update (b1.bit[7] = 0) — return streamPtr+1
+
+```
+word[0]: opcode=0x0B | b1<<8
+  b1 bits[1:0] = slot_index (0..3)
+  b1 bit[7]    = 0 → poll mode
+
+word[0] bits[14:12] (= uVar1 & 0x7000):
+  ==0 : tester uniquement si load fini
+  !=0 : si chargé (field6.bits[6:4]==0) et compteur>0 → décrémente field3, met field6.bits[6:4]
+```
+
+#### Mode Init (b1.bit[7] = 1) — return streamPtr+7
+
+```
+word[0]: opcode=0x0B | (0x80|idx_flags)<<8
+word[1]: cd_buffer_index → dataptr = &g_cdFileBufferTable[cd_buffer_index]
+word[2]: (réservé — non utilisé)
+word[3]: x → ImageLoadRequest.x (position X VRAM)
+word[4]: y → ImageLoadRequest.y (position Y VRAM)
+word[5]: {field3_0x8(byte), field4_0x9(byte)}
+word[6]: {field5_0xa(byte), field6_0xb_init(byte)}
+```
+
+**Structure ImageLoadRequest** (stride 0xC = 12 bytes) :
+
+| Offset | Taille | Nom Ghidra | Rôle |
+|--------|--------|-----------|------|
+| +0x00 | 4 | `dataptr` | Pointeur vers données texture dans RAM |
+| +0x04 | 2 | `x` | Position X en VRAM cible |
+| +0x06 | 2 | `y` | Position Y en VRAM cible |
+| +0x08 | 1 | `field3_0x8` | Compteur de chargement (décrémenté) |
+| +0x09 | 1 | `field4_0x9` | Paramètre taille (width/height packed) |
+| +0x0A | 1 | `field5_0xa` | Paramètre taille (width/height packed) |
+| +0x0B | 1 | `field6_0xb` | Flags état : bits[6:4]=status, autres=flags |
+
+`FUN_80067588` = fonction de progression/polling d'un `ImageLoadRequest` (1 caller depuis AsyncLoadTexture).
+
+**CERTAIN** : décompilé, positions x/y directement assignées, stride array = 4 slots (index & 3).
+
+### 24.3 CHBinMeshEntry.unknown_08 — INCONNU
+
+Preuve insuffisante :
+- `RenderBattleScene3D` n'accède jamais `local_38[1]` (= offset +0x08 de la struct)
+- `InitBattleStageAssets` utilise des `MeshTableEntry` (STG_MD), pas CHBinMeshEntry
+- Aucun autre caller de `g_chBinEntryTableBasePtr` trouvé
+
+**Actions recommandées** :
+1. Chercher la fonction qui *charge* le CH_BIN (parser initial, non `RenderBattleScene3D`)
+2. Chercher des accès à `g_meshTableCounts` dans d'autres fonctions
+
+### 24.4 UVEntry — Structure 6B confirmée
+
+De `RenderBattleScene3D` lignes 241-253, accès `uv_idx[vi] * 6 + iVar14` (base = résolution de `local_c8[1]`) :
+
+```c
+struct UVEntry {      // 6B CERTAIN (stride 6 confirmé)
+    undefined2 uv_lo;  // (u, v) bytes 0-1 → positionné dans prim POLY_GT4 champ UV lo
+    undefined2 uv_mid; // bytes 2-3 → champ UV mid (CLUT area?)
+    undefined2 uv_hi;  // bytes 4-5 → champ UV hi (tpage area?)
+};
+```
+
+Les 3 fields correspondent aux positions dans le layout PSX `POLY_GT4` (u, v = 1B chacun + 2B CLUT = 4B, puis u+v = 2B, puis tpage = 2B). Noms exacts PROBABLE — nécessite corrélation avec SetPolyGT4 pour confirmer (u/v/clut/tpage exact).
+
+**Accès confirmé** : chaque vertex `vi` charge `UVEntry[uv_idx[vi]]`, 3 writes dans prim GT4.
+
+### 24.5 SpriteRecord.ptr_sprite — PROBABLE = pointeur vers données couleur de vertex
+
+De `RenderBattleScene3D` lignes 192-295 :
+
+```c
+local_c0 = (int *)(local_38[4] + g_cdFileBaseOffset)  // = ptr_sprite_recs
+local_bc = (int *)(*local_c0 + g_cdFileBaseOffset)     // SpriteRecord.ptr_sprite
+local_c0[1]                                            // SpriteRecord.cnt_packed
+```
+
+`local_bc` est itéré par `IterateMeshStreamAndFetch_Offset8()` et sert à suply les canaux R,G,B dans les vertices `POLY_GT4` (lignes 278-293). Stride = +8B (2 × int32) par polygone.
+
+Comportement :
+```c
+local_f0 = (u_char)(short)*local_bc;          // R channel
+local_ee = (u_char)*((int)local_bc + 2);       // G channel
+local_ec = local_f0 + local_ee;                // R+G blended
+local_ea = local_ee + (u_char)*((int)local_bc + 6); // G+B blended
+local_bc = local_bc + 2;  // stride +8B
+```
+
+**Renommage suggéré** : `ptr_sprite` → `ptr_vertex_color_stream` (**PROBABLE**, non confirmé sans analyse de la section dans CH_01.BIN à offset réel).
+
+**INCONNU** : pourquoi "SpriteRecord" — le nom `ptr_sprite` provient d'une hypothèse initiale. La structure pointe sur des données RGB, pas une image sprite au sens classique.
+
+### 24.6 Bilan des Accès CHBinMeshEntry dans RenderBattleScene3D
+
+```c
+// local_38 = local_98 + 1 (CHBinMeshEntry + 0x04)
+// ---
+*local_38          // +0x04 poly_count_packed.low16 → compteur boucle polygones (CERTAIN)
+local_38[1]        // +0x08 unknown_08 → NON LU dans cette fonction (INCONNU)
+local_38[2]        // +0x0C ptr_color_table → local_d0 = résolution runtime (CERTAIN)
+local_38[3]        // +0x10 ptr_mesh_records → local_c8 = résolution runtime (CERTAIN)
+local_38[4]        // +0x14 ptr_sprite_recs → local_c0 = résolution runtime (CERTAIN)
+local_38[5]        // +0x18 ptr_anim_stream → animstream ptr ou 0 (CERTAIN)
+```
+
+---
+
+## 25. Session continuation — Validation CHBinMeshEntry.unknown_08, AnimCmd_RenderEntryGroup, données binaires
+
+### 25.1 CHBinMeshEntry.unknown_08 — INCONNU (double confirmation)
+
+Vérifié dans **2 fonctions** qui itèrent les entrées :
+- `RenderBattleScene3D` (332 lignes) : `puVar12[1]` (= +0x08) jamais lu
+- `AnimCmd_RenderEntryGroup` (250 lignes, ligne 67: `puVar12 = local_98 + 1`) : même pattern, +0x08 jamais lu
+
+**Valeurs brutes dans CH_01.BIN** (file offset 0x1244, entries 0..9) :
+
+| Entrée | +0x00 (id_packed) | +0x04 (poly_count) | +0x08 (INCONNU) | ptr_anim_stream |
+|--------|------------------|--------------------|-----------------|-----------------|
+| E0 | 0x00000000 | 0x00000000 | 0x00000000 | 0x801A3EE8 |
+| E1 | 0x00000000 | 0x00000000 | 0x00000000 | 0x801A459C |
+| E2 | 0x00000000 | 0x00000000 | 0x00000000 | 0x801A4630 |
+| E3 | 0x00000100 | 0x00010001 | 0x00010001 | 0x801A4654 |
+| E4 | 0x00000200 | 0x00010006 | 0x00010001 | 0x801A4814 |
+| E5 | 0x00000300 | 0x00010010 | 0x00010001 | 0x00000000 |
+| E6 | 0x00180400 | 0x00010008 | 0x00010001 | 0x801A4914 |
+| E7 | 0x00000500 | 0x00010001 | 0x00010001 | 0x801A4990 |
+| E9 | 0x00080700 | 0x00000001 | 0x00000000 | 0x801A485C |
+
+**Observations** :
+- Entrées "header" (E0..E2) : tout = 0 sauf les ptrs
+- Entrées actives (E3..E8) : `unknown_08` = 0x00010001 systématiquement
+- E9 (part_id=7) : `unknown_08` = 0, cohérent avec poly_count high16 = 0 aussi
+- Pattern low16=1, high16=1 → PROBABLE = sous-compte (sprite count + mesh sub-count)
+
+**INCONNU** — Aucune preuve code directe. Hypothèse : utilisé par un chargeur non encore trouvé.
+
+### 25.2 AnimCmd_RenderEntryGroup — Découverte groupIndex
+
+`AnimCmd_RenderEntryGroup` a un paramètre `groupIndex` (short) qui sélectionne un groupe dans le stream AnimStream quand `ptr_anim_stream != 0`. Ligne 97-102 :
+```c
+// Parcours des groupes dans g_meshStreamPtrBuffer jusqu'à trouver groupIndex
+if ((uVar3 & 2) != 0) {
+    puVar11 = &g_meshStreamPtrBuffer;
+    uVar22 = 0; uVar7 = 0;
+    do {
+        if ((int)groupIndex != uVar7) {
+            if (*puVar11 == 0) break;
+            puVar11++;
+        }
+        uVar7++;
+    } while (uVar22++ < 0x10);  // max 16 groupes
+}
+```
+
+**CERTAIN** : le stream AnimStream supporte jusqu'à 16 groupes par entrée, indexés par `groupIndex`.
+
+### 25.3 CHBinMeshEntry — Accès confirmés (synthèse finale)
+
+`local_98 = entry_ptr`, `puVar12 = local_98 + 1` dans les deux fonctions :
+
+```
+*local_98 = id_packed (+0x00)    → CERTAIN (high16=flags, low16=id utilisé en render)
+puVar12[0] = poly_count (+0x04)  → CERTAIN (boucle while local_a8 < (short)*puVar12)
+puVar12[1] = unknown (+0x08)     → INCONNU (jamais lu dans les 2 fonctions de rendu)
+puVar12[2] = ptr_color_table (+0x0C) → CERTAIN (relocalisé +0x2E800, utilisé comme vertex_stream)
+puVar12[3] = ptr_mesh_records (+0x10) → CERTAIN (relocalisé, UV table + vertex coord streams)
+puVar12[4] = ptr_sprite_recs (+0x14)  → CERTAIN (relocalisé, vertex color / sprite data)
+puVar12[5] = ptr_anim_stream (+0x18)  → CERTAIN (0=absent, sinon: AnimStream bytecode, multi-group)
+```
+
+### 25.4 Découverte sur ptr_color_table (MeshRecord)
+
+`local_d0 = ptr_color_table` résolu. Usage :
+- `*local_d0` = ptr vers buffer vertex data (résolu +0x2E800)
+- `local_d0[1]` = packed count : `high16 = outer_count - 1` (compteur decremented), `low16 = inner_count`
+- `local_d0[2]` = ptr vers 2ème section vertex (chargé quand compteur outer épuisé)
+- `local_d0[3]` = packed count 2ème section
+
+**Structure réelle de ptr_color_table** = liste chaînée de blocs vertex (multiple segments) :
+```c
+struct ColorTableBlock {   // stride variable
+    uint ptr_vertices;     // → data vertices
+    uint cnt_packed;       // high16 = outer_count-1, low16 = inner_count
+    // repeat...
+};
+```
+
+**PROBABLE** — pattern identique dans RenderBattleScene3D et AnimCmd_RenderEntryGroup.
+
+---
+
+## 26. Session continuation — CH_BIN Sections, SetMeshPaletteRange, ApplyCharEffect
+
+### 26.1 CH_BIN Header Sections (CH_01.BIN)
+
+4 pointeurs dans l'en-tête (dwords[2..5]), tous rebasés +0x2E800 :
+
+| dword | Addr compile | File offset | Contenu | Statut |
+|-------|-------------|-------------|---------|--------|
+| [2] | 0x801A4A44 | 0x1244 | CHBinMeshEntry table (37 entries, stride 28B) | CERTAIN |
+| [3] | 0x801A4E50 | 0x1650 | CLUT 16 couleurs PSX BGR555 (32 bytes) | CERTAIN |
+| [4] | 0x801A4E70 | 0x1670 | INCONNU (structured data, dword[0]=0x00482279) | INCONNU |
+| [5] | 0x801A8098 | 0x4898 | INCONNU (starts: 04 00 02 00, count fields?) | INCONNU |
+
+**CLUT @ 0x1650** — 16 entries PSX BGR555 (little-endian), symétrique gradient :
+```
+Entry  0 = 0x0000 (transparent)
+Entry  1 = 0x6EF7 (dark)
+Entry  2..4 = gradient light
+Entry  5 = 0x7FFF (pure white)
+Entry  6..9 = symmetric gradient back to transparent
+Entry 10 = 0xCBDE (highlight)
+Entry 11..14 = gradient dark
+Entry 15 = 0x0000 (transparent)
+```
+
+Labels Ghidra ajoutés :
+- `DAT_801d200c` → `g_chBinClutTablePtr`
+- `DAT_DOT801d200c` — voir XREF relocation RenderBattleScene3D
+
+### 26.2 opcode 0x10 `pal_set` — AnimCmd_SetMeshPaletteRange @ 0x80038874
+
+**Format : 4 × uint16 = 8 bytes (return streamPtr+4)**
+
+```
+word[0]: opcode=0x10 | b1<<8
+  b1 = flags (cVar1):
+    bits[3:0] = mesh_group_id → cherche mesh correspondant dans g_renderMetadataBuffer
+    bit[4]    = indirect word[1] (g_animSharedVarTable)
+    bit[6]    = indirect word[2] (g_animSharedVarTable)
+    bit[7]    = absolute_mode → copie raw local_d8 matrix sans CompositionMatrix
+
+word[1]: range_count (nombre de slots OT depth à modifier) | ou var_idx
+word[2]: depth_delta (ajouté à g_polyOTDepthTable chaque itération) | ou var_idx
+word[3]: target_specs packed (3 cibles, shift progressif 6+5+5 bits):
+  bits[ 5:0] = spec_0 → ResolveBodyPartTarget(spec_0 & 0x3F) = transVec
+  bits[10:6] = spec_1 → ResolveBodyPartScale(spec_1 & 0x1F)  = rotVec
+  bits[15:11] = spec_2 → g_bodyPartTransformTable[(spec_2&0xF)*8] = scaleVec
+```
+
+**Action** : Trouve la mesh par group_id dans `g_renderMetadataBuffer`, puis appelle `TransformAndProjectMesh` pour projeter les polygones en 3D, ensuite incrémente OT depths de `depth_delta` pour `range_count` polygones.
+
+**CERTAIN** : décompilé, switch sur iVar4=0/1/2 avec 3 resolvers différents.
+
+### 26.3 TransformAndProjectMesh @ 0x8003f814 (renommée, 1 caller)
+
+**Signature** :
+```c
+void TransformAndProjectMesh(
+    int polyBuf,        // &POLY_GT4_801f7180[idx] = target primitive
+    SVECTOR *uvBuf,     // &g_uvOrTexCoordBuffer[idx*16] = UV data
+    SVECTOR *rotVec,    // body part rotation SVECTOR
+    short *transVec,    // body part translation short[3]
+    short *scaleVec,    // body part scale short[3]
+    int otDepthPtr,     // &g_polyOTDepthTable[idx] = OT depth
+    ushort polyCount,   // nombre de polygones à projeter
+    short absoluteMode  // 0=CompMatrix, 1=raw local_d8
+)
+```
+
+**Opérations GTE** :
+1. `PushMatrix / ReadRotMatrix` → sauvegarde matrice courante
+2. `RotMatrix(rotVec, &local_d8)` → construction matrice rotation body part
+3. `local_d8.t = transVec - screen_offset` → translation relative à camera
+4. `ScaleMatrix(&local_d8, scaleVec)` → échelle body part
+5. `CompMatrix(&global, &local_d8, &result)` → composition avec matrice globale
+6. Si `absoluteMode=1` → diagonal identity override sur result
+7. `SetRotMatrix / SetTransMatrix` → charge dans GTE
+8. Boucle sur polyCount polygones : `RotAverage4` (POLY_GT4) ou `RotAverage3` (POLY_GT3)
+
+**CERTAIN** : décompilé, appels GTE directs.
+
+### 26.4 opcode 0x11 `eff_xset` — AnimCmd_ApplyCharEffect @ 0x80038eb0
+
+**Format bi-modal** :
+
+#### Mode init (bit[15]=0) : return streamPtr+6
+
+```
+word[0]: opcode=0x11 | flags<<8
+  bit[15]=0 → init mode, charger les paramètres
+  bit[8]   = indirect stream[2]
+  bit[9]   = indirect stream[3]
+  bit[10]  = indirect stream[4]
+word[1]: {lo_byte=target_spec, hi_byte=scale_spec}
+  → g_charEffectTranslatePtr = ResolveBodyPartTarget(target_spec & 0xFF)
+  → g_charEffectScalePtr     = ResolveBodyPartScale(scale_spec & 0xFF)
+word[2]: rotation_x (ou var_idx si bit[8])→ DAT_800a6780
+word[3]: rotation_y (ou var_idx si bit[9])→ DAT_800a6782
+word[4]: rotation_z (ou var_idx si bit[10]) → DAT_800a6784
+→ g_charEffectInitFlag = 1
+```
+
+#### Mode execute (bit[15]=1) : return streamPtr+1
+
+```
+word[0]: opcode=0x11 | 0x80<<8
+  uniquement : appel UpdateCharEffectTransform()
+```
+
+#### UpdateCharEffectTransform @ 0x8003fae8 (renommée)
+
+Système d'interpolation de position/rotation/échelle sur N frames :
+
+```
+Si g_charEffectInitFlag=1 (init) :
+  → calcule delta_pos = target_translate - scratchpad_pos
+  → calcule delta_rot = target_rot - SVECTOR_1f800084.vy  
+  → stocke en DAT_800a6794/96/98 (velocity XYZ)
+  → g_charEffectInitFlag = 0
+
+Si g_charEffectInitFlag=0 (update) :
+  → incrémente DAT_800a6788/78c/790 (pos accum) par velocity
+  → écrit scratchpad_coordX/Y/Z = pos_accum >> 4 (fixed-point 4.12)
+  → incrémente rotation accumulator par velocity
+  → écrit SVECTOR_1f800084.vy/vx (scratchpad rotation)
+  → décrémente DAT_800a679a (frame counter)
+  → retourne 1 si counter == 0 (effet terminé)
+```
+
+**Labels ajoutés** :
+
+| Adresse | Label | Rôle |
+|---------|-------|------|
+| 0x800a6778 | `g_charEffectTranslatePtr` | Ptr vers translation target short[3] |
+| 0x800a677c | `g_charEffectScalePtr` | Ptr vers SVECTOR scale target |
+| 0x800a6786 | `g_charEffectInitFlag` | 0=update mode, 1=init mode |
+
+### 26.5 Fonctions renommées cette session
+
+| Ancienne | Nouvelle | Signature courte | Callers |
+|----------|----------|-----------------|---------|
+| FUN_8003fddc | `EffectTaskMainLoop` | `void()` | CreateTask (via SpawnEffectTask) |
+| FUN_8003f814 | `TransformAndProjectMesh` | `void(int,SVECTOR*,SVECTOR*,short*,short*,int,ushort,short)` | 1 |
+| FUN_8003fae8 | `UpdateCharEffectTransform` | `undefined4()` | 1 |
+
+---
+
+## Section 27 — AnimCmd : opcodes de mouvement, RGBA, UV/XY, contrôle de flux, hitbox
+
+### 27.1 Nouveau label : g_charEffectSlotTable
+
+| Adresse | Label | Type | Rôle |
+|---------|-------|------|------|
+| 0x801fab30 | `g_charEffectSlotTable` | uint32[16] | Table des slots d'effet par personnage |
+
+**Preuve** : lu/écrit par `AnimCmd_ChEffSet` (3 refs @ 0x8003e070, 0x8003e0c8, 0x8003e134) et `AnimCmd_CheffWait` (1 ref @ 0x8003ec24). Indices actifs = 4..15 (12 slots).
+
+---
+
+### 27.2 AnimCmd_MoveSet — `move_set` (opcode 0x1A @ 0x8003c738, 1032 octets)
+
+**Format** : 4 mots
+
+```
+word[0]: opcode=0x1A | sub_mode<<8
+word[1]: lo_byte=target_spec_A (corps cible)
+         hi_byte=flags (bit[5]=snap-to-goal, bit[6]=varTable indirect)
+word[2]: lo_byte=target_spec_B (position source/goal)
+         hi_byte=varTable_dest_idx (bit[6]=indirect)
+word[3]: completion_bitmask (ORé dans varTable quand tous axes atteints)
+```
+
+**Logique** (CERTAIN) :
+
+```c
+// Résolution des cibles
+psVar5 = ResolveBodyPartTarget(target_A, gameState);  // cible à déplacer
+psVar6 = ResolveBodyPartTarget(src_B, gameState);     // position goal
+psVar7 = ResolveBodyPartTarget(speed_spec, gameState); // vitesse par axe
+
+// Axes X, Y, Z (3 fois la même pattern)
+// Utilise DAT_801faa84 (dX), DAT_801faa88 (dY), DAT_801faa8c (dZ)
+// comme deltas de mouvement par frame
+if (A.x != goal.x && delta != 0):
+    A.x += delta
+    if signe_change(goal.x - speed.x ^ goal.x - (A.x+delta)):
+        A.x = goal.x; flag |= bit  // overshoot snap
+
+// Résultat dans g_animSharedVarTable[varDest]:
+// si flag == 7 (tous axes OK): OR completion_mask
+// flag bits: 0=X atteint, 1=Y atteint, 2=Z atteint
+```
+
+**Note** : `DAT_801faa84/88/8c` = deltas de mouvement global (short×3 = SVECTOR[0..2]).
+PROBABLE → vec3 de vitesse de déplacement courant du personnage.
+
+**Nouveau label identifié** :
+
+| Adresse | Label | Type |
+|---------|-------|------|
+| 0x801faa84 | `g_charMoveVelocity` | short[3] (X, Y, Z per-frame delta) |
+
+---
+
+### 27.3 AnimCmd_Xy0123Set — `xy_set` (opcode 0x22 @ 0x8003d580, 1352 octets)
+
+**Format** : 5+ mots
+
+```
+word[0]: opcode=0x22 | mode<<8 (bits[5:4] = range_mode)
+word[1]: lo_byte=start_idx, hi_byte=count_or_part_id
+word[2]: packed (3 × 5 bits) = [x0_spec:5][y0_spec:5][x1_spec:5]  [bit15=sign]
+word[3]: packed (3 × 5 bits) = [y1_spec:5][x2_spec:5][y2_spec:5]
+word[4]: packed (2 × 5 bits) = [x3_spec:5][y3_spec:5]
++ suite: opérandes inline (selon specs)
+```
+
+**Chaque spec 5 bits** :
+- bits[3:0] = index dans varTable (0xF = skip/no-op)
+- bit[4] = si 1 → lire depuis `g_animSharedVarTable[*puVar16++]`, si 0 → lire depuis stream inline
+
+**Range modes** (bits[5:4] de word[0]>>8) :
+
+| bVar6 | Mode |
+|-------|------|
+| 0x10 | Range par index mesh_count (scan g_renderMetadataBuffer byte[3]→POLY index) |
+| 0x00 | Direct range [start_idx .. start_idx+count] dans POLY_GT4 pool |
+| 0x20 | Search par group_id : scan g_renderMetadataBuffer byte[2]==part_id |
+
+**Boucle interne** (CERTAIN) :
+
+```c
+// psVar12 = &POLY_GT4->x0  (base, puis +6 shorts = +12 bytes par vertex)
+// 4 itérations (x0,y0), (x1,y1), (x2,y2), (x3,y3)
+for v in 0..3:
+    x_new = ApplyMathOp(psVar12[v*6+0], x_mode[v], x_operand[v])
+    y_new = ApplyMathOp(psVar12[v*6+1], y_mode[v], y_operand[v])
+// stride inter-polygone: +8 shorts = +16 bytes après boucle de 4 vertices
+```
+
+**Layout POLY_GT4 relatif (confirmé)** :
+
+| Offset (shorts) | Champ | Note |
+|-----------------|-------|------|
+| 0 | tag/len | |
+| 1 | r0,g0,b0,code | 4 bytes |
+| 3 | x0 | vertex 0 |
+| 4 | y0 | |
+| 5 | u0,v0 (bytes) + clut | |
+| 6 | r1... | → stride = 6 shorts (12B) par vertex depuis x0 |
+
+---
+
+### 27.4 AnimCmd_Rgb2Set — `rgb2_set` (opcode 0x1C @ 0x8003a300, 1304 octets)
+
+**Format** : 4-5 mots
+
+```
+word[0]: opcode=0x1C | flags<<8  (bits[5:4]=range_mode, bits[7:6]=reserved)
+word[1]: lo_byte=start_idx (ou varTable[idx] si bit[lo_byte_flags&0x40])
+         hi_byte=count
+word[2]: packed modes RGB (3 × 5 bits) :
+         bits[4:0]=r_spec, bits[9:5]=g_spec, bits[14:10]=b_spec
+         (0xF = skip channel)
+         bit[15]=mode_flag (si 1: word[3] is extra params block)
+word[3]: extra operands (si bit[15] dans word[2])
++ word[4] si uVar10==2: operand overflow
+```
+
+**Chaque spec 5 bits** :
+- bits[3:0] = index dans varTable (0xF = skip)
+- bit[4] = indirect depuis varTable
+
+**Délégation** (CERTAIN) : appelle `ApplyRgbaPerVertex(0x8003f464)` :
+
+```c
+ApplyRgbaPerVertex(
+    bVar4 & 0xf,     // vertex_skip_mask (bits individuels par vertex)
+    poly_count,       // nombre de polygones
+    &POLY_GT4_pool[offset],
+    r_mode, r_operand,
+    g_mode, g_operand,
+    b_mode, b_operand,
+    stp_mode, stp_operand
+)
+```
+
+**Range modes** :
+
+| bVar6 | Mode |
+|-------|------|
+| 0x10 | Range [start..start+count] via g_meshCountBuffer (par mesh) |
+| 0x00 | Direct range |
+| 0x20 | Search par group_id dans g_renderMetadataBuffer byte[2] |
+
+---
+
+### 27.5 ApplyRgbaPerVertex — `FUN_8003f464` (renommée, 560 octets)
+
+**Signature** :
+```c
+void ApplyRgbaPerVertex(
+    ushort vertex_skip_mask,   // bit N = skip vertex N
+    ushort poly_count,
+    byte  *prim_ptr,           // ptr vers POLY_GT4 (byte*)
+    short r_mode, short r_operand,
+    short g_mode, short g_operand,
+    short b_mode, short b_operand,
+    short stp_mode, short stp_operand
+)
+```
+
+**Logique par vertex** (CERTAIN) :
+
+```c
+for poly in 0..poly_count:
+    prim_ptr += 4  // sauter tag/len (4 bytes)
+    for v in 0..3:
+        if (vertex_skip_mask & (1<<v)) == 0:
+            r = ApplyMathOp(prim_ptr[0], r_mode, r_operand)  // clamp [0..255]
+            g = ApplyMathOp(prim_ptr[1], g_mode, g_operand)
+            b = ApplyMathOp(prim_ptr[2], b_mode, b_operand)
+            stp_bits = ApplyMathOp(prim_ptr[3], stp_mode, stp_operand) & 3
+            prim_ptr[3] = (prim_ptr[3] & 0xFC) | stp_bits
+        prim_ptr += 4  // stride = 4 bytes par vertex RGBA
+```
+
+**Note** : `prim_ptr[3]` = code byte du vertex POLY_GT4 ; les 2 bits low = STP flag.
+
+---
+
+### 27.6 AnimCmd_EffSet — `eff_set` (opcode 0x21 @ 0x8003cf38, 720 octets)
+
+**Format** :
+
+```
+Mode spawn (bit[7]=0 dans lo_byte word[0]):
+    word[0]: opcode=0x21 | lo_flags<<8
+    word[1]: lo_byte=effectIndex, hi_byte=body_part_spec
+    word[2]: extra config (mis dans gameState+0x52)
+    → ret param_1 + 3
+
+Mode kill/stop (bit[7]=1):
+    word[0]: opcode=0x21 | mode_flags<<8
+    → ret param_1 + 1
+```
+
+**Logique mode spawn** (CERTAIN) :
+
+```c
+// Slot d'effet : g_effectObjectPtrs[opcode_lo & 0xf]
+if (opcode_lo & 0x10):
+    slot_idx = g_animSharedVarTable[(opcode_lo & 0xf)] & 0xf
+else:
+    slot_idx = opcode_lo & 0xf
+
+if g_effectObjectPtrs[slot_idx] == 0:
+    // Créer nouvel effet
+    animDataPtr = ResolveBodyPartTarget(word[1].hi_byte, gameState)
+    task = SpawnEffectTask(animDataPtr, effectIndex)
+    g_effectObjectPtrs[slot_idx] = task->gameState
+    gameState->entityData.polyF3Index |= (hi_flags & 0x20)  // mode rendu
+    g_effectObjectPtrs[slot_idx]+0x58 = &g_effectObjectPtrs[slot_idx]  // back-ptr
+else if hi_flags & 0x40:
+    // Réinitialiser animation
+    InitEntityAnimPtr(existingGameState, -0x7ffde77c, effectIndex)
+```
+
+**Mode kill** (bit[7]=1) :
+
+| Bit | Action |
+|-----|--------|
+| bit[6] in lo_byte | `slot[idx].+0x50 |= 4` (flag kill type A) |
+| bit[5] in hi_byte | `slot[idx].+0x50 |= 2` ; `g_effectObjectPtrs[idx] = 0` (kill B) |
+| bit[4] in hi_byte | `slot[idx].+0x50 |= 1` ; `g_effectObjectPtrs[idx] = 0` (kill C) |
+
+---
+
+### 27.7 AnimCmd_BitSet — `bit_set` (opcode 0x0D @ 0x8003b148, 280 octets)
+
+**Format** : 3 mots
+
+```
+word[0]: opcode=0x0D | op_mode<<8
+word[1]: dest_var_idx  (→ g_animSharedVarTable + idx*2)
+word[2]: operand  (ou g_animSharedVarTable[word[2]] si bit[4] dans lo_byte word[0])
+```
+
+**Logique** (CERTAIN) :
+
+```c
+g_animSharedVarTable[dest] = ApplyMathOp(g_animSharedVarTable[dest], op_mode, operand)
+// Cas spécial op_mode==8: g_animSharedVarTable[dest] = g_animSharedVarTable[operand]  (COPY)
+```
+
+Opération mathématique directe sur la table de variables partagées.
+
+---
+
+### 27.8 AnimCmd_BitChk — `bit_chk` (opcode 0x0C @ 0x8003afa4, 420 octets)
+
+**Format** : 2-4 mots (selon mode)
+
+```
+word[0]: opcode=0x0C | flags<<8 | lo_byte
+         lo_byte bits[5:4] = check mode
+         lo_byte bits[3:0] = varTable_src_idx
+         lo_byte bit[4] = invert test (NOT)
+         lo_byte bit[5] = AND-all vs ANY
+         lo_byte bits[7:6] = 0x80 → word[2] = extra stream ptr idx
+word[1]: bitmask à tester
+hi_byte (word[0]>>8): action_mode
+         bits[7:6] = action type
+```
+
+**Test** :
+
+```c
+val = g_animSharedVarTable[src_idx]
+if (lo_byte & 0x10): val = ~val
+if (lo_byte & 0x20): pass = (val & mask) == mask  // ALL bits
+else:                pass = (val & mask) != 0       // ANY bit
+```
+
+**Actions si test réussi** :
+
+| hi_byte bits[7:6] | Action |
+|-------------------|--------|
+| 0x00 | `g_meshOffsetBuffer[param_2] = 1` + retour au début stream (`g_meshStreamPtrBuffer[arg] - 4`) |
+| 0x40 | Scan forward jusqu'à `*ptr == 0` (null sentinel) |
+| 0x80 | `g_meshOffsetBuffer = 1` + jump vers stream depuis `g_cdFileBufferTable[word[2]]` |
+
+**Note** : `param_2` est l'index de mesh courante (passé par l'exécuteur de stream).
+
+---
+
+### 27.9 AnimCmd_IfSet — `if_set` (opcode 0x23 @ 0x8003d450, 304 octets)
+
+**Format** : 3 mots (+ scan forward variable)
+
+```
+word[0]: opcode=0x23 | tag12 (bits[11:0]) | bits[15:14]
+word[1]: hi_byte=varTable_src_idx, lo_byte flags:
+         bit[4] = NOT/invert
+         bit[5] = AND-all vs ANY
+word[2]: bitmask à tester
+```
+
+**Logique** (CERTAIN) :
+
+```c
+val = g_animSharedVarTable[word[1]>>8]
+if (word[1] & 0x10): val = ~val
+if (word[1] & 0x20): fail = (val & mask) != mask
+else:                fail = (val & mask) == 0
+
+if fail:
+    // Scan stream forward jusqu'à trouver mot avec bits[11:0] == tag12
+    while (*ptr & 0xfff) != (opcode & 0xfff): ptr++
+    // ptr pointe sur le marker de fin correspondant
+```
+
+**Mode spécial** (bits[15:14] == 0x4000) : scan jusqu'à sentinelle signée `((tag-0x8000)*2)`.
+
+**Usage** : saut conditionnel vers bloc END correspondant (identifié par tag 12 bits commun).
+
+---
+
+### 27.10 AnimCmd_EndSet — `end_set` (opcode 0x0E @ 0x8003b260, 120 octets)
+
+**Format** : 1 mot
+
+**Logique** (CERTAIN) :
+
+```c
+if (!g_pauseFlag):
+    g_meshStreamPtrBuffer[mesh_slot] = 0         // reset ptr stream
+    g_meshOffsetBuffer[mesh_slot] = 1            // marquer terminé
+    return param_1 + 2
+else:  // pause → loop back au début
+    return g_meshStreamPtrBuffer[mesh_slot * 2] - 4  // revisite début stream
+```
+
+**Globals utilisés** :
+
+| Adresse | Label | Rôle |
+|---------|-------|------|
+| 0x801faa00 | `g_meshStreamPtrBuffer` | uint32[] ptr courant du stream par mesh |
+| 0x801faa40 | `g_meshOffsetBuffer` | uint16[] flag "stream terminé" par mesh |
+
+---
+
+### 27.11 AnimCmd_ObjIntGet — `obj_int_get` (opcode 0x11 @ 0x8003ad38, 412 octets)
+
+**Format** : 2 mots
+
+```
+word[0]: opcode=0x11 | part_A_spec<<8
+word[1]: lo_byte=part_B_spec, hi_byte=dest_varTable_idx
+```
+
+**Logique** (CERTAIN) :
+
+```c
+posA = ResolveBodyPartTarget(part_A, gameState)  // short[3] = X,Y,Z
+posB = ResolveBodyPartTarget(part_B, gameState)
+dX = posA[0] - posB[0]
+dY = posA[1] - posB[1]
+dZ = posA[2] - posB[2]
+dist = SquareRoot0(dX*dX + dY*dY + dZ*dZ)  // GTE SquareRoot0
+g_animSharedVarTable[dest] = (short)dist
+```
+
+**Usage** : calculer la distance 3D entre deux parties du corps (ou entités via `ResolveBodyPartTarget`).
+
+---
+
+### 27.12 AnimCmd_ObjLongGet — `obj_long_get` (opcode 0x12 @ 0x8003aed4, 208 octets)
+
+**Format** : 2 mots
+
+```
+word[0]: opcode=0x12 | start_idx<<8
+word[1]: lo_byte=count, hi_byte=dest_varTable_idx
+```
+
+**Logique** (CERTAIN) :
+
+```c
+sum = 0
+for i in start_idx .. start_idx+count:
+    sum += g_meshXOffsetBuffer[i]
+g_animSharedVarTable[dest] = sum
+```
+
+**Usage** : accumule les offsets X de plusieurs meshes consécutifs → mesure de déplacement écran horizontal total.
+
+---
+
+### 27.13 AnimCmd_AttSet — `att_set` (opcode 0x25 @ 0x8003d208, 584 octets)
+
+**Format** : 3 mots
+
+```
+word[0]: opcode=0x25 | mode<<8
+         lo_byte bit[0]: uVar6 (0=attack_list_A, 1=attack_list_B)
+         lo_byte bit[3]: si 1 → reset DAT_801faa84/88/8c + snap position
+word[1]: lo_byte=body_part_spec, hi_byte=dest_varTable_idx (bits[3:0])
+word[2]: bitmask résultat (ORé dans varTable)
+```
+
+**Logique** (CERTAIN) :
+
+```c
+pSVar3 = ResolveBodyPartTarget(word[1] & 0xff, gameState)
+// Prépare local_30/2e/2c = DAT_801faa84/88/8c (velocity/delta)
+iVar4 = FUN_80043a84(ListHead_800892d4 + uVar6*0x3c, pSVar3, &local_30, &local_28, uVar6)
+*(byte*)(iVar4 + 0x18) = 1  // marque collision active
+
+if (uVar6 == 0):
+    if (iVar4 + 0xc == -1):
+        varTable[dest] |= local_32 << 1   // pas de hit
+    else:
+        varTable[dest] |= local_32        // hit détecté
+else:
+    // Itère 6 slots char, cherche correspondance charPointers[0]
+    // ORe local_32 (shiftant gauche à chaque itération) dans varTable
+```
+
+**FUN_80043a84** : non analysée — probablement enregistrement/test zone d'attaque.
+
+---
+
+### 27.14 AnimCmd_HitzSet — `hitz_set` (opcode 0x26 @ 0x8003e760, 440 octets)
+
+**Format** : 4 mots
+
+```
+word[0]: opcode=0x26 | body_part_spec<<8
+word[1]: hitbox_size (ou g_animSharedVarTable[idx] si word[2]>>8 & 1)
+word[2]: lo_byte=dest_varTable_idx, hi_byte bit[0]=indirect_flag
+word[3]: bitmask à ORer dans varTable par slot char détecté
+```
+
+**Logique** (CERTAIN) :
+
+```c
+pvVar3 = ResolveBodyPartTarget(word[0]>>8, gameState)
+// Enregistrer hitbox dans 2 listes de collision
+FUN_800452f4(&ListHead_800892d4, 0x40, pos, hitbox_size)
+iVar4 = FUN_800452f4(&ListHead_80089310, 0x40, pos, hitbox_size)
+
+// Si entrée dans ListHead_80089310 active:
+for each entry in list:
+    if (entry.byte[0x19] == 0 && entry.byte[0x18] == '@'):
+        for slot in 0..5:
+            if entry.charPtr == charPointers[slot]:
+                varTable[dest] |= (word[3] << slot)
+                entry.byte[0x19] = 0; clearEntry
+```
+
+**Usage** : détection de hitzone — teste si la position du personnage intersecte un hitbox, marque les slots correspondants.
+
+---
+
+### 27.15 AnimCmd_ChDanSet — `ch_dan_set` (opcode 0x2E @ 0x8003e508, 600 octets)
+
+**Format** : 3 mots, 2 modes
+
+**Mode 0** (bit[7]=0 dans lo_byte) :
+```
+word[0]: opcode=0x2E | flags
+word[1]: lo_byte=body_part_target, hi_byte=scale_spec
+word[2]: damage_param (short)
+```
+```c
+pos = ResolveBodyPartTarget(word[1] & 0xff, gameState)
+scale = ResolveBodyPartScale(word[1] >> 8, gameState)
+FUN_8004375c(pos, scale, (short)word[2], mode & 0xff)
+```
+
+**Mode 1** (bit[7]=1) :
+```
+word[0]: opcode=0x2E | 0x80 | flags
+word[1]: packed (part_spec + var flags)
+word[2]: bitmask
+```
+```c
+// Lit gameState->entityData.runtimePointers.dataPtr1
+// Si ptr != 0 et field +0xc == -1 (final state):
+//   Copie 3 shorts depuis ptr+0x2c..0x30 → body part position
+//   Désactive dataPtr1 = 0
+// Masque bitmask dans g_animSharedVarTable
+```
+
+**FUN_8004375c** : non analysée — PROBABLE enregistrement/application de dégâts.
+
+---
+
+### 27.16 AnimCmd_PartsLink — `parts_link` (opcode 0x09 @ 0x80039f44, 580 octets)
+
+**Format** : 2 mots
+
+```
+word[0]: opcode=0x09 | src_group_id<<8
+word[1]: lo_byte=src_part_id, hi_byte=count
+```
+
+**Logique** (CERTAIN via Ghidra) :
+
+```c
+// Cherche entrées dans g_renderMetadataBuffer avec:
+//   byte[2] == src_group_id && byte[1] == src_part_id
+for each match:
+    uVar10 = g_renderMetadataBuffer[i] >> 24  // poly_idx
+    sVar2 = g_meshCountBuffer[i]              // poly count
+    
+    // Copie UV depuis DAT_801f2198[DAT_801fa87f[part_id*4] * 0x10]
+    for p in 0..poly_count:
+        g_uvOrTexCoordBuffer[uVar10+p * 0x10] = uVar3  // UV source copy
+        DAT_801f2188[(uVar10+p) * 0x10] = uVar3
+    
+    // Met à jour offset X avec g_meshXOffsetBuffer
+    sVar6 = DAT_801f2188[uVar10*0x10] + g_meshXOffsetBuffer[i]
+```
+
+**Nouveaux accès observés** :
+
+| Adresse | Accès | Type minimal | Note |
+|---------|-------|-------------|------|
+| 0x801fa87f | lecture via `[part_id*4]` | byte[] | Table mapping part_id → UV_source_idx |
+| 0x801f2198 | lecture+écriture via `[idx * 0x10]` | undefined2[] | UV source table (stride 0x20 = 32B) |
+| 0x801f2188 | lecture+écriture via `[idx * 0x10]` | undefined2[] | UV dest/transform buffer |
+
+**Classification** : PROBABLE — `g_uvOrTexCoordBuffer` et `g_uvTransformBuffer` (noms à confirmer).
+
+---
+
+### 27.17 Table récapitulative des opcodes analysés
+
+| Adresse | Nom | Opcode | Format | Fonction résumée |
+|---------|-----|--------|--------|-----------------|
+| 0x8003c738 | `AnimCmd_MoveSet` | 0x1A | 4 mots | Interpolation 3D vers cible avec delta velocity |
+| 0x8003d580 | `AnimCmd_Xy0123Set` | 0x22 | 5+ mots | ApplyMathOp sur x0..y3 de POLY_GT4 |
+| 0x8003a300 | `AnimCmd_Rgb2Set` | 0x1C | 4-5 mots | ApplyRgbaPerVertex par canal R,G,B,STP |
+| 0x8003cf38 | `AnimCmd_EffSet` | 0x21 | 1-3 mots | Spawn/kill effet via g_effectObjectPtrs |
+| 0x8003b148 | `AnimCmd_BitSet` | 0x0D | 3 mots | ApplyMathOp sur g_animSharedVarTable direct |
+| 0x8003afa4 | `AnimCmd_BitChk` | 0x0C | 2-4 mots | Test bits varTable → action conditionnelle stream |
+| 0x8003d450 | `AnimCmd_IfSet` | 0x23 | 3 mots | Skip conditionnel → scan jusqu'à tag de fin |
+| 0x8003b260 | `AnimCmd_EndSet` | 0x0E | 1 mot | Terminer stream (ou loop si pause) |
+| 0x8003ad38 | `AnimCmd_ObjIntGet` | 0x11 | 2 mots | Distance 3D entre 2 body parts → varTable |
+| 0x8003aed4 | `AnimCmd_ObjLongGet` | 0x12 | 2 mots | Somme g_meshXOffsetBuffer[range] → varTable |
+| 0x8003d208 | `AnimCmd_AttSet` | 0x25 | 3 mots | Test collision attaque → flag chaîne de résultat |
+| 0x8003e760 | `AnimCmd_HitzSet` | 0x26 | 4 mots | Enregistre hitzone + test intersection → varTable |
+| 0x8003e508 | `AnimCmd_ChDanSet` | 0x2E | 3 mots | Enregistre dégâts (mode 0) / finalise impact (mode 1) |
+| 0x8003f44 | `AnimCmd_PartsLink` | 0x09 | 2 mots | Copie UV/position entre meshes par group+part ID |
+
+### 27.18 Fonctions renommées cette section
+
+| Ancienne | Nouvelle | Signature | Callers |
+|----------|----------|-----------|---------|
+| `FUN_8003f464` | `ApplyRgbaPerVertex` | `void(ushort,ushort,byte*,short×8+2)` | AnimCmd_Rgb2Set (3×) |
+
+### 27.19 Nouveaux labels identifiés
+
+| Adresse | Label candidat | Type | Preuve | Certitude |
+|---------|---------------|------|--------|-----------|
+| 0x801faa84 | `g_charMoveVelocity` | short[3] | lu par MoveSet comme delta X/Y/Z | PROBABLE |
+| 0x801fa87f | `g_bodyPartUVIndexTable` | byte[] | indexé par `part_id*4` dans PartsLink | PROBABLE |
+| 0x801f2198 | `g_uvSourceBuffer` | undefined2[] stride 0x10 | lu/écrit par PartsLink | PROBABLE |
+| 0x801f2188 | `g_uvTransformBuffer` | undefined2[] stride 0x10 | lu/écrit par PartsLink | PROBABLE |
+
+### 27.20 Zones d'ombre restantes
+
+| Élément | Statut | Raison |
+|---------|--------|--------|
+| `FUN_80043a84` | INCONNU | Appelée par AttSet — registration zone attaque + résolution |
+| `FUN_8004375c` | INCONNU | Appelée par ChDanSet — application/registration dégâts |
+| `FUN_800452f4` | INCONNU | Appelée par HitzSet (2×) — registration hitbox dans liste |
+| `AnimCmd_ChseCall` @ 0x8003ec74 | ANALYSÉ section 28 | ChaseCallAI + g_chaseStateBlock |
+| `AnimCmd_BaseCulX/Y/Z/P` | ANALYSÉ section 28 | 4 opcodes MathOp sur g_uvOrTexCoordBuffer |
+| `AnimCmd_MovexpSet` @ 0x8003c514 | ANALYSÉ section 28 | ComputeCharMovement + g_charMoveVelocity |
+| `AnimCmd_DistSet` @ 0x8003c638 | ANALYSÉ section 28 | FUN_800460f8 + rotation |
+| `AnimCmd_XAddSet` @ 0x80039d6c | ANALYSÉ section 28 | Scroll X avec delta clamp |
+| `AnimCmd_XMaxSet` @ 0x8003a188 | ANALYSÉ section 28 | ApplyMathOp sur g_meshEntryFlagsHiBuf |
+| `DAT_801faa84..8c` | CERTAIN = `g_charMoveVelocity` | Preuve directe AnimCmd_MovexpSet |
+
+---
+
+## Section 28 — AnimCmd batch final : culling UV, mouvements, IA, XOffset
+
+### 28.1 AnimCmd_BaseCulX/Y/Z/P — `base_cul_{x/y/z/p}` (opcodes 0x0F..0x14)
+
+| Adresse | Nom | Taille |
+|---------|-----|--------|
+| 0x8003b2d8 | `AnimCmd_BaseCulX` | 1152 o |
+| 0x8003b758 | `AnimCmd_BaseCulY` | 1152 o |
+| 0x8003bcd8 | `AnimCmd_BaseCulZ` | 1152 o |
+| 0x8003c258 | `AnimCmd_BaseCulP` | 1152 o |
+
+**Format** : 3 + 4 mots inline
+
+```
+word[0]: opcode | flags<<8
+         lo_byte bit[2] = 1 → start_idx depuis varTable
+         lo_byte bits[1:0] = range_mode
+word[1]: lo_byte=start_idx, hi_byte=count
+word[2]: 4 × 4-bit math_op modes = [mode3:4][mode2:4][mode1:4][mode0:4]
+word[3..6]: 4 operandes inline (un par mode)
+```
+
+**Core loop** (CERTAIN — identique pour les 4 variantes) :
+
+```c
+// psVar10 = g_uvOrTexCoordBuffer + poly_idx * 0x10
+// Itère poly_count fois, 4 opérations MathOp successives (+4 shorts = +8 bytes)
+for poly in 0..poly_count:
+    local_3e = word[2]  // modes packed
+    for ch in 0..3:
+        *psVar10 = ApplyMathOp(*psVar10, local_3e & 0xf, local_38[ch])
+        psVar10 += 4     // stride 4 shorts = 8 bytes entre composantes
+        local_3e >>= 4
+```
+
+**Range modes (bits[1:0])** :
+
+| Mode | Description |
+|------|-------------|
+| 0 | Direct range [start..start+count] dans g_uvOrTexCoordBuffer[idx * 0x10] |
+| 1 | Via g_renderMetadataBuffer byte[3] → poly_idx lookup |
+| 2 | Search par group_id dans g_renderMetadataBuffer byte[2] |
+
+**Note** : Les 4 variantes (X/Y/Z/P) pointent vers des composantes différentes de `g_uvOrTexCoordBuffer` (stride 0x10 = 32 bytes, chaque variante cible un offset +x dans ce stride). PROBABLE → buffer de coordonnées transformées (clip-space ou world-space X/Y/Z/W).
+
+---
+
+### 28.2 AnimCmd_XAddSet — `x_add_set` (opcode 0x08 @ 0x80039d6c, 472 octets)
+
+**Format** : 3 mots
+
+```
+word[0]: opcode=0x08 | op_mode<<8 (bit[7]=indirect operand)
+word[1]: lo_byte=start_idx,
+         bits[11:8] = varTable_idx_A (source position),
+         bits[15:12] = varTable_idx_B (target position)
+word[2]: max_step (ou varTable[word[2]] si bit[7])
+```
+
+**Logique** (CERTAIN) :
+
+```c
+delta = (short)(g_animSharedVarTable[var_A] - g_animSharedVarTable[var_B])
+direction = sign(delta)
+if direction > 0:
+    step = min(delta, max_step)
+    range = [start_idx .. start_idx + op_mode]
+else:
+    step = 0
+    range = [start_idx-1 .. start_idx + op_mode - 1]
+
+for i in range:
+    g_meshXOffsetBuffer[i] += delta
+    // Clamp avec g_meshEntryFlagsHiBuf[i] comme borne max
+```
+
+**Usage** : scrolling horizontal de meshes vers une position cible avec vitesse max limitée.
+
+---
+
+### 28.3 AnimCmd_XMaxSet — `x_max_set` (opcode indéterminé @ 0x8003a188, 376 octets)
+
+**Format** : 3 mots
+
+```
+word[0]: opcode | start_idx<<8
+word[1]: lo_byte=count, hi_byte=op_mode (bit[4]=indirect)
+word[2]: operand
+```
+
+**Logique** (CERTAIN) :
+
+```c
+for i in start_idx..start_idx+count:
+    val = ApplyMathOp(g_meshEntryFlagsHiBuf[i], op_mode, operand)
+    if val < 0: val = 0
+    g_meshEntryFlagsHiBuf[i] = val
+    // si op_mode==8: copie depuis g_meshEntryFlagsHiBuf[operand]
+```
+
+`g_meshEntryFlagsHiBuf` (0x801fa800) = borne max de scroll X ou valeur "visible width" par mesh.
+
+---
+
+### 28.4 AnimCmd_MovexpSet — `movexp_set` (opcode 0x1D @ 0x8003c514, 292 octets)
+
+**Format** : 4 mots
+
+```
+word[0]: opcode=0x1D | scale_spec<<8 (bits[5:0])
+word[1]: bits[11:0]=speed_param, bit[12]=indirect word[3], bit[13]=indirect word[2], bit[14]=indirect self
+word[2]: direction param
+word[3]: magnitude param
+```
+
+**Logique** (CERTAIN) :
+
+```c
+pSVar1 = ResolveBodyPartScale(word[0]>>8 & 0x3f, gameState)
+ComputeCharMovement(pSVar1, &g_charMoveVelocity, speed&0xfff, direction, (short)magnitude)
+```
+
+**Preuve directe** (CERTAIN) : `&g_charMoveVelocity` = 0x801faa84 passé direct à `ComputeCharMovement`.
+
+---
+
+### 28.5 AnimCmd_DistSet — `dist_set` (opcode 0x1E @ 0x8003c638, 256 octets)
+
+**Format** : 3 mots
+
+```
+word[0]: opcode=0x1E | target_C_spec<<8
+word[1]: lo_byte=target_A_spec, hi_byte=scale_spec
+word[2]: angle_add (12 bits)
+```
+
+**Logique** (CERTAIN) :
+
+```c
+posA   = ResolveBodyPartTarget(word[0]>>8, gameState)
+posB   = ResolveBodyPartTarget(word[1] & 0xff, gameState)
+scale  = ResolveBodyPartScale(word[1]>>8, gameState)
+FUN_800460f8(posA, posB, scale, param_4, sVar6)  // INCONNU: calcul direction/vecteur
+scale->vy = (scale->vy + word[2]) & 0xfff
+```
+
+---
+
+### 28.6 AnimCmd_ChseCall — `chse_call` (opcode 0x32 @ 0x8003ec74, 228 octets)
+
+**Format** : 2 mots
+
+```
+word[0]: opcode=0x32 | target_arg<<8 (ou varTable[lo_byte & 0xf] si bit[7])
+word[1]: lo_byte=chase_type, hi_byte=speed_arg (ou varTable si bit[7])
+```
+
+**Logique** (CERTAIN) :
+
+```c
+if (target_arg == g_chaseStateBlock[1]):  // DAT_801fac41
+    g_chaseStateBlock[0..3] = 0           // reset état
+ChaseCallAI(chase_type, target_arg, speed_arg)
+```
+
+---
+
+### 28.7 Fonctions renommées cette section
+
+| Ancienne | Nouvelle | Signature | Callers |
+|----------|----------|-----------|---------|
+| `FUN_80047714` | `ComputeCharMovement` | `void(SVECTOR*, short*, ushort, ushort, int)` | 3 |
+| `FUN_80065208` | `ChaseCallAI` | `void(ushort, short, short)` | 1 |
+
+### 28.8 Nouveaux labels créés
+
+| Adresse | Label | Certitude |
+|---------|-------|-----------|
+| 0x801faa84 | `g_charMoveVelocity` | CERTAIN |
+| 0x801fac40 | `g_chaseStateBlock` | CERTAIN |
+
+### 28.9 Zones d'ombre restantes prioritaires
+
+| Élément | Statut | Action recommandée |
+|---------|--------|--------------------|
+| `FUN_800460f8` | RÉSOLU → `ComputeAnglesToTarget` | section 29 |
+| `FUN_80043a84` | RÉSOLU → `QueryAttackZoneList` | section 29 |
+| `FUN_8004375c` | RÉSOLU → `SpawnCharDamageTask` | section 29 |
+| `FUN_800452f4` | RÉSOLU → `RegisterHitboxInList` | section 29 |
+| `AnimCmd_AddPrimsToOT` @ 0x80038b88 | ANALYSÉ section 29 | — |
+| `AnimCmd_AnimateVertexColors` @ 0x80039290 | ANALYSÉ section 29 | — |
+| `g_uvOrTexCoordBuffer` @ 0x801f... | PROBABLE nom | Confirmer offset exact via BaseCulX |
+| `g_meshEntryFlagsHiBuf` @ 0x801fa800 | PROBABLE "max_x_scroll" | Confirmer via animation data |
+
+---
+
+## Section 29 — Fonctions utilitaires : angles, hitboxes, dégâts + opcodes finaux
+
+### 29.1 ComputeAnglesToTarget — `FUN_800460f8` (712 octets)
+
+**Signature** :
+```c
+void ComputeAnglesToTarget(short *posA, short *posB, short *out_angles)
+```
+
+**Algorithme** (CERTAIN) :
+
+```c
+// Différences XZ avec wrapping 16-bit (modulo 0x10000 → plage ±0x7FFF)
+dX = posB[0] - posA[0]  // vx
+dZ = posB[2] - posA[2]  // vz
+if abs(dX) > 0x7FFF: dX = 0xFFFF - abs(dX) (avec signe corrigé)
+if abs(dZ) > 0x7FFF: dZ = 0xFFFF - abs(dZ)
+
+// Angle horizontal (azimut XZ)
+out_angles[1] = ratan2(dX, dZ) & 0xFFF
+
+// Projection GTE pour distance XZ → angle vertical
+PushMatrix(); SetRotMatrix(identity + RotMatrixY(0x1000 - azimuth))
+RotTrans([dX, 0, dZ], &projected_vec)  // projette en espace de caméra rotationnel
+PopMatrix()
+
+// Angle vertical (élévation)
+out_angles[2] = ratan2(posB[1] - posA[1], projected_vec.z) & 0xFFF
+out_angles[0] = 0  // vx non utilisé (reset)
+```
+
+**Callers** (5) : `AnimCmd_DistSet`, `FUN_8002770c` (×1), `FUN_8004dc2c` (×1), `FUN_8004d8cc` (×1), `FUN_80054fe4` (×1)
+
+---
+
+### 29.2 QueryAttackZoneList — `FUN_80043a84` (6248 octets, 480 lignes)
+
+**Signature** :
+```c
+void *QueryAttackZoneList(ListHead *listHead, SVECTOR *pos, ushort *velocity,
+                           SVECTOR *target, int mode)
+```
+
+**Rôle** (PROBABLE) : Query de liste de zones d'attaque avec partition spatiale en cellules (>>9 = cellule 512 unités). Teste si une entité en position `pos` avec vitesse `velocity` intersecte une zone dans `listHead`. Retourne le premier nœud correspondant.
+
+**Particularités observées** :
+
+- `velocity` = short[3] = {X, Y, Z} vitesse (déduit SquareRoot(vx²+vy²+vz²) = magnitude)
+- Cellules calculées en floor(coord >> 9) pour X et Z
+- `mode=1` → retourne null immédiatement si liste vide (les 2 têtes vides)
+- `mode!=1` → calcule plages de cellules couvertes par trajectory (pos..pos+vel)
+- Recherche le nœud le plus proche (`local_28 = 0x7FFF` dist² initiale)
+- Retourne le pointeur nœud → `*(byte*)(result+0x18) = 1` pour marquer actif
+
+**Callers** : `AnimCmd_AttSet` (attaque), `FUN_80054420`, `FUN_800548c8`
+
+---
+
+### 29.3 SpawnCharDamageTask — `FUN_8004375c` (312 octets)
+
+**Signature** :
+```c
+void SpawnCharDamageTask(short *pos, short *scale, short damage_value, uint effect_type)
+```
+
+**Logique** (CERTAIN) :
+
+```c
+task = CreateTask(FUN_80042b6c, 0, 0xB, 0xC0, 0, g_taskListTails[0xB])
+if task != 0:
+    gs = task->gameState
+    // Copie pos[0..2] dans entityData.runtimePointers (polyFt3Index..polyFt4Index)
+    // Copie scale[0..2] dans entityData.runtimePointers (polyGt3Index area)
+    // Initialise nombreux _ptrs internes (back-links vers EntityData fields)
+    gs.entityData.runtimePointers.dataPtr14 = damage_value
+    InitEntityAnimPtr(gs, -0x7FFDE77C, effect_type & 0xFFFF)
+```
+
+**Usage** : crée une tâche pour afficher/animer l'indicateur de dégâts (nombre visuel, flash, etc.) au-dessus du personnage touché.
+
+---
+
+### 29.4 RegisterHitboxInList — `FUN_800452f4` (1764 octets)
+
+**Signature** :
+```c
+int RegisterHitboxInList(ListHead *listHead, ushort flags, short *pos, ushort radius)
+```
+
+**Logique** (CERTAIN — partition spatiale) :
+
+```c
+// Cellule min/max X = (pos[0] ± radius) >> 9
+x_min_cell = (pos[0] - radius - 1) >> 9  (avec ajustement signe)
+x_max_cell = (pos[0] + radius - 1) >> 9
+// Idem pour Z = pos[2]
+// Alloue/enregistre nœud dans la liste pour chaque cellule couverte
+```
+
+**Structure entrée allouée** : `byte[0x1A]` minimum — `byte[0x18]` = active flag, `byte[0x19]` = hit flag, `char[0x18]` = type/owner code `'@'` (0x40) vu dans HitzSet
+
+**Callers** : `AnimCmd_HitzSet` (×2 — pour `ListHead_800892d4` et `ListHead_80089310`)
+
+---
+
+### 29.5 AnimCmd_AnimateVertexColors — `vert_col_set` (opcode 0x06 @ 0x80039290, 1220 octets)
+
+**Important** : le nom est trompeur — cette fonction anime les champs **CLUT et TPAGE** des POLY_GT4, pas les couleurs vertex (R/G/B). Il s'agit d'**animation de texture** (palette switch + texture page flip).
+
+**Format** : 4 mots
+
+```
+word[0]: opcode | mode<<8
+         lo_byte bit[6] = indirect word[2] via varTable
+         lo_byte bit[7] = indirect word[3] via varTable
+         lo_byte bits[5:4] = range_mode (0x10=range, 0x00=direct, 0x20=search)
+         lo_byte bits[3:0] = ApplyMathOp mode
+word[1]: lo_byte=start_idx, hi_byte=count
+word[2]: CLUT operand  (ou varTable[word[2] & 0x7FFF])
+word[3]: TPAGE operand (ou varTable[word[3] & 0x7FFF])
+```
+
+**Boucle interne** (CERTAIN) :
+
+```c
+// puVar5 = &POLY_GT4_pool[poly_idx].clut  (u_short*)
+// 2 itérations (iVar2 = 3..4):
+//   iVar2=3 → *puVar5 = ApplyMathOp(clut,  mode, word[2])  +clampe ≥ 0
+//   iVar2=4 → *puVar5 = ApplyMathOp(tpage, mode, word[3])  +clampe ≥ 0
+//   stride interne: puVar5 += 6 u_shorts = +12 bytes
+// stride inter-polygone: puVar6 + 0x14 u_shorts = +40 bytes → polygone suivant
+```
+
+**Résultat** : permet d'animer la palette (CLUT index) et la page texture (TPAGE) par polygone — effet de clignotement, changement de couleur de palette, ou animation sprite sheet.
+
+---
+
+### 29.6 AnimCmd_AddPrimsToOT — `pri_set` (opcode 0x0A @ 0x80038b88, 412 octets)
+
+**Format** : 2 mots
+
+```
+word[0]: opcode=0x0A | group_id<<8 (ou varTable[idx] si bit[4])
+word[1]: poly_count (ou varTable[idx] si bit[4] dans lo_byte word[0])
+```
+
+**Logique** (CERTAIN) :
+
+```c
+// Cherche entrée avec g_renderMetadataBuffer.byte[2] == group_id
+for each entry in g_renderMetadataBuffer[0..0x3F]:
+    if byte[2] == group_id:
+        poly_base = POLY_GT4_pool + (entry >> 24)  // poly index
+        for i in 0..poly_count:
+            depth = g_polyOTDepthTable[poly_base + i]
+            if 0 < depth < 0x800:
+                AddPrim(OT[0x7FF - depth], &poly_base[i])
+        return  // stop at first group match
+```
+
+**OT structure** (CERTAIN) :
+- OT base = `DRAWENV_ptr + 0x70`
+- OT taille = 0x800 entrées (2048 niveaux de profondeur)
+- `OT[0] = closest`, `OT[0x7FF] = farthest`
+- Profondeur 0 ou ≥ 0x800 → polygone ignoré (hors range)
+
+---
+
+### 29.7 Récapitulatif final — toutes les fonctions renommées
+
+| Adresse | Nom | Callers | Notes |
+|---------|-----|---------|-------|
+| 0x8003f694 | `ApplyMathOp` | 16 | 13 modes |
+| 0x8003f37c | `ResolveBodyPartTarget` | multiple | 3 modes |
+| 0x8003f404 | `ResolveBodyPartScale` | multiple | 2 modes |
+| 0x8003ffec | `SpawnEffectTask` | 2 | |
+| 0x80053d44 | `InitEntityAnimPtr` | 3 | |
+| 0x8003fddc | `EffectTaskMainLoop` | 1 | |
+| 0x8003f814 | `TransformAndProjectMesh` | 1 | GTE |
+| 0x8003fae8 | `UpdateCharEffectTransform` | 1 | interpolation |
+| 0x8003f464 | `ApplyRgbaPerVertex` | 3 | RGBA par vertex |
+| 0x80047714 | `ComputeCharMovement` | 3 | mouvement + velocity |
+| 0x80065208 | `ChaseCallAI` | 1 | IA poursuite |
+| 0x800460f8 | `ComputeAnglesToTarget` | 5 | azimut + élévation |
+| 0x80043a84 | `QueryAttackZoneList` | 3 | partition spatiale |
+| 0x8004375c | `SpawnCharDamageTask` | 1 | task dégâts |
+| 0x800452f4 | `RegisterHitboxInList` | 2 | hitbox + spatial |
+
+### 29.8 État final des labels globaux
+
+| Adresse | Label | Type | Certitude |
+|---------|-------|------|-----------|
+| 0x80087950 | `g_animStreamDispatchTable` | void*[51] | CERTAIN |
+| 0x80087A1C | `g_animStreamOpcodeNames` | char[][16] | CERTAIN |
+| 0x801faa60 | `g_renderFlushFlag` | uint | CERTAIN |
+| 0x801faa64 | `g_animSharedVarTable` | uint16[16] | CERTAIN |
+| 0x801faaac | `g_effectObjectPtrs` | uint32[16] | CERTAIN |
+| 0x801fa580 | `g_polyOTDepthTable` | int16[] | CERTAIN |
+| 0x801fa780 | `g_meshXOffsetBuffer` | int16[] | CERTAIN |
+| 0x801fa800 | `g_meshEntryFlagsHiBuf` | uint16[] | CERTAIN |
+| 0x801f2000 | `g_renderScratchBuffer` | 0x8C48 bytes | CERTAIN |
+| 0x801f2100 | `g_bodyPartTransformTable` | SVECTOR[16] | CERTAIN |
+| 0x801fab0c | `g_charRenderStateBuf` | uint32[6] | CERTAIN |
+| 0x801fab24 | `g_charSharedVarMaskBuf` | uint16[6] | CERTAIN |
+| 0x801fab30 | `g_charEffectSlotTable` | uint32[16] | CERTAIN |
+| 0x801faa84 | `g_charMoveVelocity` | short[3] | CERTAIN |
+| 0x801fac40 | `g_chaseStateBlock` | uint8[4] | CERTAIN |
+| 0x801d2000 | `g_cdFileBufferTable` | variable | CERTAIN |
+| 0x801d2004 | `g_meshTableCounts` | uint16 | CERTAIN |
+| 0x801d2008 | `g_chBinEntryTableBasePtr` | uint32 | CERTAIN |
+| 0x801d200c | `g_chBinClutTablePtr` | uint32 | CERTAIN |
+| 0x800a6778 | `g_charEffectTranslatePtr` | void* | CERTAIN |
+| 0x800a677c | `g_charEffectScalePtr` | SVECTOR* | CERTAIN |
+| 0x800a6786 | `g_charEffectInitFlag` | uint | CERTAIN |
+| 0x801faa00 | `g_meshStreamPtrBuffer` | uint32[] | CERTAIN |
+| 0x801faa40 | `g_meshOffsetBuffer` | uint16[] | CERTAIN |
+
+### 29.9 Zones d'ombre résiduelles (post-analyse complète)
+
+| Élément | Statut | Priorité |
+|---------|--------|----------|
+| `FUN_80042b6c` | **RÉSOLU** → `DamageNumberTaskLoop` (section 30) | — |
+| `ListHead_800892d4` | PARTLY KNOWN | liste principale attaque + hitbox (identifiée mais structure interne INCONNU) |
+| `ListHead_80089310` | PARTLY KNOWN | liste hitbox secondaire (idem) |
+| `g_uvOrTexCoordBuffer` offset exact | **RÉSOLU** → 0x801f2180, layout AOS 16 shorts/poly (section 31) | — |
+| `DAT_8009a950` / `DAT_800c0808` | INCONNU | buffers temporaires GTE dans ComputeAnglesToTarget |
+| `POLY_GT4_pool` alignement exact | **RÉSOLU** → stride 52 bytes exact = sizeof(POLY_GT4) (section 31) | — |
+
+---
+
+## Section 30 — Helpers tâches et caméra : analyse des fonctions combat et rendu de sprites
+
+### 30.1 Résumé factuel
+
+Cette session analyse les fonctions helpers identifiées lors de la session 29 comme cibles prioritaires.
+11 nouvelles fonctions nommées dans Ghidra. Couverture étendue aux sous-systèmes :
+- **Tâches sprites** (damage numbers + effets visuels courts)
+- **Actions combat** (déclenchement, direction, son/couleur)
+- **Caméra de bataille** (mise à jour principale depuis `main()`)
+- **Distance 3D** + **sélection de frame orientation**
+
+### 30.2 ComputeDistance3D @ 0x80045eb8
+
+**Signature** : `int ComputeDistance3D(short *posA, short *posB)` (400 bytes, 6 callers)
+
+**Preuve** (CERTAIN) :
+```c
+local_18 = abs(posB[0] - posA[0]);  // dX
+if (local_18 > 0x7FFF) local_18 = 0xFFFF - local_18;  // wrap 16-bit
+local_14 = abs(posB[2] - posA[2]);  // dZ (même wrap)
+dy = (posB[1] - posA[1]);           // dY : pas de wrap
+return (short)SquareRoot0(dX*dX + dY*dY + dZ*dZ);
+```
+
+**Callers confirmés** :
+| Caller | Usage |
+|--------|-------|
+| `UpdateBattleCamera` (×4) | distance combattants (physique caméra) |
+| `FUN_80023924` | distance entre positions de parties |
+| `FUN_80055178` | distance entre entrées POLY_GT4 |
+
+**Notes** :
+- Wrap 16-bit sur X et Z : espace 3D PSX utilise des coordonnées 16-bit signées
+- Y direct : pas de wrap (hauteur non cyclic)
+- Retourne `short` (max ~32767 unités)
+
+### 30.3 SetCharacterAction @ 0x80047e28
+
+**Signature** : `void SetCharacterAction(GameState *gameState, uint actionIndex)` (148 bytes, 15 callers)
+
+**Preuve** (CERTAIN) :
+```c
+InitEntityAnimPtr(gameState,
+    *(int*)(charData->field_0x0 + 0x38),  // animTableBase depuis char data
+    actionIndex & 0xFFFF);
+battleChars[0].previousAction = battleChars[0].currentAction;
+battleChars[0].currentAction = (byte)actionIndex;
+FUN_800264b8(gameState);  // post-action setup (INCONNU)
+```
+
+**Indices d'action confirmés** (issus des callers) :
+| Index | Caller | Interprétation |
+|-------|--------|----------------|
+| 0x16 | TriggerCombatAction_Case3 | saut attaque |
+| 0x18 | TriggerCombatAction_DirKi | attaque direction basse |
+| 0x19 | TriggerCombatAction_DirKi | attaque direction haute |
+| 0x1a | TriggerCombatAction_DirKi | attaque direction neutre |
+| 0x1c | FUN_8004ac60 | atterrissage |
+| 0x1f | FUN_8004c46c | état spécial |
+| 0x20 | FUN_8004aed0 | repos/idle |
+| 0x21 | FUN_8004ac08 | saut |
+| 0x2a | FUN_8004b500 | technique spéciale |
+
+**Note** : 15 callers — fonction centrale de transition d'état des personnages.
+
+### 30.4 DamageNumberTaskLoop @ 0x80042b6c
+
+**Signature** : `void DamageNumberTaskLoop(ushort rotationFlags)` (592 bytes, 2 refs)
+
+**Preuve** (CERTAIN) :
+```c
+// Registre comme callback de tâche par SpawnCharDamageTask et FUN_80043474
+gameState = g_currentTask->gameState;
+if (!(g_pauseFlag & 1)) {
+    // 2× LookupOrientationFrame(polyGt4Index, polyGt3Index+2) → rotationByte
+    // ProcessEntityScript(gameState)  → avance l'animation
+    // stocke résultat dans dataPtr14+2
+}
+// RenderTransformedSprites(charPointers[4], X-camX, Y, Z-camZ, rotationFlags,
+//                          0,0, 0x200, 0x200, dataPtr12, 0,0, '\0','\0', 0x80,0x80,0x80, ...)
+if (!(g_pauseFlag & 1)) {
+    if (dataPtr13 < 0) {  // animation terminée
+        jitter_X = rand() % 0xC00 - 0x600;  // ±1536
+        jitter_Z = rand() % 0xC00 - 0x600;
+        FUN_800463c0(&facing, &position, &scale);  // update transform
+        dataPtr13 &= 0x7FFFFFFF;
+    }
+}
+if (polyFt4 != 0) return;       // encore vivant
+RemoveTaskFromList(g_currentTask, 0xB);  // terminé → détruire
+```
+
+**Offsets de stockage dans entityData** (CERTAIN) :
+| Champ | Contenu |
+|-------|---------|
+| `runtimePointers.polyGt4Index` | Position world X (short) |
+| `runtimePointers.polyGt3Index+2` | Position world Y (short) |
+| `runtimePointers.polyFt4Index` | Position world Z (short) |
+| `runtimePointers.dataPtr12` | Offset de profondeur OT |
+| `runtimePointers.dataPtr13` | Flags + signe = état animation |
+| `runtimePointers.dataPtr14+2` | Frame orientation byte courant |
+| `polyFt4 (short)` | Compteur durée de vie (0 = expire) |
+
+### 30.5 SpriteEffectTaskLoop @ 0x80043894 + SpawnSpriteEffectTask @ 0x800439b0
+
+**SpriteEffectTaskLoop** (284 bytes, 1 caller = SpawnSpriteEffectTask) :
+```c
+// Task callback simplifié — même pattern que DamageNumberTaskLoop
+gameState = g_currentTask->gameState;
+if (!(g_pauseFlag & 1)) ProcessEntityScript(gameState);
+RenderTransformedSprites(charPointers[4],
+    dataPtr2 - g_camX,      // X
+    *(dataPtr2+2),           // Y (non corrigé)
+    polyFt3Index - g_camZ,   // Z
+    (ushort)polyFt4Index,    // rotationFlags
+    *(polyFt4Index+2),       // offsetX
+    (short)polyGt3Index,     // offsetY
+    0x200, 0x200, 1, 0,0, '\0','\0', 0x80,0x80,0x80, ...);
+if (!(g_pauseFlag & 1) && polyFt4 == 0)
+    RemoveTaskFromList(g_currentTask, 0xB);
+```
+
+**SpawnSpriteEffectTask** (212 bytes, 5-10 callers) :
+```c
+// Crée une tâche SpriteEffectTaskLoop (priorité 0xB, mémoire 0x58 = 88 bytes)
+task = CreateTask(SpriteEffectTaskLoop, 0, 0xB, 0x58, 0, g_taskListTails[0xB]);
+if (task) {
+    gs = task->gameState;
+    gs->runtimePointers.dataPtr2[0..1] = position[0..1];   // X,Y
+    gs->runtimePointers.polyFt3Index   = position[2];       // Z
+    gs->runtimePointers.polyFt4Index   = facing[0];         // angle
+    gs->runtimePointers.polyFt4Index+2 = facing[1];
+    gs->runtimePointers.polyGt3Index   = facing[2];
+    gs->polyGt4               = &entityData;                // self-ref
+    gs->runtimePointers.polyF3Index    = &entityData;
+    gs->runtimePointers.polyF4Index    = &runtimePointers.dataPtr2;
+    InitEntityAnimPtr(gs, -0x7FFDE77C, animIndex);
+}
+```
+
+**Callers et indices d'animation** :
+| Caller | animIndex | Usage |
+|--------|-----------|-------|
+| TriggerCombatAction_Case3 | 0x11 | effet attaque saut |
+| TriggerCombatAction_DirKi | 0x0C | effet approche directionnelle |
+| TriggerCombatAction_DirKi (cas 0x17) | 0x02 | pivot si déjà en approche |
+| FUN_8004d564 | 0x00 | idle |
+| FUN_8004d7ac | 0x0F / 0x02 | recul / pivot |
+| FUN_800407d8 | 0x05 | particule explosion |
+
+### 30.6 LookupOrientationFrame @ 0x80045d34
+
+**Signature** : `undefined1 LookupOrientationFrame(ushort angleX, short angleY)` (388 bytes, 7 callers)
+
+**Preuve** (CERTAIN) :
+```c
+// SVECTOR_1f80007c = viewport reference (camera delta frame)
+uVar1 = ((SVECTOR_1f80007c.vy + angleY) >> 8) & 0xF;   // row : 0-15
+// Sens de l'offset X selon la ligne (octant caméra)
+if (uVar1 < 5 || uVar1 > 10)
+    local_12 = (angleX - SVECTOR_1f80007c.vx) >> 8;
+else
+    local_12 = (angleX + SVECTOR_1f80007c.vx) >> 8;
+local_12 &= 0xF;  // col : 0-15
+// Cas spéciaux (transition) :
+if ((2 < uVar1 < 5) || (10 < uVar1 < 13))
+    local_12 = (short)(angleX & 0xFFF) >> 8;   // col non corrigé
+return DAT_800884b0[DAT_800884a0[row] * 16 + col];  // lookup 16×16
+```
+
+**Tables** :
+| Adresse | Type | Contenu |
+|---------|------|---------|
+| `0x800884a0` | `uint8[16]` | table d'indirection lignes (row → base) |
+| `0x800884b0` | `uint8[16*N]` | table orientation 2D (16 colonnes × N lignes) |
+
+**Utilisation** : Retourne un byte de frame orientation (contrôle quel sprite parmi les 8/16 directions de face est utilisé pour ce personnage selon l'angle caméra relatif). Utilisé par les tâches damage + combat.
+
+### 30.7 SetAttackSFXAndColor @ 0x8006458c
+
+**Signature** : `undefined4 SetAttackSFXAndColor(ushort effectMode)` (328 bytes, 13 callers)
+
+**Preuve** (CERTAIN) :
+```c
+pGVar1 = g_gamestate_8009a990;  // gamestate global secondaire
+if (charData->battleChars[0].field_0xb+1 < 0) return -1;  // guard
+charData->battleChars[0].u0 = effectMode;  // stocke mode courant
+if (effectMode == 0) {
+    // Arrêt : clear 4 canaux audio
+    for i in 0..3: FUN_80070ee8(0x11+i);  // FUN_80070ee8 = StopSfxChannel
+} else {
+    // Couleur : indexe DAT_80092314[(effectMode-1)*4] → R,G,B
+    entityFlags2.R = DAT_80092314[(effectMode-1)*4 + 0];
+    entityFlags2.G = DAT_80092314[(effectMode-1)*4 + 1];
+    entityFlags2.B = DAT_80092314[(effectMode-1)*4 + 2];
+    entityFlags2.A = 0xFF;
+    DAT_8009a91c++;
+    if (DAT_8009a91c > 0x14) DAT_8009a91c = 0x12;  // cycle canal (0x12..0x14)
+    FUN_80070afc(DAT_8009a91c, position_y, R, G, B, 0, 0xFF, 0xFF);  // PlaySfxAt
+    FUN_80071434(DAT_8009a91c, entityFlags, entityFlags+1);           // SetSfxParam
+}
+```
+
+**Table paramètres son @ 0x80092314** — lecture mémoire Ghidra (32 bytes) :
+```
+00 00 18 00  (mode 1)
+00 01 19 00  (mode 2)
+00 02 1A 00  (mode 3)
+00 03 1B 00  (mode 4)
+00 04 1C 00  (mode 5)
+00 05 1D 00  (mode 6)
+00 06 1F 00  (mode 7)
+00 07 23 00  (mode 8, si utilisé)
+```
+
+**Correction** : Ces valeurs NE sont PAS des couleurs RGB (valeurs < 0x24, pas caractéristiques de composantes couleur). Les 3 bytes transférés dans `entityFlags2[0..2]` sont passés comme arguments séparés à `FUN_80070afc` (fonction son PSX). Interprétation PROBABLE : `[0]=groupe, [1]=banque/canal, [2]=ID sample (0x18..0x23)`. La certitude "RGB" de la session précédente est **revue en INCONNU**.
+
+| Mode | byte[0] | byte[1] | byte[2] | Certitude |
+|------|---------|---------|---------|-----------|
+| 0 | — | — | — | CERTAIN (stop) |
+| 1..7 | 0x00 (fixe) | 0x00..0x06 | 0x18..0x1F | INCONNU (sémantique bytes) |
+
+**Globals** :
+- `g_gamestate_8009a990` : gamestate global secondaire (autre joueur ou objet global)
+- `DAT_8009a91c` : compteur canal son 3D (cycles 0x12..0x14 = 3 canaux disponibles)
+
+### 30.8 UpdateBattleCamera @ 0x8002770c
+
+**Signature** : `void UpdateBattleCamera(void)` (6480 bytes, 822 lignes, 1 caller = `main`)
+
+**Preuve** (CERTAIN — 1 seul caller = main, taille et accès globaux caméra) :
+
+**Structure principale** :
+1. Guard : `if (g_pauseFlag & 1) return`
+2. Lecture `PTR_8009aa30` = playerGameState
+3. Vérification `polyF3Array` bitmask (phase de combat) :
+   - `(flags & 0x8000008) && !(flags & 0x2000002)` = phase cinématique/combat actif
+4. Récupère positions : `iVar16+0x114` (char pos X), `iVar16+0x116` (Y), `iVar16+0x118` (Z)
+5. **Phase (DAT_8009aca0+0x76)** dispatcher :
+   - Phase 0 : `DAT_1f8000d0 = 0x280` (FOV fixe), `DAT_8009a828/82c = 0x1000` (scale = 1.0)
+   - Phase 1-2 : interpolation angle caméra Y via `SVECTOR_1f800084.vy`, calcul lerp
+   - Phase 3+ : `SVECTOR_1f800084.vx = 0xC0`, `DAT_1f8000d0 = 0x280`, `scale = 0x1000`
+6. Boucle flags `0x10000000` : itère jusqu'à 12 GameStates (tableau de combattants ?)
+7. Appels : `ComputeDistance3D` ×4, `ComputeAnglesToTarget` ×1, `ComputeCharMovement` ×2
+
+**Globaux caméra identifiés** (CERTAIN via accès directs) :
+| Adresse | Nom provisoire | Valeur type | Certitude |
+|---------|---------------|-------------|-----------|
+| `0x8009a828` | `g_camScaleX` | 0x1000 (1.0 fp12) | CERTAIN |
+| `0x8009a82c` | `g_camScaleY` | 0x1000 (1.0 fp12) | CERTAIN |
+| `0x8009a84a` | `g_camFarScale` | 0x200 | CERTAIN |
+| `0x8009a848` | `g_camAngleDelta` | angle 12-bit | PROBABLE |
+| `0x8009a830` | `g_camAngleLerped` | angle interpolé | PROBABLE |
+| `0x8009a834` | `g_camFovLerped` | distance lerp | PROBABLE |
+| `0x8009a84c` | `g_camFovDelta` | delta FOV | PROBABLE |
+| `0x1f8000d0` | `g_fovOrZoom` | 0x280 = écart | PROBABLE |
+| `SVECTOR_1f800084` | `g_cameraAngles` | SVECTOR vx/vy | PROBABLE |
+| `PTR_8009aa30` | `g_playerBattleState` | GameState* | PROBABLE |
+| `DAT_8009aca0` | `g_battleStateBlock` | uint8[] struct | PROBABLE |
+
+### 30.9 TriggerCombatAction_Case3 @ 0x8004dc2c + TriggerCombatAction_DirKi @ 0x8004d8cc
+
+**TriggerCombatAction_Case3** (1180 bytes, 1 caller = DispatchCombatAction case 3) :
+```c
+void TriggerCombatAction_Case3(GameState *attacker, uint actionId=0x16, int target)
+// 1. Lit DAT_8009a864/868 → position+facing par défaut
+// 2. rand() % 4 → SetAttackSFXAndColor(1..4)  (attaque normale-spéciale)
+// 3. ComputeAnglesToTarget(attacker.pos, target+0x114, &angles)
+// 4. LookupOrientationFrame(angles.Z, angles.X) → orientByte
+//    angles.Z = 0; angles.X = (orientByte & 0x80) << 8
+// 5. SpawnSpriteEffectTask(attacker.pos, angles, 0x11)
+// 6. SetCharacterAction(attacker, 0x16)  // saut attaque
+// 7. Flags field_0x128 depuis target+0x16a :
+//    '#' (0x23) → +0x1000, '$' (0x24) → +0x2000, '%' (0x25) → +0x800
+```
+
+**TriggerCombatAction_DirKi** (864 bytes, 3 callers = DispatchCombatAction cases 4/5/6) :
+```c
+void TriggerCombatAction_DirKi(GameState *attacker, uint actionId, GameState *target)
+// actionId 0x19 → SetAttackSFXAndColor(6)    // ki haute
+// actionId 0x1a → SetAttackSFXAndColor(7)    // ki neutre
+// actionId 0x18 → SetAttackSFXAndColor(5)    // ki basse
+// Si currentAction == 0x17 et task->gameState == target :
+//    SpawnSpriteEffectTask(attacker.pos, facing, 2)   // pivot
+// Sinon :
+//    ComputeAnglesToTarget(attacker.pos, target.pos, &angles)
+//    LookupOrientationFrame(...) → SpawnSpriteEffectTask(pos, angles, 0xC)
+//    SetCharacterAction(attacker, actionId)
+//    field_0x128 |= 0x400   // flag "track opponent"
+```
+
+**DispatchCombatAction** (324 bytes, 1 caller) :
+```c
+void DispatchCombatAction(GameState *param_1, undefined4 param_2)
+// switch sur actionType :
+// case 3 → TriggerCombatAction_Case3(param_1, 0x16, target)
+// case 4 → TriggerCombatAction_DirKi(param_1, 0x19, target)
+// case 5 → TriggerCombatAction_DirKi(param_1, 0x1a, target)
+// case 6 → TriggerCombatAction_DirKi(param_1, 0x18, target)
+// autres → FUN_8004d564, FUN_8004a2cc
+```
+
+### 30.10 Table des fonctions ajoutées cette session
+
+| Adresse | Nom | Taille | Certitude |
+|---------|-----|--------|-----------|
+| 0x80045eb8 | `ComputeDistance3D` | 400 B | CERTAIN |
+| 0x80047e28 | `SetCharacterAction` | 148 B | CERTAIN |
+| 0x80042b6c | `DamageNumberTaskLoop` | 592 B | CERTAIN |
+| 0x80043894 | `SpriteEffectTaskLoop` | 284 B | CERTAIN |
+| 0x800439b0 | `SpawnSpriteEffectTask` | 212 B | PROBABLE |
+| 0x8006458c | `SetAttackSFXAndColor` | 328 B | PROBABLE |
+| 0x80045d34 | `LookupOrientationFrame` | 388 B | PROBABLE |
+| 0x8004e1fc | `DispatchCombatAction` | 324 B | PROBABLE |
+| 0x8004dc2c | `TriggerCombatAction_Case3` | 1180 B | PROBABLE |
+| 0x8004d8cc | `TriggerCombatAction_DirKi` | 864 B | PROBABLE |
+| 0x8002770c | `UpdateBattleCamera` | 6480 B | PROBABLE |
+| 0x800463c0 | `ApplyGteRotTransform` | 228 B | CERTAIN |
+
+### 30.11 Zones d'ombre après session 30
+
+| Élément | Statut | Action recommandée |
+|---------|--------|--------------------|
+| `DAT_80092314` sémantique bytes | INCONNU | lire `FUN_80070afc` (son 3D) pour confirmer structure |
+| `DAT_800884a0` | PROBABLE lookup orientation (16 entrées) | vérifier taille avec `read-memory` |
+| `FUN_800264b8` post-action | INCONNU | appelé par SetCharacterAction |
+| `FUN_8004d564` / `FUN_8004a2cc` | INCONNU | autres cases de DispatchCombatAction |
+| `g_gamestate_8009a990` vs `PTR_8009aa30` | PROBABLE | deux joueurs différents |
+| Structure nœud ListHead (byte[0x18/0x19]) | **RÉSOLU** → `HitboxNode` créé dans Ghidra (section 30.12) | — |
+| `FUN_80070afc` / `FUN_80071434` | INCONNU | son 3D PSX (SPU ?) |
+| `g_uvOrTexCoordBuffer` adresse + layout | **RÉSOLU** → 0x801f2180, AOS 4×{X,Y,Z,P} shorts/poly (section 31) | — |
+| `POLY_GT4` stride en mémoire | **RÉSOLU** → 52 bytes = sizeof(POLY_GT4) confirmed (section 31) | — |
+
+### 30.12 Structure nœud ListHead — analyse RegisterHitboxInList
+
+**Preuves** tirées de RegisterHitboxInList (CERTAIN pour les offsets accédés) :
+
+```c
+// Accès observés sur local_24 (HitboxNode*)
+*local_24              // offset 0x00 : next ptr (type HitboxNode*)  — CERTAIN
+local_24[4]            // offset 0x10 : vertexData ptr (int→short*)  — CERTAIN
+local_24[5] = short    // offset 0x14 : cellX (spatial >>9)          — CERTAIN
+*(short*)(local_24+0x16) // offset 0x16 : cellZ (spatial >>9)        — CERTAIN
+local_24[6] = ushort   // offset 0x18 : flags/hits field             — CERTAIN
+local_24[7] = short    // offset 0x1C : baseX (translation monde)    — CERTAIN
+*(short*)(local_24+0x1E) // offset 0x1E : baseY                      — CERTAIN  
+local_24[8] = short    // offset 0x20 : baseZ                        — CERTAIN
+```
+
+**Structure C partielle** (CERTAIN pour les offsets listés, reste INCONNU) :
+```c
+typedef struct HitboxNode {
+    struct HitboxNode *next;    // 0x00: prochain nœud de la liste liée
+    undefined4  unknown_0x04;   // 0x04: INCONNU
+    undefined4  unknown_0x08;   // 0x08: INCONNU
+    undefined4  unknown_0x0C;   // 0x0C: INCONNU
+    short      *vertexData;     // 0x10: ptr vers tableau short[] de vertex/counts
+    short       cellX;          // 0x14: cellule spatiale X (pos>>9)
+    short       cellZ;          // 0x16: cellule spatiale Z (pos>>9)
+    ushort      hitFlags;       // 0x18: flags de collision (0x40 = touché)
+                                //       aussi utilisé comme byte actif dans QueryAttackZoneList
+    undefined2  unknown_0x1A;   // 0x1A: INCONNU (padding ou champ)
+    short       baseX;          // 0x1C: translation base X
+    short       baseY;          // 0x1E: translation base Y
+    short       baseZ;          // 0x20: translation base Z
+    // taille totale : 36 bytes (0x24) — créée dans Ghidra /auto_structs/HitboxNode
+} HitboxNode;
+```
+
+**Format vertexData (short array)** (PROBABLE) :
+```
+[0]           = outerCount (nb groupes de hitbox)
+[1]           = innerCount[0] (nb points dans groupe 0)
+[3..]         = données vertex du groupe 0
+// stride entre groupes : 0x1C shorts = 56 bytes
+// vertex axes stockés en 3 strips séparées :
+//   X = ptr[uVar2]     (8 shorts par groupe)
+//   Y = ptr[uVar2+8]
+//   Z = ptr[uVar2+0x10]
+```
+
+**Certitude** :
+| Offset | Champ | Certitude |
+|--------|-------|-----------|
+| 0x00 | next | CERTAIN |
+| 0x04..0x0C | 3 champs INCONNUS | INCONNU |
+| 0x10 | vertexData* | CERTAIN |
+| 0x14 | cellX | CERTAIN |
+| 0x16 | cellZ | CERTAIN |
+| 0x18 | hitFlags | CERTAIN |
+| 0x1A | unknown_0x1A | INCONNU |
+| 0x1C | baseX | CERTAIN |
+| 0x1E | baseY | CERTAIN |
+| 0x20 | baseZ | CERTAIN |
+
+---
+
+## Section 31 — Validation POLY_GT4 stride et g_uvOrTexCoordBuffer
+
+### 31.1 Résumé factuel
+
+Validation des deux inconnues structurelles majeures héritées de la section 29. Source : analyse complète des décompilations `AnimCmd_AnimateVertexColors` et `AnimCmd_BaseCulX/Y`.
+
+### 31.2 POLY_GT4 stride — CERTAIN : 52 bytes
+
+**Confusion précédente** (section 29.9) : notait "stride +40 octets outer loop" — incorrect car calculé depuis `puVar6` (à offset `.tpage`) et non depuis le début de la structure.
+
+**Preuve directe** (CERTAIN) — décompilation `AnimCmd_AnimateVertexColors` :
+```c
+// puVar5 démarre à &poly_pool[polyIdx].clut  (offset +14 depuis début POLY_GT4)
+do {  // boucle externe : 1 itération = 1 polygone
+    iVar2 = 3;
+    do {  // boucle interne : iVar2 = 3, 4 → 2 iterations
+        puVar6 = puVar5;           // save → u_short* vers .clut puis .tpage
+        puVar5 = puVar6 + 6;       // avance 6 u_shorts = +12 bytes
+        iVar2++;
+    } while (iVar2 < 5);
+    // Fin inner: puVar6 pointe .tpage (+12 depuis .clut)
+    puVar5 = puVar6 + 0x14;        // +0x14 u_shorts = +40 bytes depuis .tpage
+    // .clut + 12 + 40 = .clut + 52 bytes = .clut du polygone suivant ✓
+} while (...);
+```
+
+**Calcul** :
+- `.clut` = offset 14 dans `POLY_GT4`
+- `.tpage` = offset 26 = `.clut` + 12 bytes
+- Outer advance depuis `.tpage` : +0x14 u_shorts = +40 bytes
+- Total depuis `.clut` : 12 + 40 = **52 bytes** = sizeof(POLY_GT4) ✓
+
+**Confirmation** : `POLY_GT4` (psyq330) = 52 bytes packed. Stride réel en pool = 52 bytes. La valeur "PROBABLE 64 bytes" de la section 29.9 est **annulée**.
+
+**Champs animés par AnimCmd_AnimateVertexColors** :
+| iVar2 | Offset depuis .clut | Champ POLY_GT4 | Offset absolu | Certitude |
+|-------|---------------------|----------------|---------------|-----------|
+| 3     | +0                  | `.clut`         | +14           | CERTAIN |
+| 4     | +12                 | `.tpage`        | +26           | CERTAIN |
+
+### 31.3 g_uvOrTexCoordBuffer — adresse et layout CERTAIN
+
+**Adresse confirmée** : `0x801f2180` (16 références dans Ghidra, symbole déjà labelisé)
+- Position : `g_renderScratchBuffer` (0x801f2000) + 0x180
+
+**Layout AOS par polygone** (CERTAIN — double-confirmé BaseCulX + BaseCulY) :
+```c
+// BaseCulX : psVar10 = base + polyIdx*0x10;    puis += 4 ×4 → accède [0,4,8,12]
+// BaseCulY : psVar8  = base + polyIdx*0x10 + 1; puis += 4 ×4 → accède [1,5,9,13]
+// Composante Y démarre à +1 dans chaque bloc de 4 shorts/vertex → layout AOS confirmé
+
+typedef struct PolyVertexBlock {   // 16 shorts = 32 bytes par polygone
+    short v0x, v0y, v0z, v0p;     // vertex 0 : composantes X,Y,Z,P
+    short v1x, v1y, v1z, v1p;     // vertex 1
+    short v2x, v2y, v2z, v2p;     // vertex 2
+    short v3x, v3y, v3z, v3p;     // vertex 3
+} PolyVertexBlock;
+// BaseCulX modifie : v0x, v1x, v2x, v3x  (stride 4 shorts, offset 0)
+// BaseCulY modifie : v0y, v1y, v2y, v3y  (stride 4 shorts, offset 1)
+// BaseCulZ modifie : v0z, v1z, v2z, v3z  (stride 4 shorts, offset 2)
+// BaseCulP modifie : v0p, v1p, v2p, v3p  (stride 4 shorts, offset 3)
+```
+
+**Modes d'accès (bits 1:0 du byte flags du stream)** :
+| Mode | Accès au buffer | Certitude |
+|------|-----------------|-----------|
+| 0x01 | `base + renderMetadata[entryIdx].byte3 * 0x10` | CERTAIN |
+| 0x00 | `base + (short)polyIdx * 0x10` (direct) | CERTAIN |
+| 0x02 | scan 0x40 entrées : `renderMetadata[i].byte2 == groupId` | CERTAIN |
+
+**Composante P** : INCONNU. Candidates : profondeur clip-space W, index palette secondaire, valeur blending.
+
+**Note** : dénomination `g_uvOrTexCoordBuffer` est incorrecte (pas des UV/texcoords). Renommage en `g_polyVertexCoordBuffer` recommandé mais différé en attente confirmation P.
+
+### 31.4 Table labels globaux — état final session 31
+
+| Adresse | Label | Type | Certitude |
+|---------|-------|------|-----------|
+| 0x80087950 | `g_animStreamDispatchTable` | void*[51] | CERTAIN |
+| 0x80087A1C | `g_animStreamOpcodeNames` | char[][16] | CERTAIN |
+| 0x801faa60 | `g_renderFlushFlag` | uint | CERTAIN |
+| 0x801faa64 | `g_animSharedVarTable` | uint16[16] | CERTAIN |
+| 0x801faaac | `g_effectObjectPtrs` | uint32[16] | CERTAIN |
+| 0x801fa580 | `g_polyOTDepthTable` | int16[] | CERTAIN |
+| 0x801fa780 | `g_meshXOffsetBuffer` | int16[] | CERTAIN |
+| 0x801fa800 | `g_meshEntryFlagsHiBuf` | uint16[] | CERTAIN |
+| 0x801f2000 | `g_renderScratchBuffer` | 0x8C48 bytes | CERTAIN |
+| 0x801f2100 | `g_bodyPartTransformTable` | SVECTOR[16] | CERTAIN |
+| 0x801f2180 | `g_uvOrTexCoordBuffer` | PolyVertexBlock[] | CERTAIN |
+| 0x801fab0c | `g_charRenderStateBuf` | uint32[6] | CERTAIN |
+| 0x801fab24 | `g_charSharedVarMaskBuf` | uint16[6] | CERTAIN |
+| 0x801fab30 | `g_charEffectSlotTable` | uint32[16] | CERTAIN |
+| 0x801faa84 | `g_charMoveVelocity` | short[3] | CERTAIN |
+| 0x801fac40 | `g_chaseStateBlock` | uint8[4] | CERTAIN |
+| 0x801d2000 | `g_cdFileBufferTable` | variable | CERTAIN |
+| 0x801d2004 | `g_meshTableCounts` | uint16 | CERTAIN |
+| 0x801d2008 | `g_chBinEntryTableBasePtr` | uint32 | CERTAIN |
+| 0x801d200c | `g_chBinClutTablePtr` | uint32 | CERTAIN |
+| 0x800a6778 | `g_charEffectTranslatePtr` | void* | CERTAIN |
+| 0x800a677c | `g_charEffectScalePtr` | SVECTOR* | CERTAIN |
+| 0x800a6786 | `g_charEffectInitFlag` | uint | CERTAIN |
+| 0x801faa00 | `g_meshStreamPtrBuffer` | uint32[] | CERTAIN |
+| 0x801faa40 | `g_meshOffsetBuffer` | uint16[] | CERTAIN |
+
+### 31.5 Zones d'ombre résiduelles
+
+| Élément | Statut | Action suivante |
+|---------|--------|-----------------|
+| `g_uvOrTexCoordBuffer` composante P | INCONNU | analyser `AnimCmd_BaseCulP` |
+| `DAT_80092314` bytes sémantique (son?) | INCONNU | décompiler `FUN_80070afc` |
+| `DAT_800884a0/b0` tables orientation 2D | PROBABLE 16×16 lookup | `read-memory` 256 bytes |
+| `FUN_800264b8` post-SetCharacterAction | RÉSOLU → `UpdateActionHistory` | — |
+| `FUN_8004d564` / `FUN_8004a2cc` | RÉSOLU → `TriggerCombatAction_BasicAttack` / `ApplyDamageToTarget` | — |
+| `DAT_80092314` sémantique SFX | PROBABLE bankId/sampleId/vol | confirmé via `PlaySfxOnChannel` |
+| `g_uvOrTexCoordBuffer` composante P | PROBABLE depth/pad write | pattern identique à X/Y/Z |
+| `DAT_800884a0/b0` tables orientation 2D | INCONNU (nibble format ?) | décompiler `LookupOrientationFrame` |
+| `DAT_8009a950` / `DAT_800c0808` | INCONNU | GTE scratch dans ComputeAnglesToTarget |
+| `MATRIX_800923a8` | INCONNU | matrice GTE de travail |
+
+---
+
+## Section 32 — Helpers combat : actions, historique, dégâts, SFX
+
+### 32.1 AnimCmd_BaseCulP — composante P confirmée
+
+**Adresse :** 0x8003c080 | **Taille :** 1172 B | **Certitude :** CERTAIN
+
+Symétrique de `AnimCmd_BaseCulX/Y/Z`. Accède au **slot d'index 3** dans chaque bloc de 4 shorts du tableau `g_uvOrTexCoordBuffer`.
+
+```c
+// Mode 0 — index direct
+psVar8 = puVar11 + 3;          // P = offset+3 dans {X=0, Y=1, Z=2, P=3}
+do {
+    puVar11 += 4;              // stride = 4 shorts = 8 bytes par vertex
+    sVar = ApplyMathOp(*psVar8, local_46 & 0xf, local_40[i]);
+    *psVar8 = sVar;
+    psVar8 += 4;               // vertex suivant
+    local_46 >>= 4;            // nibble d'opcode suivant
+} while (i < 4);               // 4 vertices par polygon
+```
+
+**Table des offsets — g_uvOrTexCoordBuffer par vertex :**
+
+| Index short | Composante | Opcode BaseCul |
+|-------------|-----------|----------------|
+| +0 | X | `AnimCmd_BaseCulX` |
+| +1 | Y | `AnimCmd_BaseCulY` |
+| +2 | Z | `AnimCmd_BaseCulZ` |
+| +3 | **P** | `AnimCmd_BaseCulP` |
+
+**Certitude composante P :** CERTAIN (accès offset +3, stride +4 identique à X/Y/Z).  
+**Sémantique P :** PROBABLE = depth-cue ou perspective pad. La valeur est modifiée par `ApplyMathOp` avec le même mécanisme que les coordonnées spatiales. Nom `P` conforme à SVECTOR PSY-Q (`pad` field réutilisé pour culling).
+
+**Modes d'adressage :** identiques à BaseCulX (0x00 = index direct, 0x01 = par renderMetadata.byte3, 0x02 = scan 0x40 entrées par groupId).
+
+---
+
+### 32.2 UpdateActionHistory (FUN_800264b8)
+
+**Adresse :** 0x800264b8 | **Taille :** 180 B | **Certitude :** CERTAIN  
+**Unique caller :** `SetCharacterAction`
+
+Appelé à chaque changement d'action. Met à jour deux shift-registers 8 bits dans `battleChars[0]` pour mémoriser l'historique des actions récentes.
+
+```c
+void UpdateActionHistory(GameState *gameState) {
+    // Toujours : marque "action changée"
+    battleChar->field_0xe4 |= 1;
+
+    // Actions neutres → pas d'historique
+    if (action == 0 || action == 2 || action == 10 || action == 0x2a) return;
+
+    // Shift register field_0xea : suivi punch/kick
+    field_0xea <<= 1;
+    if (action == 0x13 || action == 0x14) field_0xea |= 1;  // punch ou kick
+
+    // Shift register field_0xeb : suivi attaques ki/spéciales
+    field_0xeb <<= 1;
+    if (action == 0x26 || action == 0x27 || action == 0x28) field_0xeb |= 1;
+}
+```
+
+**Table des preuves :**
+
+| Offset | Accès | Signification | Certitude |
+|--------|-------|---------------|-----------|
+| battleChars[0]+0xe4 | write \|=1 | dirty flag action | CERTAIN |
+| battleChars[0]+0xea | <<1, \|=1 cond. | shift-reg punch/kick (0x13/0x14) | CERTAIN |
+| battleChars[0]+0xeb | <<1, \|=1 cond. | shift-reg ki/spécial (0x26/0x27/0x28) | CERTAIN |
+
+**Usage probable :** détection de combos (N appuis consécutifs sur punch/ki dans fenêtre = pattern dans les 8 bits de field_0xea/eb).
+
+---
+
+### 32.3 TriggerCombatAction_BasicAttack (FUN_8004d564)
+
+**Adresse :** 0x8004d564 | **Taille :** 584 B | **Certitude :** PROBABLE  
+**Caller :** `DispatchCombatAction` cases 1 et 2
+
+Cases 1 (attaque basique variante A) et 2 (variante B) du dispatch combat. Logique identique à `TriggerCombatAction_Case3` mais sans rand()%4 pour le SFX (toujours effectMode=1) et avec jitter d'amplitude différente.
+
+```c
+void TriggerCombatAction_BasicAttack(GameState *attacker, uint actionIndex, GameState *target) {
+    // Lire facing depuis DAT_8009a864/868 (vecteur direction attaquant)
+    // Jitter position : rand()%10 - 5 pour X/Z, rand()%10 - 0x23 pour Y
+    SetAttackSFXAndColor(1);   // effectMode fixe = 1
+
+    if (attacker->currentAction == 0x17 && task->gameState == target) {
+        // Déjà en animation d'attaque contre cette cible → anim 2 (parade ?)
+        SpawnSpriteEffectTask(&jitteredPos, facingVec, 2);
+    } else {
+        SpawnSpriteEffectTask(&jitteredPos, facingVec, 0);   // anim 0 = frappe basique
+        SetCharacterAction(attacker, actionIndex);
+        field_0x128 &= 0xfa640000;
+        field_0x128 |= 0x100;   // flag "attaque basique engagée"
+    }
+}
+```
+
+**Table des preuves :**
+
+| Accès | Valeur | Signification | Certitude |
+|-------|--------|---------------|-----------|
+| `DAT_8009a864` (4 bytes) | facing A | direction attaquant X/Z | PROBABLE |
+| `DAT_8009a868` (4 bytes) | facing B | direction attaquant (complément) | PROBABLE |
+| `SetAttackSFXAndColor(1)` | effectMode=1 | SFX groupe 1 (frappe légère) | CERTAIN |
+| `field_0x128 \|= 0x100` | flag | "attaque basique active" | CERTAIN |
+| `SpawnSpriteEffectTask(…, 0)` | anim 0 | sprite frappe basique | PROBABLE |
+| `SpawnSpriteEffectTask(…, 2)` | anim 2 | sprite contre/parade | PROBABLE |
+
+**Comparaison avec TriggerCombatAction_Case3 :**
+
+| Paramètre | Case3 | Cases 1/2 |
+|-----------|-------|-----------|
+| effectMode | rand()%4 (1..4) | fixe = 1 |
+| Jitter Y | rand()%0xC00-0x600 | rand()%10 - 0x23 |
+| flag_0x128 | 0x1000/0x2000/0x800 | 0x100 |
+| SFX table row | 0..3 | 0 |
+
+---
+
+### 32.4 ApplyDamageToTarget (FUN_8004a2cc)
+
+**Adresse :** 0x8004a2cc | **Taille :** 1040 B | **Certitude :** CERTAIN  
+**Callers :** 6 fonctions dont `DispatchCombatAction` (case 3), `FUN_8004aad4`, `FUN_8004ab40`, `FUN_8004ac60`, `FUN_8004c114`, `FUN_80050198`
+
+Calcule et applique les dégâts en soustrayant une valeur de `battleChars[0xb].field_0x104` de la cible (le slot 0xb semble être la structure de stats de combat).
+
+```c
+void ApplyDamageToTarget(GameState *attacker) {
+    // Étape 1 : mapper action → indice type de dommage
+    int damageType;
+    if (field_0x128 & 0x40000) damageType = 8;       // beam
+    else if (field_0x128 & 0x80000) damageType = 9;  // état spécial
+    else if (field_0x128 & 0x80) damageType = 10;    // garde
+    else if (field_0x128 & 0x20000) damageType = 11; // aérien
+    else switch (currentAction) {
+        case 0x13: case 0x14: damageType = 0; break; // punch/kick basique
+        case 0x21: damageType = 1; break;
+        case 0x23: damageType = 6; break;
+        case 0x24: damageType = 7; break;
+        case 0x25: damageType = 5; break;
+        case 0x26: damageType = 3; break;
+        case 0x27: damageType = 4; break;
+        case 0x28: damageType = 2; break;
+        default:   damageType = -1; break;  // pas de dégâts
+    }
+
+    // Étape 2 : lire stat depuis table de l'adversaire
+    uint dmg = 0;
+    if (damageType != -1) {
+        dmg = statTable[charSlot][damageType];  // gameState2->battleChars[0xb]
+    }
+    dmg *= 100;
+
+    // Étape 3 : diviseurs selon flags
+    if (damageType == 8) dmg /= 0x1c;   // beam = dégâts réduits
+    if (damageType == 1) dmg >>= 3;     // action 0x21 = /8
+
+    if (field_0x128 & 0x10) dmg /= 0x32;  // flag "tanking" = dégâts /50
+
+    // Étape 4 : appliquer (HP -= dmg, plancher 0)
+    target->battleChars[0xb].field_0x104[charSlot] -= (short)dmg;
+    if (target->battleChars[0xb].field_0x104[charSlot] < 0)
+        target->battleChars[0xb].field_0x104[charSlot] = 0;
+}
+```
+
+**Table des preuves — mapping action → damageType :**
+
+| currentAction | damageType | Interprétation | Certitude |
+|---------------|------------|----------------|-----------|
+| 0x13, 0x14 | 0 | punch/kick basique | CERTAIN |
+| 0x21 | 1 | attaque spéciale légère (/8) | CERTAIN |
+| 0x28 | 2 | — | CERTAIN |
+| 0x26 | 3 | ki directionnel A | CERTAIN |
+| 0x27 | 4 | ki directionnel B | CERTAIN |
+| 0x25 | 5 | — | CERTAIN |
+| 0x23 | 6 | — | CERTAIN |
+| 0x24 | 7 | — | CERTAIN |
+| flag 0x40000 | 8 (beam, /0x1c) | beam attack | CERTAIN |
+| flag 0x80000 | 9 | état altéré | CERTAIN |
+| flag 0x80 | 10 | garde | CERTAIN |
+| flag 0x20000 | 11 | aérien | CERTAIN |
+
+**Structure partielle accédée :**
+- `gameState2->entityData.battleChars[0xb].field_0x104` = tableau de HP/valeurs par charSlot
+- `attacker->entityData.battleChars[0].field_0x2b` = index du slot caractère attaquant
+- Stride : `field_0x104 + charSlot * 0x14` → 20 bytes par slot
+
+---
+
+### 32.5 PlaySfxOnChannel (FUN_80070afc)
+
+**Adresse :** 0x80070afc | **Taille :** 1004 B | **Certitude :** CERTAIN  
+**Signature :** `int PlaySfxOnChannel(ushort channelId, short voiceIdx, ushort bankId, byte sampleId, undefined2 vol1, undefined2 vol2, short pitchLo, short pitchHi)`  
+**Callers :** 8 fonctions (SetAttackSFXAndColor, ChaseCallAI, FUN_800630e4, FUN_80065408, FUN_80064aec)
+
+Wrappeur SPU : alloue une voix via `SpuVmVSetUp`, configure les registres SPU en miroir RAM, puis démarre la lecture. Utilise un mutex `DAT_800c0678` (flag busy=1 pendant la programmation).
+
+```c
+int PlaySfxOnChannel(ushort channelId, short voiceIdx, ushort bankId, byte sampleId,
+                     undefined2 vol1, undefined2 vol2, short pitchLo, short pitchHi) {
+    if (DAT_800c0678 == 1) return -1;  // canal occupé
+    DAT_800c0678 = 1;
+
+    if (channelId >= 0x18) goto fail;  // max 24 canaux
+
+    int voiceHandle = SpuVmVSetUp(voiceIdx, bankId);
+    if (voiceHandle != 0) goto fail;   // allocation voix échouée
+
+    // Calculer panning 0..0x7f
+    if (pitchLo == pitchHi) pan = '@';           // 0x40 = centre
+    else if (pitchHi < pitchLo) pan = (pitchHi<<6)/pitchLo;
+    else pan = 0x7f - (pitchLo<<6)/pitchHi;
+
+    // Configurer miroir registres SPU (0x800c490x)
+    DAT_800c4906 = vol1_lo;
+    DAT_800c4907 = vol2_lo;
+    DAT_800c4908 = pitchLo;
+    DAT_800c4909 = pan;
+    DAT_800c4904 = sampleTable[bankId*4];       // adresse sample
+    DAT_800c4910 = sampleId;
+    // ...
+
+    // Copier vers slot canal (DAT_800a6d5c + channelId*0x18)
+    slot[channelId].sampleAddr = DAT_800c491c;
+    slot[channelId].bankId = bankId;
+    slot[channelId].sampleId = sampleId;
+    // ...
+
+    FUN_8006d0d8();  // flush SPU registers
+    DAT_800c0678 = 0;
+    return channelId;
+
+fail:
+    DAT_800c0678 = 0;
+    return -1;
+}
+```
+
+**Table paramètres depuis SetAttackSFXAndColor :**
+
+| Paramètre | Source | Valeurs observées |
+|-----------|--------|-------------------|
+| channelId | `DAT_8009a91c` (cycles 0x12..0x14) | 18, 19, 20 |
+| voiceIdx | `*(short*)(charData->field_0xb + 1)` | dépend du personnage |
+| bankId | `DAT_80092314[entry*4+0]` (byte) | 0x00..0x06 |
+| sampleId | `DAT_80092314[entry*4+1]` (byte) | 0x00..0x07 |
+| vol1 | résultat `FUN_80071434(…)` | paramètre enveloppe |
+| vol2 | 0 | — |
+| pitchLo | 0xff | max |
+| pitchHi | 0xff | max |
+
+**DAT_80092314 layout (8 entrées × 4 bytes) — mémoire @ 0x800923a4 :**
+```
+Entry 0 : bankId=0x00, sampleId=0x00, vol=0x18, pad=0x00
+Entry 1 : bankId=0x00, sampleId=0x01, vol=0x19, pad=0x00
+Entry 2 : bankId=0x00, sampleId=0x02, vol=0x1A, pad=0x00
+Entry 3 : bankId=0x00, sampleId=0x03, vol=0x1B, pad=0x00
+Entry 4 : bankId=0x00, sampleId=0x04, vol=0x1C, pad=0x00
+Entry 5 : bankId=0x00, sampleId=0x05, vol=0x1D, pad=0x00
+Entry 6 : bankId=0x00, sampleId=0x06, vol=0x1F, pad=0x00
+Entry 7 : bankId=0x00, sampleId=0x07, vol=0x23, pad=0x00
+```
+**Certitude :** PROBABLE (bankId=0 pour tous → banque unique; sampleId=0..7 = 8 SFX de frappe distincts; vol croissant 0x18→0x23 = intensité croissante).
+
+---
+
+### 32.6 DAT_800884a0/b0 — Tables orientation sprites
+
+**Addresses :** 0x800884a0 (table A), 0x800884b0 (table B, +16 bytes)  
+**Utilisé par :** `LookupOrientationFrame` @ 0x80045d34
+
+**Données lues (0x800884a0, 256 bytes) :**
+```
+800884a0: DD 22 42 0D 00 00 00 00  00 00 1D 11 13 31 13 11
+800884b0: 11 11 21 D2 DD CD CB DD  DD 42 44 0D 00 00 00 00
+800884c0: 00 00 1D 13 11 11 11 11  11 33 43 22 DD CD CB DD
+...
+```
+
+**Observation :** toutes les valeurs lues comme nibbles (demi-octets 4 bits) sont dans la plage 0x0..0xD (0 à 13). Les valeurs comme 0xDD = {13,13}, 0x22 = {2,2}, 0x42 = {4,2}, 0x0D = {0,13}, etc.
+
+**Hypothèse de format (PROBABLE :**
+- Table de 16×16 = 256 index de frames, encodés en nibbles (2 par byte = 128 bytes pour 256 entrées)
+- Valeurs 0xE/0xF absentes → max 14 frames valides (indices 0..13)
+- DAT_800884a0 = table de 16 lignes de 16 cases, nibble-packed → complète en 128 bytes
+
+**Certitude format :** INCONNU — le décompilé de `LookupOrientationFrame` devra confirmer si l'accès est par byte ou nibble. La valeur 0xDD (=221) comme index byte dans `DAT_800884b0[0xDD * 16 + col]` dépasserait toute table raisonnable, ce qui renforce l'hypothèse nibble.
+
+**Action recommandée :** décompiler `LookupOrientationFrame` (0x80045d34, 388 bytes).
+
+---
+
+### 32.7 Inventaire des renames session 32
+
+| Adresse | Ancien nom | Nouveau nom | Certitude |
+|---------|-----------|-------------|-----------|
+| 0x800264b8 | `FUN_800264b8` | `UpdateActionHistory` | CERTAIN |
+| 0x8004a2cc | `FUN_8004a2cc` | `ApplyDamageToTarget` | CERTAIN |
+| 0x8004d564 | `FUN_8004d564` | `TriggerCombatAction_BasicAttack` | PROBABLE |
+| 0x80070afc | `FUN_80070afc` | `PlaySfxOnChannel` | CERTAIN |
+
+---
+
+### 32.8 Zones d'ombre résiduelles
+
+| Élément | Statut | Action suivante |
+|---------|--------|-----------------|
+| `DAT_800884a0/b0` nibble format | RÉSOLU → 2 tables byte, format ci-dessous | — |
+| `FUN_80071434` (SetSfxParam) | RÉSOLU → `SetChannelVolume` | — |
+| `FUN_8004aad4` | RÉSOLU → `TriggerHitAndDamage` | — |
+| `FUN_8004ab40` | RÉSOLU → `TriggerKiHitAndDamage` | — |
+| `DAT_8009a864/868` facing vectors | INCONNU | identifier (short[2]? SVECTOR?) |
+| `FUN_8004ac60` | INCONNU | caller ApplyDamageToTarget, condition flag 0x80000 |
+| `battleChars[0xb].field_0x104` | PROBABLE HP table | stride 0x14, short array |
+| `DAT_8009a950` / `DAT_800c0808` | INCONNU | GTE scratch dans ComputeAnglesToTarget |
+| `MATRIX_800923a8` | INCONNU | matrice GTE de travail |
+
+---
+
+## Section 33 — Orientation sprites, pipeline SFX, pipeline hit/damage
+
+### 33.1 LookupOrientationFrame — format tables résolu
+
+**Adresse :** 0x80045d34 | **Taille :** 388 B | **Certitude :** CERTAIN  
+**Callers :** DamageNumberTaskLoop (×2), TriggerCombatAction_Case3, TriggerCombatAction_DirKi, FUN_80054fe4, FUN_80042a18 (×2)
+
+Décompilé intégral (21 lignes). Implémente le lookup d'orientation sprite pour billboards.
+
+```c
+undefined1 LookupOrientationFrame(ushort angleX, short angleY) {
+    // Étape 1 : bande d'élévation (4 bits = 0..15)
+    ushort row = ((SVECTOR_1f80007c.vy + angleY) >> 8) & 0xF;
+
+    // Étape 2 : colonne azimut (dérivée)
+    ushort col;
+    if (row < 5 || row > 10) {
+        col = ((angleX - SVECTOR_1f80007c.vx) >> 8);   // vue avant : soustrait caméra
+    } else {
+        col = ((angleX + SVECTOR_1f80007c.vx) >> 8);   // vue arrière : ajoute caméra
+    }
+    col &= 0xF;
+
+    // Correction octants ±45° : vue de côté → ignorer caméra
+    if ((2 < row && row < 5) || (10 < row && row < 13)) {
+        col = (angleX & 0xFFF) >> 8;    // direct, pas de correction caméra
+    }
+
+    // Étape 3 : lookup 2-level
+    return g_spriteOrientationFrameTable[g_spriteOrientationRowTable[row] * 16 + col];
+}
+```
+
+**Table des deux niveaux :**
+
+| Symbole | Adresse | Taille | Rôle | Certitude |
+|---------|---------|--------|------|-----------|
+| `g_spriteOrientationRowTable` | 0x800884a0 | 16 bytes | rowIndex[0..15] → base row dans frame table | CERTAIN |
+| `g_spriteOrientationFrameTable` | 0x800884b0 | ≤4096 bytes | byte table 2D : frameIndex = table[row*16+col] | CERTAIN |
+
+**Données g_spriteOrientationRowTable (0x800884a0) :**
+```
+Row  0 = 0xDD (221)  → élévation "dessus" — beaucoup de frames de plongée
+Row  1 = 0x22 (34)
+Row  2 = 0x42 (66)
+Row  3 = 0x0D (13)
+Row  4..9 = 0x00     → élévation neutre (vue de face)
+Row 10 = 0x1D (29)
+Row 11 = 0x11 (17)
+Row 12 = 0x13 (19)
+Row 13 = 0x31 (49)
+Row 14 = 0x13 (19)
+Row 15 = 0x11 (17)
+```
+
+**Logique azimut (CERTAIN) :**
+
+| Bande row | Vue | Calcul col |
+|-----------|-----|------------|
+| 0..1 | dessus front | `(angleX - cam.vx) >> 8` |
+| 2..4 | côté 45° haut | `(angleX & 0xFFF) >> 8` (direct) |
+| 5..10 | neutre/arrière | `(angleX + cam.vx) >> 8` |
+| 11..12 | côté 45° bas | `(angleX & 0xFFF) >> 8` (direct) |
+| 13..15 | dessous | `(angleX + cam.vx) >> 8` |
+
+**Format résolu :** PAS de nibbles. Deux tables en bytes indépendantes. La table principale `g_spriteOrientationFrameTable` peut atteindre `0xDD * 16 + 15 = 0xDDF = 3551 bytes` au minimum (row max = 0xDD).
+
+**Labels créés dans Ghidra :**
+- `g_spriteOrientationRowTable` @ 0x800884a0
+- `g_spriteOrientationFrameTable` @ 0x800884b0
+
+---
+
+### 33.2 SetChannelVolume (FUN_80071434)
+
+**Adresse :** 0x80071434 | **Taille :** 156 B | **Certitude :** CERTAIN  
+**Signature :** `undefined4 SetChannelVolume(ushort channelId, short volL, short volR)`  
+**Callers :** 16 fonctions dont SetAttackSFXAndColor, FUN_80062894, FUN_800630e4
+
+Configure le volume L/R d'un canal SPU dans la table miroir RAM.
+
+```c
+undefined4 SetChannelVolume(ushort channelId, short volL, short volR) {
+    if (channelId >= 0x18) return 0xFFFFFFFF;  // erreur : max 24 canaux
+
+    DAT_800a6bc4[channelId * 8] = volL * 0x81;  // volume L (SPU scale 0x81)
+    DAT_800a6bc6[channelId * 8] = volR * 0x81;  // volume R
+    DAT_800a6d44[channelId] |= 3;               // dirty bits L+R → flush SPU
+    return 0;
+}
+```
+
+**Table des preuves :**
+
+| Accès | Signification | Certitude |
+|-------|---------------|-----------|
+| `DAT_800a6bc4[channelId*8]` | registre volume L SPU (miroir RAM) | CERTAIN |
+| `DAT_800a6bc6[channelId*8]` | registre volume R SPU (miroir RAM) | CERTAIN |
+| `DAT_800a6d44[channelId] \|= 3` | dirty flags bits 0+1 = L+R pending | CERTAIN |
+| `volX * 0x81 = volX * 129` | conversion linéaire → format SPU 15 bits | CERTAIN |
+
+**Usage type (SetAttackSFXAndColor) :**
+```c
+SetChannelVolume(DAT_8009a91c,   // canal en cours (0x12..0x14)
+    entityData.entityFlags >> 3, // vol L depuis flags d'entité
+    entityData.entityFlags >> 3  // vol R (mono = identique)
+);
+```
+
+**Valeurs courantes dans FUN_80062894 (init) :**
+- Canaux 0x11..0x14 → vol = 0x40 (64) → 0x40 × 0x81 = 0x2040 ≈ 60% max
+- Canaux 0x15..0x16 → vol = 0x38 (56) → légèrement plus faibles
+
+---
+
+### 33.3 TriggerHitAndDamage (FUN_8004aad4)
+
+**Adresse :** 0x8004aad4 | **Taille :** 108 B | **Certitude :** CERTAIN  
+**Callers :** `FUN_8004b25c` (actions 0x13/0x14 = punch/kick), `FUN_8004cc18` (action 0x17)
+
+Wrappeur 3 étapes : SetCharacterAction → flag 0x1 → ApplyDamageToTarget.
+
+```c
+void TriggerHitAndDamage(GameState *gameState, uint actionIndex) {
+    SetCharacterAction(gameState, actionIndex);
+    field_0x128 |= 1;              // flag "hit physique confirmé"
+    ApplyDamageToTarget(gameState);
+}
+```
+
+**Flag 0x1 :** différent de la condition dans ApplyDamageToTarget (qui teste 0x40000/0x80000/0x80/0x20000). Ce flag est probablement lu par d'autres systèmes (animation de choc, compteur combo).
+
+---
+
+### 33.4 TriggerKiHitAndDamage (FUN_8004ab40)
+
+**Adresse :** 0x8004ab40 | **Taille :** 108 B | **Certitude :** CERTAIN  
+**Callers :** `FUN_8004b25c` (actions 0x26/0x27/0x28), `FUN_8004bb90`, `FUN_8004bf00`, `FUN_8004c5a4`, `FUN_8004e0c8` (×2)
+
+Structure symétrique à `TriggerHitAndDamage`, flag différent.
+
+```c
+void TriggerKiHitAndDamage(GameState *gameState, uint actionIndex) {
+    SetCharacterAction(gameState, actionIndex);
+    field_0x128 |= 8;              // flag "hit ki confirmé"
+    ApplyDamageToTarget(gameState);
+}
+```
+
+**Comparaison flags :**
+
+| Fonction | Flag | Type de hit |
+|----------|------|-------------|
+| `TriggerHitAndDamage` | 0x1 | physique (punch/kick 0x13/0x14) |
+| `TriggerKiHitAndDamage` | 0x8 | ki (0x26/0x27/0x28) |
+| `TriggerCombatAction_BasicAttack` | 0x100 | attaque basique en cours |
+| `TriggerCombatAction_Case3` | 0x1000/0x2000/0x800 | effets spéciaux |
+| `TriggerCombatAction_DirKi` | 0x400 | tracker adversaire |
+
+**Callers communs FUN_8004b25c :** dispatch gate entre actions 0x13/0x14 → TriggerHitAndDamage et actions 0x26..0x28 → TriggerKiHitAndDamage. Confirme que FUN_8004b25c est un **Combat Action Gate** — à analyser session 34.
+
+---
+
+### 33.5 Inventaire renames session 33
+
+| Adresse | Ancien nom | Nouveau nom | Certitude |
+|---------|-----------|-------------|-----------|
+| 0x80071434 | `FUN_80071434` | `SetChannelVolume` | CERTAIN |
+| 0x8004aad4 | `FUN_8004aad4` | `TriggerHitAndDamage` | CERTAIN |
+| 0x8004ab40 | `FUN_8004ab40` | `TriggerKiHitAndDamage` | CERTAIN |
+| 0x800884a0 | `DAT_800884a0` | `g_spriteOrientationRowTable` | CERTAIN |
+| 0x800884b0 | `DAT_800884b0` | `g_spriteOrientationFrameTable` | CERTAIN |
+
+---
+
+### 33.6 Zones d'ombre résiduelles
+
+| Élément | Statut | Action suivante |
+|---------|--------|-----------------|
+| `FUN_8004b25c` combat action gate | INCONNU | décompiler (dispatch 0x13/0x14 vs 0x26..0x28) |
+| `FUN_8004ac60` | INCONNU | caller ApplyDamageToTarget sous flag 0x80000 |
+| `FUN_8004cc18` → `TriggerHitAndDamage(gs, 0x17)` | INCONNU | contexte action 0x17 |
+| `FUN_8004bb90` / `FUN_8004bf00` / `FUN_8004c5a4` | INCONNU | callers TriggerKiHitAndDamage |
+| `FUN_8004e0c8` → `TriggerKiHitAndDamage(p1, 0x28)` | INCONNU | contexte action 0x28 |
+| `DAT_8009a864/868` | INCONNU | facing vectors TriggerCombatAction_BasicAttack |
+| `battleChars[0xb].field_0x104` | PROBABLE HP table | stride 0x14, short array |
+| `DAT_8009a950` / `DAT_800c0808` | INCONNU | GTE scratch ComputeAnglesToTarget |
+| `MATRIX_800923a8` | INCONNU | matrice GTE de travail |
