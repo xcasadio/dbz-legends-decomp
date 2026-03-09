@@ -824,16 +824,24 @@ namespace DbzLegendsAnalyser.Viewers
             var skyTx = FindTexture(txEntries, 15, 0, new StgUV(0, 0));
 
             const float R       = 7000f;   // ring radius (well outside the stage)
-            // Y values from InitSkyBackgroundQuads (Ghidra):
-            //   PSX Y_top = 0xff84 = -124   → viewer Y = +(-124 × -7) = +868  (Y-flip, scale=7)
-            //   PSX Y_bot = 0x0004 =   +4   → viewer Y = +(  4 × -7) =  -28
-            const float PanelYTop = 868f;  // = -(-124) × 7
-            const float PanelYBot = -28f;  // = -(   4) × 7
-            const float PanelH  = PanelYTop - PanelYBot;   // 896  = 128 px × 7
+            // Y values from FUN_80037c7c (Ghidra) — PSX quad raw coords:
+            //   PSX Y_top = 0xff84 = -124, PSX Y_bot = 0x0004 = +4  (height = 128 PSX units)
+            // FUN_80037ef4 applies ScaleMatrix with {0x7000, 0x7000, 0x1000} in 12-bit fixed-point:
+            //   XY scale = 0x7000/0x1000 = 7  →  effective PSX_cam Y_top = -124×7 = -868
+            //                               Z scale = 1    →  sky placed at PSX_cam Z = 2520
+            //
+            // The PSX sky is a flat backdrop at Z_cam=2520.  Our viewer places it on a ring at
+            // R=7000.  To subtend the same vertical angle the height must scale by R/Z_psx:
+            //   PanelYTop = 868  × (7000/2520) ≈ 2411
+            //   PanelYBot = -28  × (7000/2520) ≈  -78
+            //   PanelH    = 2489,  PanelYC = -1167
+            const float Z_PSX   = 2520f;
+            const float PanelYTop = 868f  * (R / Z_PSX);  // ≈ +2411
+            const float PanelYBot = -28f  * (R / Z_PSX);  // ≈  -78
+            const float PanelH  = PanelYTop - PanelYBot;  // ≈ 2489
             // World matrix has CreateScale(1,-1,1) → screen_Y = -code_Y.
-            // So code_Y must be NEGATIVE to appear above floor on screen.
-            // PanelYC = -420 → screen centre = +420 (above floor)
-            const float PanelYC = -((PanelYTop + PanelYBot) * 0.5f);  // -420
+            // PanelYC negative → appears above floor in viewer.
+            const float PanelYC = -((PanelYTop + PanelYBot) * 0.5f);  // ≈ -1167
 
             // Sky blue: matches the background clear colour used on PSX stages.
             var wireColor  = new Color(140, 160, 220);
