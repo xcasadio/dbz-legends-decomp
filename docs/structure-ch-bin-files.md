@@ -1186,3 +1186,245 @@ Modifications sauvegardees localement dans GAME.EXE working copy :
 - 5 labels renommes
 - 4 structures creees (/CHBin)
 
+
+---
+
+## 22. Session du 09/03/2026 — Fonctions Utilitaires et Opcodes 0x05/0x0E
+
+### 22.1 Fonctions Utilitaires Renommées
+
+#### ApplyMathOp @ 0x8003f694 (16 callers)
+
+Opérateur arithmétique générique appelé par la majorité des opcodes AnimStream.
+
+**Signature** : `short ApplyMathOp(short current_val, short op_mode, short operand)`
+
+| Mode | Opération | Notes |
+|------|-----------|-------|
+| 0 | `current_val = operand` | set direct |
+| 1 | `current_val + operand` | add |
+| 2 | `current_val - operand` | sub |
+| 3 | `current_val | operand` | bitwise OR |
+| 4 | `current_val & operand` | bitwise AND |
+| 5 | `current_val ^ operand` | bitwise XOR |
+| 6 | `current_val * operand * 0x10000` | mul (fixedpoint) |
+| 7 | `current_val / operand` | div |
+| 9 | `operand - current_val` | rsub |
+| 10 | `g_animSharedVarTable[(operand>>1)&0xf] = current_val; return current_val` | write-to-var |
+| 11 | `current_val + (operand & rand())` | add random |
+| 12 | `current_val % operand` | modulo |
+
+**CERTAIN** : décompilation complète, switch/case exhaustif.
+
+#### ResolveBodyPartTarget @ 0x8003f37c (11 callers)
+
+**Signature** : `void * ResolveBodyPartTarget(uint target_spec, int gameState_ptr)`
+
+Résout un pointeur vers un champ de transform selon `target_spec` :
+
+| Bits de target_spec | Résolution | Retour |
+|---------------------|------------|--------|
+| bit[5]=0, bit[4]=0 | `charPointers[(target_spec & 0x5)][+0x114]` | translation ptr |
+| bit[5]=1, bit[4]=0 | `g_effectObjectPtrs[(target_spec & 0xf)] + 0x3C` | effet ptr |
+| bit[4]=1 | `g_renderScratchBuffer[+0x80] + (target_spec & 0xf) * 8` | scratch slot |
+
+#### ResolveBodyPartScale @ 0x8003f404 (7 callers)
+
+**Signature** : `SVECTOR * ResolveBodyPartScale(uint target_spec, int gameState_ptr)`
+
+Résout une SVECTOR pour l'animation scale_set (0x08) :
+
+| Bits de target_spec | Résolution |
+|---------------------|------------|
+| bit[4]=0, `param_1 < 6` | `charPointers[param_1][+0x11C]` |
+| bit[4]=0, `param_1 >= 6` | `SVECTOR_1f800084` (scratchpad HW) |
+| bit[4]=1 | `g_renderScratchBuffer + (target_spec & 0xf) * 8` |
+
+### 22.2 Labels Globaux Ajoutés
+
+| Adresse | Label | Usage | Preuve |
+|---------|-------|-------|--------|
+| 0x801fab0c | `g_charRenderStateBuf` | Table 6×uint32 état rendu par slot char | SetCharRenderState 3 accès exclusifs |
+| 0x801fab24 | `g_charSharedVarMaskBuf` | Table 6×uint16 masques OR pour g_animSharedVarTable | SetCharRenderState 1 accès exclusif |
+| 0x801faaac | `g_effectObjectPtrs` | Table 16×ptr vers GameState effets | EffSet, FUN_80036bb0, ResolveBodyPartTarget |
+| 0x801faa60 | `g_renderFlushFlag` | Flag: mis à 1 si flush OT nécessaire | RenderEntryGroup write, ExecuteAnimStreamBatch read+clear |
+| 0x801f2000 | `g_renderScratchBuffer` | Buffer scratch 0x8C48 bytes, zéré chaque frame | bzero 0x8C48 in RenderEntryGroup ligne 52 |
+
+### 22.3 opcode 0x05 `anm_set` — AnimCmd_SetCharRenderState @ 0x80038074
+
+**Format : 4 × uint16 = 8 bytes (return streamPtr + 4)**
+
+```
+word[0]: opcode=0x05 | b1_flags<<8
+  b1 bits:
+    bit[7] = 1 : mode scan 6 slots (boucle sur g_charRenderStateBuf[0..5])
+    bit[7] = 0 : mode set direct
+      bit[5] = indirect g_animSharedVarTable[b1&0xF]
+      bit[4] = mode compteur de frame
+      bits[3:0] = slot_index (0..5) ou var_index
+word[1]: b0=renderFlags (→ charPointers[slot]->renderFlags), b1+.. = state packed
+word[2]: tpage+clut config packed (→ g_charRenderStateBuf[slot])
+word[3]: mask_bits (→ g_charSharedVarMaskBuf[slot], ORed into g_animSharedVarTable)
+```
+
+**Boucle scan (bit[7]=1)** : itère les 6 slots de `g_charRenderStateBuf`, cherche les flags actifs :
+- bit[6]=1 → décrémente compteur d'animation (`-= 0x20`)
+- bit[5]=1, bit[4]=0 → attend signal : OR mask_bits dans `g_animSharedVarTable[var_idx]`
+- bit[5]=1, bit[4]=1 → attend compteur spécifique, puis OR mask_bits
+
+### 22.4 opcode 0x0E `rgb_set` — AnimCmd_AnimatePolyColorRGBA @ 0x80039754
+
+**Format : 4 × uint16 = 8 bytes (return streamPtr + 4)**
+
+```
+word[0]: opcode=0x0E | b1_flags<<8
+  b1 bits:
+    bits[5:4] = mode: 0x10=search by part_id, 0x20=range, 0x00=direct
+    bits[3:0] = ApplyMathOp op_mode (0..12)
+    bit[6]    = appliquer STP bit (semi-transparence)
+    bit[7]    = appliquer ABR bit (blend mode)
+word[1]: b0=part_id, b1=count_polys
+word[2]: delta_R (b0) + delta_G (b1)
+word[3]: delta_B (b0) + sem_trans_flags (b1)
+```
+
+**Action** : applique `ApplyMathOp(current_byte_channel, op_mode, delta_X)` sur chaque byte R/G/B des 4 vertices de chaque POLY_GT4 matchant. Clamp [0..255].
+
+### 22.5 Structure g_renderScratchBuffer @ 0x801f2000 (0x8C48 bytes)
+
+```
+0x801f2000 [+0x0000] = g_renderScratchBuffer start (zéré chaque frame par RenderEntryGroup)
+0x801f2080 [+0x0080] = body part transform slots (ResolveBodyPartTarget bit[4]=1, stride 8B×16)
+0x801f2100 [+0x0100] = g_bodyPartTransformTable (SetBodyPartTransforms_v3, stride 8B×16 SVECTOR)
+0x801f7180 [+0x5180] = POLY_GT4_801f7180 : pool POLY_GT4 prims (taille INCONNU)
+```
+
+### 22.6 Certitudes mises à jour
+
+| Élément | Confiance | Preuve |
+|---------|-----------|--------|
+| ApplyMathOp 13 modes (0..0xC) | CERTAIN | switch/case complet décompilé |
+| g_animSharedVarTable = uint16[16] | CERTAIN | `(var_idx * 2)` read/write dans tous les opcodes |
+| g_charRenderStateBuf = uint32[6] | CERTAIN | iVar6 = 0..5, lecture/écriture directe |
+| g_renderScratchBuffer size = 0x8C48 | CERTAIN | bzero(g_renderScratchBuffer, 0x8C48) |
+| POLY_GT4 base = 0x801f7180 | CERTAIN | `&POLY_GT4_801f7180` référencé par 8+ opcodes |
+
+
+---
+
+## 23. Session continuation — Opcodes 0x07/0x08/0x0F et Tâches Effets
+
+### 23.1 opcode 0x07 `rotate_set` — AnimCmd_SetBodyPartTransforms_v2 @ 0x800384e0
+
+**Format : variable (2 + N words, identique v1)**
+
+Même structure de stream que v1 (0x06) mais utilise `ResolveBodyPartScale` au lieu de `ResolveBodyPartTarget`.
+Écrit dans les 3 composantes short (SVECTOR.vx/.vy/.vz) d'un slot rotation.
+
+```
+word[0]: opcode=0x07 | b1<<8
+  b1 = target_spec → ResolveBodyPartScale(target_spec & 0xFF, gameState_ptr)
+word[1]: 3 × 5-bit component_specs: bits[14:10][9:5][4:0]
+         chaque spec = {op_mode[3:0], indirect_flag[4]}
+         op_mode == 0xF → skip (pas de mot inline)
+         op_mode == 8   → COPY_MODE: lit depuis un autre slot ResolveBodyPartScale
+         indirect_flag  → 1: lire depuis g_animSharedVarTable[*puVar5 & 0xf]
+                          0: lire mot inline
+optional word[2+]: valeurs inline par composante non-skip
+```
+
+**Itération** : 3 passes (iVar6 0..2), avance `pSVar2` par `&pSVar2->vy` (+2B) à chaque passe.
+
+**CERTAIN** : décompilé, `ResolveBodyPartScale` confirmé, itère `pSVar2->vx` puis `vy` puis via avance.
+
+### 23.2 opcode 0x08 `scale_set` — AnimCmd_SetBodyPartTransforms_v3 @ 0x800386a8
+
+**Format : variable (2 + N words, identique v1/v2)**
+
+Utilise `g_bodyPartTransformTable` directement (0x801f2100). Accès par `&g_bodyPartTransformTable + (target_spec & 0xf) * 8`.
+
+```
+word[0]: opcode=0x08 | b1<<8
+  b1 = target_spec
+  si bit[4]=1 → unaff_s4 = &g_bodyPartTransformTable[(target_spec & 0xf) * 8]
+word[1]: 3 × 5-bit specs (même format)
+optional word[2+]: valeurs inline
+```
+
+**COPY mode (op_mode==8)** : si `operand & 0x10` → `unaff_s5 = &g_bodyPartTransformTable[(operand & 0xf) * 8]`, puis avance de `iVar4 * 2` bytes.
+
+**CERTAIN** : décompilé, `g_bodyPartTransformTable` référencé 2 fois dans la fonction.
+
+### 23.3 Comparaison des 3 opcodes SetBodyPartTransforms
+
+| Opcode | Nom debug | Resolver | Cible |
+|--------|-----------|----------|-------|
+| 0x06 `trans_set` | AnimCmd_SetBodyPartTransforms | ResolveBodyPartTarget | Translation XY (void*) |
+| 0x07 `rotate_set` | AnimCmd_SetBodyPartTransforms_v2 | ResolveBodyPartScale | SVECTOR rotation (vx/vy/vz) |
+| 0x08 `scale_set` | AnimCmd_SetBodyPartTransforms_v3 | g_bodyPartTransformTable direct | Transform scale table short[3] |
+
+### 23.4 opcode 0x0F `cmp_set` — AnimCmd_ConditionalBranch @ 0x80039028
+
+**Format : 4 × uint16 = 8 bytes (toujours return streamPtr + 4)**  
+**Déclenche si g_pauseFlag & 1 → return sans action**
+
+```
+word[0]: opcode=0x0F | compare_mode<<8
+  compare_mode = (uint8)(*streamPtr >> 8) & 0xFF
+  valide : 0..5
+word[1]: packed indices vars
+  bits[3:0]  = var_A_idx (index dans g_animSharedVarTable)
+  bits[7:4]  = var_B_idx (idem)
+  bits[15:8] = dest_var_idx (index de la var destination si branche prise)
+word[2]: branch_value = valeur à ORer dans g_animSharedVarTable[dest_var_idx] si branche prise
+word[3]: const_offset = constante ajoutée à g_animSharedVarTable[var_B_idx]
+```
+
+**Modes de comparaison** :
+
+| Mode | Condition de branche | Mnemonic |
+|------|---------------------|---------|
+| 0 | `var[A] != var[B] + offset` | NEQ |
+| 1 | `var[A] == var[B] + offset` | EQ |
+| 2 | `var[A] <= var[B] + offset` | LEQ (NOT GT) |
+| 3 | `var[A] < var[B] + offset` | LT |
+| 4 | `var[B] + offset <= var[A]` | GEQ |
+| 5 | `var[B] + offset < var[A]` | GT |
+
+**Action si branche prise** : `g_animSharedVarTable[dest_var_idx] |= branch_value`  
+Ce n'est PAS un saut d'adresse — c'est un OU conditionnel dans le pool de variables partagées.  
+Les autres opcodes lisent ces bits via `indirect_flag=1` (mode g_animSharedVarTable).
+
+**CERTAIN** : switch/case complet décompilé, 6 comparateurs, action OR confirmée.
+
+### 23.5 Fonctions Renommées
+
+| Ancienne | Nouvelle | Signature | Callers |
+|----------|----------|-----------|---------|
+| FUN_8003ffec | `SpawnEffectTask` | `Task *(undefined2 *animDataPtr, ushort effectIndex)` | 1 |
+| FUN_80053d44 | `InitEntityAnimPtr` | `void(GameState *gameState, int animTableBase, uint animIndex)` | 7 |
+
+#### SpawnEffectTask @ 0x8003ffec
+
+- Crée une tâche via `CreateTask(FUN_8003fddc, 0, 0xB, 0x5C, 0, g_taskListTails[0xB])`  
+  → task list 0xB, data size 0x5C bytes
+- Copie 3 × undefined2 de `animDataPtr` dans `gameState->entityData.runtimePointers`
+- Appelle `InitEntityAnimPtr(gameState, -0x7ffde77c, effectIndex)`  
+  → `0x80021884` = table globale d'animations
+- Renvoit Task* (NULL si création échoue)
+
+**CERTAIN** : décompilé, 1 caller (AnimCmd_EffSet @ 0x8003d018 ligne 41)
+
+#### InitEntityAnimPtr @ 0x80053d44
+
+- Reset `gameState->polyFt4 = 0`
+- Si `animTableBase >= 0` : `base = &gameState->polyFt3->tag + animTableBase`
+- Sinon : `base = animTableBase` (utilisé directement comme adresse absolue)
+- `ptr = *(base + animIndex * 4)` → pointeur dans table
+- Si `ptr < 0x80000000` : corrige depuis `gameState->polyFt3` (offset relatif)
+- Stocke résultat dans `gameState->polyGt3`
+
+**Champ gameState->polyGt3** = pointeur vers AnimStream bytecode actif de l'entité.  
+**Constante 0x80021884** = table globale (utilisée par AnimCmd_EffSet et SpawnEffectTask).
+
+**CERTAIN** : décompilé, appel à 0x80021884 vérifié pour 5 des 7 callers.
