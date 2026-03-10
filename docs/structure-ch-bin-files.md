@@ -3835,3 +3835,462 @@ void TriggerKiHitAndDamage(GameState *gameState, uint actionIndex) {
 | `battleChars[0xb].field_0x104` | PROBABLE HP table | stride 0x14, short array |
 | `DAT_8009a950` / `DAT_800c0808` | INCONNU | GTE scratch ComputeAnglesToTarget |
 | `MATRIX_800923a8` | INCONNU | matrice GTE de travail |
+
+---
+
+## Section 34 — Validation disque CH_BIN : entrée 28B, listes de segments, AnimStream
+
+### 34.1 Résumé factuel
+
+- Le mapping disque des pointeurs CH_BIN est **revalidé** : `file_offset = ptr_compile_time - 0x801A3800`.
+- `CHBinMeshEntry` reste une structure de **28 bytes** (`7 x uint32`).
+- Les champs `+0x0C`, `+0x10`, `+0x14` ne pointent pas vers un bloc plat unique mais vers des **listes de segments**.
+- `+0x0C` = liste de segments vertex `{ptr_vertices, counts_packed}` de stride 8.
+- `+0x10` = liste de segments mesh `{ptr_primitive_indices, ptr_uv_table, ptr_color_table, counts_packed}` de stride 16.
+- `+0x14` = liste de segments lighting `{ptr_lighting_values, counts_packed}` de stride 8.
+- `+0x18` contient bien du **bytecode AnimStream**: les mots 16 bits observés produisent des opcodes déjà identifiés (`0x06`, `0x08`, `0x0D`, etc.) en little-endian.
+- `CHBinMeshEntry` a été mis à jour dans Ghidra, et trois structures partielles `/CHBin` existent maintenant pour les listes de segments.
+
+### 34.2 Table des preuves — CHBinMeshEntry E3 (CH_01.BIN)
+
+Fichier : `data/CH_BIN1/CH_01.BIN`  
+Entrée examinée : **E3** @ `foff 0x1298`
+
+| Offset | Valeur brute | Accès observé / interprétation minimale | Certitude |
+|--------|--------------|------------------------------------------|-----------|
+| +0x00 | `0x00000100` | `entry_id_packed` | CERTAIN |
+| +0x04 | `0x00010001` | `primitive_count_packed` | CERTAIN |
+| +0x08 | `0x00010001` | `unknown_0x08` | CERTAIN pour la valeur, INCONNU pour la sémantique |
+| +0x0C | `0x801A38BC` | pointeur compile-time vers liste de segments vertex | CERTAIN |
+| +0x10 | `0x801A3E78` | pointeur compile-time vers liste de segments mesh | CERTAIN |
+| +0x14 | `0x801A3ED0` | pointeur compile-time vers liste de segments lighting | CERTAIN |
+| +0x18 | `0x801A4654` | pointeur compile-time vers stream AnimStream | CERTAIN |
+
+**Preuve du mapping pointeur → fichier :**
+
+```text
+compile_time_base = 0x801A3800
+
+0x801A38BC - 0x801A3800 = 0x00BC
+0x801A3E78 - 0x801A3800 = 0x0678
+0x801A3ED0 - 0x801A3800 = 0x06D0
+0x801A4654 - 0x801A3800 = 0x0E54
+```
+
+### 34.3 Table des preuves — listes de segments pointées
+
+#### A. Liste vertex @ `ptr_vertex_segment_list = 0x801A38BC` → `foff 0x00BC`
+
+Dump 32-bit observé :
+
+```text
+0x00BC: 0x801A3818, 0x000100FF
+0x00C4: 0x801A381C, 0x00040006
+0x00CC: 0x801A382C, 0x00040010
+0x00D4: 0x801A383C, 0x00200001
+```
+
+| Sous-offset | Accès | Type minimal | Preuve |
+|------------|-------|--------------|--------|
+| +0x00 | pointeur compile-time | `uint` | valeurs `0x801A3818`, `0x801A381C`, `0x801A382C`, `0x801A383C` |
+| +0x04 | compteur packé | `uint` | valeurs `0x000100FF`, `0x00040006`, `0x00040010`, `0x00200001` |
+
+**Structure partielle CERTAIN :**
+
+```c
+typedef struct CHBinVertexSegmentEntry {
+    uint ptr_vertices;     // +0x00 compile-time pointer
+    uint counts_packed;    // +0x04 high/low halves used by RenderBattleScene3D
+} CHBinVertexSegmentEntry; // 8 bytes
+```
+
+#### B. Liste mesh @ `ptr_mesh_segment_list = 0x801A3E78` → `foff 0x0678`
+
+Dump 32-bit observé :
+
+```text
+0x0678: 0x801A3C30, 0x801A3C3C, 0x801A3DC4, 0x00010001
+0x0688: 0x00000000, 0x00000000, 0x000100F6, 0x00010001
+```
+
+Le premier bloc a exactement le pattern lu par `RenderBattleScene3D` :
+
+| Sous-offset | Rôle minimal | Certitude | Preuve |
+|------------|--------------|-----------|--------|
+| +0x00 | `ptr_primitive_indices` | CERTAIN | lu comme `*local_c8` |
+| +0x04 | `ptr_uv_table` | CERTAIN | lu comme `local_c8[1]` |
+| +0x08 | `ptr_color_table` | CERTAIN | lu comme `local_c8[2]` |
+| +0x0C | `counts_packed` | CERTAIN | lu comme `local_c8[3]` |
+
+**Structure partielle CERTAIN :**
+
+```c
+typedef struct CHBinMeshSegmentEntry {
+    uint ptr_primitive_indices;  // +0x00
+    uint ptr_uv_table;           // +0x04
+    uint ptr_color_table;        // +0x08
+    uint counts_packed;          // +0x0C
+} CHBinMeshSegmentEntry; // 16 bytes
+```
+
+#### C. Liste lighting @ `ptr_lighting_segment_list = 0x801A3ED0` → `foff 0x06D0`
+
+Dump 32-bit observé :
+
+```text
+0x06D0: 0x801A3EA0, 0x00010001
+0x06D8: 0x801A3EA8, 0x00010008
+0x06E0: 0x801A3EB0, 0x00010001
+```
+
+| Sous-offset | Rôle minimal | Certitude | Preuve |
+|------------|--------------|-----------|--------|
+| +0x00 | `ptr_lighting_values` | CERTAIN | lu comme `*local_c0` |
+| +0x04 | `counts_packed` | CERTAIN | lu comme `local_c0[1]` |
+
+**Structure partielle CERTAIN :**
+
+```c
+typedef struct CHBinLightingSegmentEntry {
+    uint ptr_lighting_values;  // +0x00
+    uint counts_packed;        // +0x04
+} CHBinLightingSegmentEntry; // 8 bytes
+```
+
+### 34.4 Preuve directe que `ptr_anim_stream` pointe vers AnimStream
+
+Exemples de mots 16 bits lus à plusieurs cibles `+0x18` dans `CH_01.BIN` :
+
+```text
+0x801A3EE8 -> foff 0x06E8: 0000 0001 1506 2008 0000 0000 0000 1606 2008 0003 ...
+0x801A4654 -> foff 0x0E54: 0000 0001 0000 0001 1706 2108 0000 0000 0000 1706 ...
+0x801A485C -> foff 0x105C: 0000 0001 0000 0001 1206 2108 0000 0000 0000 1206 ...
+0x801A4990 -> foff 0x1190: 0000 0001 0000 0001 200D 0104 7FE8 000A 1108 0000 ...
+```
+
+En little-endian, les mots `0x1506`, `0x1706`, `0x1206`, `0x200D`, `0x1108` codent des opcodes bas-byte `0x06`, `0x06`, `0x06`, `0x0D`, `0x08`, cohérents avec le VM AnimStream déjà documenté.
+
+**Conclusion :** `ptr_anim_stream` est **CERTAIN**.
+
+### 34.5 Structure partielle consolidée
+
+```c
+typedef struct CHBinMeshEntry {
+    uint entry_id_packed;             // +0x00 CERTAIN
+    uint primitive_count_packed;      // +0x04 CERTAIN
+    uint unknown_0x08;                // +0x08 INCONNU (valeurs récurrentes observées)
+    uint ptr_vertex_segment_list;     // +0x0C CERTAIN
+    uint ptr_mesh_segment_list;       // +0x10 CERTAIN
+    uint ptr_lighting_segment_list;   // +0x14 CERTAIN
+    uint ptr_anim_stream;             // +0x18 CERTAIN
+} CHBinMeshEntry; // 0x1C
+```
+
+### 34.6 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `CHBinMeshEntry` = 28 bytes, 7 dwords.
+- `file_offset = ptr_compile_time - 0x801A3800`.
+- `+0x0C` = liste de segments vertex, stride 8.
+- `+0x10` = liste de segments mesh, stride 16.
+- `+0x14` = liste de segments lighting, stride 8.
+- `+0x18` = flux AnimStream.
+
+**PROBABLE**
+- `primitive_count_packed` encode le compteur de primitives et possiblement un second sous-compte dans le high16.
+- `counts_packed` dans les listes encode systématiquement deux demi-mots de contrôle utilisés par les itérateurs.
+
+**INCONNU**
+- Sémantique exacte de `unknown_0x08`.
+- Sémantique exacte des high16/low16 de `counts_packed` dans tous les types de segments.
+- Format de la section header `[5]` quand elle n'est pas atteinte via une entrée classique.
+
+### 34.7 Actions Ghidra recommandées
+
+1. Appliquer `CHBinMeshEntry` sur la table `g_chBinEntryTableBasePtr` et relire `RenderBattleScene3D` avec les nouveaux noms.
+2. Appliquer `CHBinVertexSegmentEntry`, `CHBinMeshSegmentEntry`, `CHBinLightingSegmentEntry` sur les listes pointées par `E3` et `E4` pour voir si les segments suivants gardent le même stride.
+3. Tracer `unknown_0x08` par comparaison multi-fichiers (`CH_01`, `CH_02`, `IN_01`) afin de vérifier s’il pilote le nombre de segments ou un type de mesh.
+
+---
+
+## Section 35 — Comparaison multi-fichiers : classes d'entrée, header commun, texture vs ptr5
+
+### 35.1 Résumé factuel
+
+- `unknown_0x08` prend, sur les fichiers comparés, principalement deux valeurs : `0x00000000` ou `0x00010001`.
+- Dans `CH_01.BIN`, les entrées `E0,E1,E2,E9,E23` ont `unknown_0x08 = 0`.
+- `E0,E1,E2` sont des entrées de type partage/global, avec `id=0`, `prim=0`, et les mêmes listes de segments.
+- `E9` et `E23` sont des entrées spéciales à `prim=1`, qui réutilisent aussi les mêmes listes de segments partagées.
+- `CH_02.BIN` et `IN_01.BIN` n'ont, sur les entrées observées, que `unknown_0x08 = 0x00010001`.
+- `counts_packed` peut maintenant être classé **CERTAIN** au niveau minimal : c'est un paquet `2 x u16` servant d'état/rechargement `countX/countY` pour les itérateurs 2D.
+- Un `CHBinFileHeaderCommon` partiel a été créé et appliqué en Ghidra à `0x801A3800`.
+- Les scans d'opcodes texture (`load_set`/`tex_set`) sur le corpus complet montrent des index de table plausibles `3`, `4` et `5`.
+
+### 35.2 Table des preuves — `unknown_0x08`
+
+#### CH_01.BIN
+
+| Entrée | id_packed | primitive_count_packed | unknown_0x08 | Observations |
+|--------|-----------|------------------------|--------------|--------------|
+| E00 | `0x00000000` | `0x00000000` | `0x00000000` | shared/header-like |
+| E01 | `0x00000000` | `0x00000000` | `0x00000000` | shared/header-like |
+| E02 | `0x00000000` | `0x00000000` | `0x00000000` | shared/header-like |
+| E03 | `0x00000100` | `0x00010001` | `0x00010001` | entrée mesh normale |
+| E09 | `0x00080700` | `0x00000001` | `0x00000000` | spéciale, 1 primitive, listes partagées |
+| E23 | `0x00080800` | `0x00000001` | `0x00000000` | spéciale, 1 primitive, listes partagées |
+
+Agrégation complète observée sur `CH_01.BIN` :
+
+```text
+u08=00000000 -> entries 0,1,2,9,23
+u08=00010001 -> entries 3,4,5,6,7,8,10..22,24..36
+```
+
+#### CH_02.BIN
+
+Toutes les entrées observées (`E00..E05`) ont `unknown_0x08 = 0x00010001`.
+
+#### IN_01.BIN
+
+Toutes les entrées observées (`E00..E11`) ont `unknown_0x08 = 0x00010001`.
+
+**Classification :**
+
+- **CERTAIN** : `unknown_0x08` sépare au moins deux classes binaires d'entrée (`0` et `0x00010001`).
+- **PROBABLE** : `0` marque des entrées spéciales/partagées, tandis que `0x00010001` marque les entrées mesh normales.
+- **INCONNU** : sémantique exacte du bitfield ou du double demi-mot.
+
+### 35.3 `counts_packed` — statut relevé d'un cran
+
+La preuve issue des itérateurs est suffisante pour durcir le niveau de certitude :
+
+```c
+countX--;
+if (countX == 0) {
+    countY--;
+    if (countY == 0) {
+        // avance la liste de segments
+        // relit nouveau pointeur + nouveaux compteurs
+    } else {
+        // reste sur le segment courant
+        // relit countX pour la row suivante
+    }
+}
+return (countX << 16) | countY;
+```
+
+**Conclusion minimale CERTAIN :**
+
+| Structure | Champ | Sens minimal CERTAIN |
+|-----------|-------|----------------------|
+| `CHBinVertexSegmentEntry` | `counts_packed` | paquet `countX/countY` pour `IterateMeshStreamAndFetch` |
+| `CHBinMeshSegmentEntry` | `counts_packed` | paquet `countX/countY` pour `IterateMeshStreamAndFetch_Offset16` |
+| `CHBinLightingSegmentEntry` | `counts_packed` | paquet `countX/countY` pour `IterateMeshStreamAndFetch_Offset8` |
+
+**INCONNU conservé :** affectation exacte hi/lo dans tous les chemins de reload, malgré une forte cohérence avec `hi=countX`, `lo=countY`.
+
+### 35.4 Header commun CH_BIN — structure Ghidra créée
+
+Structure ajoutée en Ghidra :
+
+```c
+typedef struct CHBinFileHeaderCommon {
+    ushort reloc_loop_bound;  // +0x00 CERTAIN
+    ushort header_flags;      // +0x02 CERTAIN
+    uint   entry_count;       // +0x04 CERTAIN
+    uint   ptr_entry_table;   // +0x08 CERTAIN
+    uint   ptr_section_3;     // +0x0C PROBABLE texture/CLUT-related
+    uint   ptr_section_4;     // +0x10 PROBABLE texture image data
+    uint   ptr_section_5;     // +0x14 INCONNU
+} CHBinFileHeaderCommon;
+```
+
+Appliquée à `0x801A3800` dans Ghidra.
+
+### 35.5 Texture opcodes — indices de table observés
+
+Scan sur les streams `ptr_anim_stream` non nuls de `CH_01.BIN`, `CH_02.BIN`, `IN_01.BIN`.
+
+Occurrences filtrées utiles :
+
+```text
+CH_01 E1/E2 : tex_set  -> tbl=3
+CH_01 E0/E4/E7/E9 : load_set -> tbl=4
+CH_02 E0        : load_set -> tbl=3 et tbl=4
+IN_01          : aucun hit fiable vers tbl=5 dans l'échantillon
+```
+
+**Extension corpus complet (`data/CH_BIN*/*.BIN`) :**
+
+Agrégation des hits plausibles `load_set` / `tex_set` :
+
+```text
+load_set tbl=0 : 308  (beaucoup de faux positifs probables)
+load_set tbl=3 : 64
+load_set tbl=4 : 50
+load_set tbl=5 : 14
+tex_set  tbl=3 : 19
+tex_set  tbl=4 : 3
+```
+
+Exemples plausibles `load_set tbl=5` :
+
+```text
+CH_11.BIN E0 : 0103 02C0 0100 0040 0098 0005 0000
+CH_15.BIN E0 : 0103 02C0 0100 0040 0098 0005 0000
+CH_23.BIN E0 : 0103 02C0 0198 0020 0068 0005 0000
+IN_08.BIN E0 : 0103 02C0 0100 0040 0100 0005 0000
+```
+
+Exemples plausibles `tex_set tbl=4` :
+
+```text
+CH_04.BIN E1 : 810B 0004 0000 02D0 01FF 0200 8008
+CH_38.BIN E1 : 810B 0004 0000 02D0 01FF 0000 0000
+CH_38.BIN E2 : 810B 0004 0000 02D0 01FF 0000 0000
+```
+
+**Conclusion révisée :**
+
+- **PROBABLE** : `ptr_section_3` alimente un chemin texture/CLUT et sert de source récurrente pour `tex_set tbl=3`.
+- **PROBABLE** : `ptr_section_4` est une banque image/texture utilisable par `load_set tbl=4` et plus rarement par `tex_set tbl=4`.
+- **PROBABLE** : `ptr_section_5` est une banque image/texture secondaire accessible par `load_set tbl=5` dans plusieurs fichiers.
+- **INCONNU** : différence exacte de rôle entre `ptr_section_4` et `ptr_section_5`, et raison précise de la rareté de `tex_set tbl=4`.
+
+### 35.6 Structure partielle consolidée après session 35
+
+```c
+typedef struct CHBinMeshEntry {
+    uint entry_id_packed;             // +0x00 CERTAIN
+    uint primitive_count_packed;      // +0x04 CERTAIN
+    uint unknown_0x08;                // +0x08 CERTAIN (valeurs observées), sémantique INCONNUE
+    uint ptr_vertex_segment_list;     // +0x0C CERTAIN
+    uint ptr_mesh_segment_list;       // +0x10 CERTAIN
+    uint ptr_lighting_segment_list;   // +0x14 CERTAIN
+    uint ptr_anim_stream;             // +0x18 CERTAIN
+} CHBinMeshEntry;
+```
+
+### 35.7 Zones d'ombre restantes
+
+| Élément | Statut | Action suivante |
+|---------|--------|-----------------|
+| `unknown_0x08` sémantique exacte | INCONNU | trouver un lecteur hors `RenderBattleScene3D` / `AnimCmd_RenderEntryGroup` |
+| différence `ptr_section_4` vs `ptr_section_5` | INCONNU | comparer formats bruts et dimensions VRAM des `load_set tbl=4` vs `tbl=5` |
+| hi/lo exact de `counts_packed` dans tous les chemins | PROBABLE | relire l'ASM des trois itérateurs avec les structures appliquées |
+| entrées spéciales `E9/E23` de CH_01 | INCONNU | comparer leur rendu/usage aux entrées normales |
+
+---
+
+## Section 36 — Rôles probables des sections header `[3]`, `[4]`, `[5]`
+
+### 36.1 Résumé factuel
+
+- Le scan corpus complet des AnimStreams produit des hits plausibles `load_set tbl=3/4/5` et `tex_set tbl=3/4`.
+- Dans l'échantillon actuel, aucun hit plausible `tex_set tbl=5` n'a été trouvé.
+- Les pointeurs header `ptr_section_4` et `ptr_section_5` mènent, sur plusieurs fichiers (`CH_11.BIN`, `CH_23.BIN`, `IN_08.BIN`), vers des zones brutes denses compatibles avec des blocs image plutôt qu'avec de simples tables d'index.
+- Les dimensions VRAM portées par les `load_set tbl=4` et `load_set tbl=5` sont toutes plausibles pour des uploads texture.
+- La séparation certaine aujourd'hui porte sur les usages observés, pas encore sur un format interne complètement reconstruit.
+
+### 36.2 Table des preuves
+
+| Section | Accès observé | Type minimal | Fichiers / fonctions | Preuve |
+|--------|---------------|--------------|----------------------|--------|
+| `ptr_section_3` | `tex_set tbl=3`, `load_set tbl=3` | source texture/CLUT | corpus CH_BIN, `AnimCmd_AsyncLoadTexture`, `AnimCmd_LoadTexture` | index `3` vu dans plusieurs streams plausibles |
+| `ptr_section_4` | `load_set tbl=4`, `tex_set tbl=4` | banque image/texture | `CH_01.BIN`, `CH_02.BIN`, `CH_04.BIN`, `CH_38.BIN` | indices `4` vus en sync et async |
+| `ptr_section_5` | `load_set tbl=5` | banque image/texture secondaire | `CH_11.BIN`, `CH_15.BIN`, `CH_23.BIN`, `IN_08.BIN` | séquences plausibles `... 0005 0000` + blocs bruts denses |
+
+### 36.3 Structure partielle du header
+
+```c
+typedef struct CHBinFileHeaderCommon {
+    ushort reloc_loop_bound;  // +0x00 CERTAIN
+    ushort header_flags;      // +0x02 CERTAIN
+    uint   entry_count;       // +0x04 CERTAIN
+    uint   ptr_entry_table;   // +0x08 CERTAIN
+    uint   ptr_section_3;     // +0x0C PROBABLE source texture/CLUT, async récurrente
+    uint   ptr_section_4;     // +0x10 PROBABLE banque image/texture, sync + async rare
+    uint   ptr_section_5;     // +0x14 PROBABLE banque image/texture secondaire, sync observé
+} CHBinFileHeaderCommon;
+```
+
+### 36.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `AnimCmd_LoadTexture` et `AnimCmd_AsyncLoadTexture` sélectionnent une source via un index de table.
+- Des hits plausibles existent pour `load_set tbl=3`, `4`, `5`.
+- Des hits plausibles existent pour `tex_set tbl=3`, `4`.
+
+**PROBABLE**
+- `ptr_section_3` joue le rôle de source texture/CLUT principale pour le chemin async.
+- `ptr_section_4` et `ptr_section_5` sont deux banques image distinctes, toutes deux utilisables par le chemin sync.
+- `ptr_section_4` peut aussi être utilisée par le chemin async, mais plus rarement.
+
+**INCONNU**
+- `ptr_section_3` contient-il uniquement des CLUT / metadata texture, ou parfois de vraies données image.
+- Différence fonctionnelle exacte entre `ptr_section_4` et `ptr_section_5`.
+- Existence éventuelle de fichiers où `tex_set tbl=5` serait valide mais non encore observé.
+
+### 36.5 Prochaines actions Ghidra recommandées
+
+1. Rechercher dans les lecteurs de texture si l'index de table sélectionne ensuite un sous-format distinct selon `3/4/5`.
+2. Comparer en brut plusieurs cibles `ptr_section_4` et `ptr_section_5` alignées sur un même personnage pour voir si l'une contient systématiquement des CLUT ou des tuiles d'une autre profondeur.
+3. Vérifier dynamiquement, via PCSX-Redux, quel pointeur header est consommé pour un `load_set tbl=5` sur un cas simple comme `CH_11.BIN E0`.
+
+---
+
+## Section 37 — Header CH_BIN runtime à `0x801D2000`
+
+### 37.1 Résumé factuel
+
+- `LoadCHBinFileAsync` charge le fichier `CH_x.BIN` directement dans `&g_cdFileBufferTable`.
+- `RenderBattleScene3D` pose ensuite `g_cdFileBaseOffset = 0x2E800` et ajoute cet offset à `(&g_cdFileBufferTable)[2..n-1]`.
+- Les symboles déjà présents en RAM runtime se calent exactement sur le préfixe header CH_BIN : `g_meshTableCounts @ +0x04`, `g_chBinEntryTableBasePtr @ +0x08`, `g_chBinClutTablePtr @ +0x0C`.
+- Deux labels supplémentaires ont été ajoutés en Ghidra : `g_chBinSection4Ptr @ 0x801D2010` et `g_chBinSection5Ptr @ 0x801D2014`.
+- Cela prouve que la zone runtime `0x801D2000..0x801D2017` est le header CH_BIN chargé depuis disque, puis relocalisé en place.
+
+### 37.2 Table des preuves
+
+| Offset runtime | Symbole / rôle | Type minimal | Fonction(s) | Preuve |
+|---------------|----------------|--------------|-------------|--------|
+| `0x801D2000` | `reloc_loop_bound` | `ushort` | `RenderBattleScene3D` | lu via `(ushort)g_cdFileBufferTable` pour borner la boucle de relocation |
+| `0x801D2004` | `entry_count` | `uint` | `RenderBattleScene3D`, `AnimCmd_RenderEntryGroup` | symbole existant `g_meshTableCounts`, utilisé comme compte d'entrées mesh |
+| `0x801D2008` | `ptr_entry_table` | `uint` | `RenderBattleScene3D` | symbole existant `g_chBinEntryTableBasePtr`, relu après relocation |
+| `0x801D200C` | `ptr_section_3` | `uint` | `RenderBattleScene3D` | symbole existant `g_chBinClutTablePtr`, relu/écrit pendant relocation |
+| `0x801D2010` | `ptr_section_4` | `uint` | `RenderBattleScene3D` | slot contigu au header commun; label Ghidra ajouté `g_chBinSection4Ptr` |
+| `0x801D2014` | `ptr_section_5` | `uint` | `RenderBattleScene3D` | slot contigu au header commun; label Ghidra ajouté `g_chBinSection5Ptr` |
+
+### 37.3 Structure partielle runtime
+
+```c
+typedef struct CHBinFileHeaderRuntime {
+    ushort reloc_loop_bound;  // +0x00 CERTAIN
+    ushort header_flags;      // +0x02 CERTAIN
+    uint   entry_count;       // +0x04 CERTAIN
+    uint   ptr_entry_table;   // +0x08 CERTAIN
+    uint   ptr_section_3;     // +0x0C CERTAIN comme champ header; sémantique PROBABLE
+    uint   ptr_section_4;     // +0x10 CERTAIN comme champ header; sémantique PROBABLE
+    uint   ptr_section_5;     // +0x14 CERTAIN comme champ header; sémantique PROBABLE
+} CHBinFileHeaderRuntime;
+```
+
+### 37.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `LoadCHBinFileAsync` appelle `SearchFileAndLoadIntoBuffer(..., &g_cdFileBufferTable, 1)` pour charger le `CH_x.BIN` courant.
+- `RenderBattleScene3D` relocalise en place les pointeurs du header chargés dans cette zone runtime.
+- `0x801D2008`, `0x801D200C`, `0x801D2010`, `0x801D2014` sont quatre dwords contigus du header runtime.
+
+**PROBABLE**
+- `g_chBinClutTablePtr` est un ancien nom trop spécifique pour le champ header `ptr_section_3`.
+- `g_chBinSection4Ptr` et `g_chBinSection5Ptr` sont les alias runtime corrects, neutres, pour les champs header `[4]` et `[5]`.
+
+**INCONNU**
+- Pourquoi Ghidra a historiquement séparé cette zone sous des symboles hétérogènes plutôt qu'un seul header structuré.
+- S'il existe, ailleurs dans le code, un accès direct nommé à `g_chBinSection4Ptr` ou `g_chBinSection5Ptr` plutôt qu'un accès par index.
+
+### 37.5 Prochaines actions Ghidra recommandées
+
+1. Relire l'ASM de `RenderBattleScene3D` autour de `0x80035C3C..0x80035C8C` pour documenter explicitement la boucle de relocation `header[2..reloc_loop_bound-1] += 0x2E800`.
+2. Vérifier si `g_chBinClutTablePtr` doit être conservé comme alias non primaire ou remplacé par un nom plus neutre `g_chBinSection3Ptr`.
+3. Chercher localement, sans scan global, les consommateurs des labels runtime `g_chBinSection4Ptr` et `g_chBinSection5Ptr` dans les fonctions texture déjà identifiées.

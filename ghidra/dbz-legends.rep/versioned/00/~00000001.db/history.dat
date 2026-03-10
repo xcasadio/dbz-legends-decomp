@@ -1,2 +1,3 @@
 1;casad;1773038466673;TransformAndProjectMesh(0x8003f814)+UpdateCharEffectTransform(0x8003fae8)+EffectTaskMainLoop(0x8003fddc) renamed. Labels: g_chBinClutTablePtr(0x801d200c), g_charEffectTranslatePtr(0x800a6778), g_charEffectScalePtr(0x800a677c), g_charEffectInitFlag(0x800a6786). AnimCmd_SetMeshPaletteRange+ApplyCharEffect formats documented. CH_BIN file sections (CLUT at foff 0x1650) confirmed binary.
 2;casad;1773039710677;
+3;casad;1773124261764;
