@@ -65,6 +65,7 @@ Lister :
 
 GHIDRA
 - Si tu dois modifier une struture dans  Ghidra, modifie la sans la recreer. Avant de la modifier verifie si elle est 'pack' et unpack la puis effectue les modifications.
+- ne fais pas de recherche globale avec une regex cela va faire un timeout.
 
 FORMAT DE SORTIE OBLIGATOIRE
 1. Résumé factuel (5–10 lignes max)

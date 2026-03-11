@@ -4054,11 +4054,13 @@ Toutes les entrées observées (`E00..E05`) ont `unknown_0x08 = 0x00010001`.
 
 Toutes les entrées observées (`E00..E11`) ont `unknown_0x08 = 0x00010001`.
 
-**Classification :**
+**Classification révisée après scan corpus complet :**
 
-- **CERTAIN** : `unknown_0x08` sépare au moins deux classes binaires d'entrée (`0` et `0x00010001`).
-- **PROBABLE** : `0` marque des entrées spéciales/partagées, tandis que `0x00010001` marque les entrées mesh normales.
-- **INCONNU** : sémantique exacte du bitfield ou du double demi-mot.
+- **CERTAIN** : `unknown_0x08` ne se limite pas à deux valeurs. Le corpus observé contient `0x00000000` (95), `0x00010001` (694), `0x00010002` (2), `0x00030001` (1).
+- **CERTAIN** : le `low16` observé ne prend que les classes `0`, `1`, `2`.
+- **PROBABLE** : `0` marque des entrées spéciales/partagées, tandis que `1` est la classe normale dominante.
+- **PROBABLE** : le `high16` suit généralement `primitive_count_packed.high16`, sauf anomalies rares (`CH_09.BIN E6/E7`).
+- **INCONNU** : sémantique exacte du double demi-mot.
 
 ### 35.3 `counts_packed` — statut relevé d'un cran
 
@@ -4087,7 +4089,7 @@ return (countX << 16) | countY;
 | `CHBinMeshSegmentEntry` | `counts_packed` | paquet `countX/countY` pour `IterateMeshStreamAndFetch_Offset16` |
 | `CHBinLightingSegmentEntry` | `counts_packed` | paquet `countX/countY` pour `IterateMeshStreamAndFetch_Offset8` |
 
-**INCONNU conservé :** affectation exacte hi/lo dans tous les chemins de reload, malgré une forte cohérence avec `hi=countX`, `lo=countY`.
+**Conclusion supplémentaire CERTAIN :** l'ASM/decompilation des trois itérateurs montre que `counts_packed` se recharge comme un dword, puis se re-sépare en `high16 = countX` et `low16 = countY` au retour.
 
 ### 35.4 Header commun CH_BIN — structure Ghidra créée
 
@@ -4152,6 +4154,7 @@ CH_38.BIN E2 : 810B 0004 0000 02D0 01FF 0000 0000
 
 **Conclusion révisée :**
 
+- **CERTAIN** : les indices `tbl=3`, `tbl=4`, `tbl=5` sélectionnent respectivement les slots header `ptr_section_3`, `ptr_section_4`, `ptr_section_5` dans le header runtime CH_BIN à `0x801D2000`.
 - **PROBABLE** : `ptr_section_3` alimente un chemin texture/CLUT et sert de source récurrente pour `tex_set tbl=3`.
 - **PROBABLE** : `ptr_section_4` est une banque image/texture utilisable par `load_set tbl=4` et plus rarement par `tex_set tbl=4`.
 - **PROBABLE** : `ptr_section_5` est une banque image/texture secondaire accessible par `load_set tbl=5` dans plusieurs fichiers.
@@ -4177,7 +4180,158 @@ typedef struct CHBinMeshEntry {
 |---------|--------|-----------------|
 | `unknown_0x08` sémantique exacte | INCONNU | trouver un lecteur hors `RenderBattleScene3D` / `AnimCmd_RenderEntryGroup` |
 | différence `ptr_section_4` vs `ptr_section_5` | INCONNU | comparer formats bruts et dimensions VRAM des `load_set tbl=4` vs `tbl=5` |
-| hi/lo exact de `counts_packed` dans tous les chemins | PROBABLE | relire l'ASM des trois itérateurs avec les structures appliquées |
+| hi/lo exact de `counts_packed` dans tous les chemins | RÉSOLU (CERTAIN) | `high16 = countX`, `low16 = countY` prouvé par les trois itérateurs |
+
+---
+
+## Section 43 — Preuve finale sur `counts_packed`
+
+### 43.1 Résumé factuel
+
+- Les trois itérateurs `IterateMeshStreamAndFetch`, `IterateMeshStreamAndFetch_Offset16` et `IterateMeshStreamAndFetch_Offset8` ont exactement la même logique de rechargement des compteurs.
+- Quand `countX` tombe à zéro, ils décrémentent `countY`.
+- Quand `countY` tombe à zéro, ils avancent à l'entrée de segment suivante et relisent `counts_packed` depuis cette entrée.
+- Le dword relu est ensuite re-séparé par `uVar2 = packed >> 16` et `return (uVar2 << 16) | (short)packed`.
+- Les appelants rangent ensuite `high16` dans le paramètre `countX` suivant et `low16` dans `countY`.
+
+### 43.2 Table des preuves
+
+| Fonction | Reload lu depuis | Séparation observée | Conclusion |
+|---------|------------------|---------------------|------------|
+| `IterateMeshStreamAndFetch` | `(*streamPtr)[1]` | `uVar2 = countY >> 16`, retour `uVar2<<16 | (short)countY` | `high16=countX`, `low16=countY` |
+| `IterateMeshStreamAndFetch_Offset16` | `(*streamPtr)[3]` | idem | `high16=countX`, `low16=countY` |
+| `IterateMeshStreamAndFetch_Offset8` | `(*streamPtr)[1]` | idem | `high16=countX`, `low16=countY` |
+
+### 43.3 Extrait minimal de preuve
+
+```c
+countY = (*streamPtr)[1 or 3];
+uVar2 = countY >> 16;
+return uVar2 * 0x10000 + (int)(short)countY;
+```
+
+Puis côté appelant :
+
+```c
+iVar7 = IterateMeshStreamAndFetch(...);
+local_countX = (short)((uint)iVar7 >> 0x10);
+local_countY = (short)iVar7;
+```
+
+### 43.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `counts_packed.high16 = countX`
+- `counts_packed.low16 = countY`
+- Cette convention est identique dans les trois types de segment.
+
+**PROBABLE**
+- `countX` représente le nombre d'éléments restants dans la ligne/colonne courante.
+- `countY` représente le nombre de lignes/blocs restants avant passage au segment suivant.
+
+**INCONNU**
+- Sémantique géométrique exacte de `countX`/`countY` selon le type de payload (vertices, indices/UV/couleurs, lighting).
+
+### 43.5 Structures partielles durcies
+
+```c
+typedef struct CHBinVertexSegmentEntry {
+    uint ptr_vertices;    // +0x00 CERTAIN
+    uint counts_packed;   // +0x04 CERTAIN: high16=countX, low16=countY
+} CHBinVertexSegmentEntry;
+
+typedef struct CHBinMeshSegmentEntry {
+    uint ptr_primitive_indices; // +0x00 CERTAIN
+    uint ptr_uv_table;          // +0x04 CERTAIN
+    uint ptr_color_table;       // +0x08 CERTAIN
+    uint counts_packed;         // +0x0C CERTAIN: high16=countX, low16=countY
+} CHBinMeshSegmentEntry;
+
+typedef struct CHBinLightingSegmentEntry {
+    uint ptr_lighting_values; // +0x00 CERTAIN
+    uint counts_packed;       // +0x04 CERTAIN: high16=countX, low16=countY
+} CHBinLightingSegmentEntry;
+```
+
+### 43.6 Prochaines actions Ghidra recommandées
+
+1. Revenir sur les exemples disque (`CH_01.BIN E3`) pour relire quelques `counts_packed` sous la forme explicite `countX/countY`.
+2. Vérifier si certains couples `countX/countY` se répètent par type de mesh ou par personnage.
+3. Déplacer l'effort vers les zones encore opaques: `unknown_0x08` et la séparation exacte `section4` vs `section5`.
+
+---
+
+## Section 44 — Nouveau signal sur `entry_id_packed`
+
+### 44.1 Résumé factuel
+
+- `RenderBattleScene3D` et `AnimCmd_RenderEntryGroup` projettent `entry_id_packed` dans deux buffers dérivés : `g_renderMetadataBuffer` et `g_meshEntryFlagsHiBuf`.
+- Le `low16` de `entry_id_packed` est injecté dans `g_renderMetadataBuffer` et relu plus tard par plusieurs handlers (`AnimCmd_PartsLink`, `AnimCmd_SetMeshPaletteRange`, etc.).
+- Le `high16` de `entry_id_packed` est copié dans `g_meshEntryFlagsHiBuf`.
+- `AnimCmd_XAddSet` compare ensuite `g_meshXOffsetBuffer` à `g_meshEntryFlagsHiBuf` et clamp la valeur courante sur cette borne.
+- `AnimCmd_XMaxSet` applique directement une opération mathématique sur `g_meshEntryFlagsHiBuf`.
+
+### 44.2 Table des preuves
+
+| Élément | Accès observé | Type minimal | Fonction(s) | Preuve |
+|--------|----------------|--------------|-------------|--------|
+| `entry_id_packed.low16` | injecté dans `g_renderMetadataBuffer` | identifiant mesh/entry CERTAIN | `RenderBattleScene3D`, `AnimCmd_RenderEntryGroup`, `AnimCmd_PartsLink` | valeur relue comme identifiant de sélection par handlers AnimCmd |
+| `entry_id_packed.high16` | copié dans `g_meshEntryFlagsHiBuf` | borne/limite X probable | `RenderBattleScene3D`, `AnimCmd_RenderEntryGroup`, `AnimCmd_XAddSet`, `AnimCmd_XMaxSet` | utilisé comme valeur de clamp/limite sur `g_meshXOffsetBuffer` |
+
+### 44.3 Extraits minimaux de preuve
+
+Writer :
+
+```c
+(&g_meshEntryFlagsHiBuf)[entryIndex] = (short)(entry_id_packed >> 16);
+g_renderMetadataBuffer[entryIndex] = entryIndex + (entry_id_packed_low16 * 0x100) + ...;
+```
+
+Lecteurs :
+
+```c
+// AnimCmd_XAddSet
+if (*g_meshEntryFlagsHiBuf < *g_meshXOffsetBuffer) {
+    *g_meshXOffsetBuffer = *g_meshEntryFlagsHiBuf;
+}
+
+// AnimCmd_XMaxSet
+*g_meshEntryFlagsHiBuf = ApplyMathOp(*g_meshEntryFlagsHiBuf, ...);
+```
+
+### 44.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `entry_id_packed.low16` sert d'identifiant exploité par des handlers ultérieurs.
+- `entry_id_packed.high16` est copié dans un buffer séparé consommé par les commandes X-related.
+
+**PROBABLE**
+- `entry_id_packed.high16` est une limite / borne X initiale ou maximale par mesh-entry.
+- Le nom historique `g_meshEntryFlagsHiBuf` est trop vague; un alias plus neutre `g_meshXLimitBuffer` est justifié en secondaire dans Ghidra.
+
+**INCONNU**
+- Sémantique exacte du low16: simple ID local, index de part, ou classe de sous-mesh.
+- Sémantique exacte du high16: borne absolue, borne relative, ou autre paramètre X réinterprété comme limite.
+
+### 44.5 Structure partielle affinée
+
+```c
+typedef struct CHBinMeshEntry {
+    uint entry_id_packed;             // +0x00 CERTAIN low16 id; high16 probable X-limit seed
+    uint primitive_count_packed;      // +0x04 CERTAIN low16 primitive count
+    uint unknown_0x08;                // +0x08 INCONNU
+    uint ptr_vertex_segment_list;     // +0x0C CERTAIN
+    uint ptr_mesh_segment_list;       // +0x10 CERTAIN
+    uint ptr_lighting_segment_list;   // +0x14 CERTAIN
+    uint ptr_anim_stream;             // +0x18 CERTAIN
+} CHBinMeshEntry;
+```
+
+### 44.6 Prochaines actions Ghidra recommandées
+
+1. Suivre `AnimCmd_SetMeshPaletteRange` pour voir comment le low16 relu du metadata buffer pilote le choix de palette par mesh.
+2. Vérifier si les valeurs `high16` observées dans `entry_id_packed` correspondent numériquement aux clamps X vus en jeu.
+3. Revenir à `unknown_0x08` avec ce nouveau contexte, pour vérifier s'il influence aussi des handlers X-related ou reste entièrement hors pipeline rendu/anim.
 | entrées spéciales `E9/E23` de CH_01 | INCONNU | comparer leur rendu/usage aux entrées normales |
 
 ---
@@ -4196,9 +4350,9 @@ typedef struct CHBinMeshEntry {
 
 | Section | Accès observé | Type minimal | Fichiers / fonctions | Preuve |
 |--------|---------------|--------------|----------------------|--------|
-| `ptr_section_3` | `tex_set tbl=3`, `load_set tbl=3` | source texture/CLUT | corpus CH_BIN, `AnimCmd_AsyncLoadTexture`, `AnimCmd_LoadTexture` | index `3` vu dans plusieurs streams plausibles |
-| `ptr_section_4` | `load_set tbl=4`, `tex_set tbl=4` | banque image/texture | `CH_01.BIN`, `CH_02.BIN`, `CH_04.BIN`, `CH_38.BIN` | indices `4` vus en sync et async |
-| `ptr_section_5` | `load_set tbl=5` | banque image/texture secondaire | `CH_11.BIN`, `CH_15.BIN`, `CH_23.BIN`, `IN_08.BIN` | séquences plausibles `... 0005 0000` + blocs bruts denses |
+| `ptr_section_3` | `tex_set tbl=3`, `load_set tbl=3` | slot header 3, source texture/CLUT probable | corpus CH_BIN, `AnimCmd_AsyncLoadTexture`, `AnimCmd_LoadTexture` | header runtime overlay + index `3` vu dans plusieurs streams plausibles |
+| `ptr_section_4` | `load_set tbl=4`, `tex_set tbl=4` | slot header 4, banque image/texture probable | `CH_01.BIN`, `CH_02.BIN`, `CH_04.BIN`, `CH_38.BIN` | header runtime overlay + indices `4` vus en sync et async |
+| `ptr_section_5` | `load_set tbl=5` | slot header 5, banque image/texture secondaire probable | `CH_11.BIN`, `CH_15.BIN`, `CH_23.BIN`, `IN_08.BIN` | header runtime overlay + séquences plausibles `... 0005 0000` + blocs bruts denses |
 
 ### 36.3 Structure partielle du header
 
@@ -4218,13 +4372,14 @@ typedef struct CHBinFileHeaderCommon {
 
 **CERTAIN**
 - `AnimCmd_LoadTexture` et `AnimCmd_AsyncLoadTexture` sélectionnent une source via un index de table.
+- L'overlay runtime à `0x801D2000` montre que les indices `3`, `4`, `5` correspondent aux champs header `ptr_section_3`, `ptr_section_4`, `ptr_section_5`.
 - Des hits plausibles existent pour `load_set tbl=3`, `4`, `5`.
 - Des hits plausibles existent pour `tex_set tbl=3`, `4`.
 
 **PROBABLE**
-- `ptr_section_3` joue le rôle de source texture/CLUT principale pour le chemin async.
-- `ptr_section_4` et `ptr_section_5` sont deux banques image distinctes, toutes deux utilisables par le chemin sync.
-- `ptr_section_4` peut aussi être utilisée par le chemin async, mais plus rarement.
+- `ptr_section_3` joue le rôle de source CLUT/palette principale pour le chemin async.
+- `ptr_section_4` et `ptr_section_5` sont utilisables par le chemin sync comme sources d'image/texture.
+- `ptr_section_4` peut aussi contenir des données compatibles CLUT, car des hits async `tbl=4` existent.
 
 **INCONNU**
 - `ptr_section_3` contient-il uniquement des CLUT / metadata texture, ou parfois de vraies données image.
@@ -4247,6 +4402,7 @@ typedef struct CHBinFileHeaderCommon {
 - `RenderBattleScene3D` pose ensuite `g_cdFileBaseOffset = 0x2E800` et ajoute cet offset à `(&g_cdFileBufferTable)[2..n-1]`.
 - Les symboles déjà présents en RAM runtime se calent exactement sur le préfixe header CH_BIN : `g_meshTableCounts @ +0x04`, `g_chBinEntryTableBasePtr @ +0x08`, `g_chBinClutTablePtr @ +0x0C`.
 - Deux labels supplémentaires ont été ajoutés en Ghidra : `g_chBinSection4Ptr @ 0x801D2010` et `g_chBinSection5Ptr @ 0x801D2014`.
+- L'overlay `CHBinFileHeaderCommon` a ensuite été appliqué avec succès sur `0x801D2000`.
 - Cela prouve que la zone runtime `0x801D2000..0x801D2017` est le header CH_BIN chargé depuis disque, puis relocalisé en place.
 
 ### 37.2 Table des preuves
@@ -4259,6 +4415,18 @@ typedef struct CHBinFileHeaderCommon {
 | `0x801D200C` | `ptr_section_3` | `uint` | `RenderBattleScene3D` | symbole existant `g_chBinClutTablePtr`, relu/écrit pendant relocation |
 | `0x801D2010` | `ptr_section_4` | `uint` | `RenderBattleScene3D` | slot contigu au header commun; label Ghidra ajouté `g_chBinSection4Ptr` |
 | `0x801D2014` | `ptr_section_5` | `uint` | `RenderBattleScene3D` | slot contigu au header commun; label Ghidra ajouté `g_chBinSection5Ptr` |
+
+Preuve directe supplémentaire depuis les handlers texture :
+
+```c
+// AnimCmd_LoadTexture
+*(u_long **)(&g_cdFileBufferTable.reloc_loop_bound + (short)streamPtr[5] * 2)
+
+// AnimCmd_AsyncLoadTexture
+*(void **)(&g_cdFileBufferTable.reloc_loop_bound + (short)*puVar4 * 2)
+```
+
+En dépit du scaling `*2` montré par le décompilé (artefact du typage sur un champ `ushort`), ces deux lectures sont **CERTAINEMENT** des déréférencements de slots 32-bit du header runtime, cohérents avec la boucle de relocation de `RenderBattleScene3D`.
 
 ### 37.3 Structure partielle runtime
 
@@ -4280,6 +4448,7 @@ typedef struct CHBinFileHeaderRuntime {
 - `LoadCHBinFileAsync` appelle `SearchFileAndLoadIntoBuffer(..., &g_cdFileBufferTable, 1)` pour charger le `CH_x.BIN` courant.
 - `RenderBattleScene3D` relocalise en place les pointeurs du header chargés dans cette zone runtime.
 - `0x801D2008`, `0x801D200C`, `0x801D2010`, `0x801D2014` sont quatre dwords contigus du header runtime.
+- Les commandes texture lisent ensuite ces slots via l'index `tbl`; le mapping `3/4/5 -> ptr_section_3/4/5` est donc CERTAIN au niveau structurel.
 
 **PROBABLE**
 - `g_chBinClutTablePtr` est un ancien nom trop spécifique pour le champ header `ptr_section_3`.
@@ -4294,3 +4463,684 @@ typedef struct CHBinFileHeaderRuntime {
 1. Relire l'ASM de `RenderBattleScene3D` autour de `0x80035C3C..0x80035C8C` pour documenter explicitement la boucle de relocation `header[2..reloc_loop_bound-1] += 0x2E800`.
 2. Vérifier si `g_chBinClutTablePtr` doit être conservé comme alias non primaire ou remplacé par un nom plus neutre `g_chBinSection3Ptr`.
 3. Chercher localement, sans scan global, les consommateurs des labels runtime `g_chBinSection4Ptr` et `g_chBinSection5Ptr` dans les fonctions texture déjà identifiées.
+
+---
+
+## Section 38 — Nouvel indice brut : `ptr_section_3` ressemble à une banque CLUT/palette
+
+### 38.1 Résumé factuel
+
+- Après application du header runtime sur `0x801D2000`, les handlers `AnimCmd_LoadTexture` et `AnimCmd_AsyncLoadTexture` confirment que `tbl=3/4/5` sélectionne structurellement `ptr_section_3/4/5`.
+- Un dump brut de quelques fichiers montre que `ptr_section_3` n'a pas le même aspect que `ptr_section_4` et `ptr_section_5`.
+- Sur `CH_04.BIN` et `CH_38.BIN`, le début de `ptr_section_3` est identique et ressemble fortement à une suite de couleurs PSX 16-bit (`0x0000`, `0x7F7B`, `0x739C`, `0x77BD`, `0x7BDE`, `0x7FFF`, ...).
+- À l'inverse, `ptr_section_4` et `ptr_section_5` montrent souvent des payloads plus denses et plus compatibles avec des blocs image/données, mais `ptr_section_5` n'est pas exclusivement dans ce cas.
+
+### 38.2 Table des preuves
+
+| Fichier | Section | Début brut | Lecture minimale | Preuve |
+|--------|---------|------------|------------------|--------|
+| `CH_04.BIN` | `ptr_section_3` | `00 00 7B 7F 9C 73 BD 77 DE 7B FF 7F DE 7F BD 7F` | palette/CLUT probable | suite de mots 16-bit bornés comme des couleurs PSX |
+| `CH_38.BIN` | `ptr_section_3` | `00 00 7B 7F 9C 73 BD 77 DE 7B FF 7F DE 7F BD 7F` | palette/CLUT probable | motif strictement identique à `CH_04.BIN` |
+| `CH_11.BIN` | `ptr_section_3` | `59 09 56 00 F4 00 A0 88 23 C0 FC 3F A8 3F 0C A6` | données texture/CLUT | forme moins évidente, mais toujours distincte des banques `4/5` |
+| `IN_08.BIN` | `ptr_section_3` | `00 00 08 21 84 10 21 04 1E 16 B9 0D 12 05 91 72` | palette/CLUT probable | suite de mots 16-bit plausible pour une palette |
+| `CH_04.BIN` | `ptr_section_4` | `00 00 E9 90 0B 7E 4E FE B1 FE F5 FE 58 FF 9B 7F` | banque image/données probable | payload dense non répétitif |
+| `CH_04.BIN` | `ptr_section_5` | `00 00 00 00 00 00 00 00 00 00 98 FF A9 DD AB FE` | CLUT-compatible possible | plus tard confirmé par `load_set raw tbl=5` en `16x1` depuis cette section |
+
+### 38.3 Structure partielle inchangée
+
+```c
+typedef struct CHBinFileHeaderCommon {
+    ushort reloc_loop_bound;  // +0x00 CERTAIN
+    ushort header_flags;      // +0x02 CERTAIN
+    uint   entry_count;       // +0x04 CERTAIN
+    uint   ptr_entry_table;   // +0x08 CERTAIN
+    uint   ptr_section_3;     // +0x0C CERTAIN comme slot header; sémantique PROBABLE palette/CLUT
+    uint   ptr_section_4;     // +0x10 CERTAIN comme slot header; sémantique PROBABLE banque image
+    uint   ptr_section_5;     // +0x14 CERTAIN comme slot header; sémantique PROBABLE banque image majoritaire mais non exclusive
+} CHBinFileHeaderCommon;
+```
+
+### 38.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `tbl=3/4/5` référence structurellement les slots header `ptr_section_3/4/5`.
+- Les débuts bruts de `ptr_section_3` et `ptr_section_4/5` n'ont pas le même profil de données sur plusieurs fichiers.
+
+**PROBABLE**
+- `ptr_section_3` stocke principalement des palettes / CLUT ou données immédiatement liées aux CLUT.
+- `ptr_section_4` stocke un contenu texture-related mixte, au moins image en sync et parfois CLUT-compatible en async.
+- `ptr_section_5` stocke majoritairement des payloads image/texture dans le chemin sync observé.
+- `ptr_section_5` peut aussi fournir au moins un payload raw CLUT-compatible (`CH_04.BIN`, `load_set raw tbl=5`, `16x1`).
+
+**INCONNU**
+- Tous les fichiers suivent-ils strictement cette séparation, ou certains mélangent palette et image dans `ptr_section_3`.
+- Format interne exact de `ptr_section_4` et `ptr_section_5`.
+
+### 38.5 Prochaines actions Ghidra recommandées
+
+1. Trouver, dans le chemin async texture, la routine qui consomme `ImageLoadRequest_ARRAY_800a67b0[index].dataptr` pour voir si le traitement diffère selon palette vs image.
+2. Comparer plus finement `CH_04.BIN` et `CH_38.BIN`, qui partagent le même début de `ptr_section_3`, afin de voir si la palette est réutilisée telle quelle.
+3. Vérifier en émulation si un `tex_set tbl=3` charge uniquement une CLUT ou déclenche aussi un upload de texture associé.
+
+---
+
+## Section 39 — Preuve directe : le chemin async upload une CLUT 16 couleurs
+
+### 39.1 Résumé factuel
+
+- `AnimCmd_AsyncLoadTexture` ne charge pas directement une image en VRAM.
+- Il remplit une structure `ImageLoadRequest` dont `dataptr` pointe vers le slot CH_BIN sélectionné par `tbl`.
+- La routine appelée ensuite, renommée `UploadClutRowFromImageLoadRequest` (`0x80067588`), copie exactement `0x20` octets depuis `dataptr`.
+- Elle traite ces données comme `16` mots de `ushort`, applique des modifications bit-à-bit sur les couleurs, puis appelle `LoadImage` avec un rectangle `w=0x10`, `h=1`.
+- Cette séquence est une preuve directe d'un upload de ligne CLUT 16 couleurs, pas d'un upload générique de texture.
+
+### 39.2 Table des preuves
+
+| Élément | Accès / comportement | Type minimal | Fonction(s) | Preuve |
+|--------|-----------------------|--------------|-------------|--------|
+| `ImageLoadRequest.dataptr` | source copiée par `memmove(..., dataptr, 0x20)` | pointeur vers 32 octets | `UploadClutRowFromImageLoadRequest` | copie fixe de `0x20` octets |
+| buffer temporaire | réinterprété comme `ushort*` | 16 couleurs 16-bit | `UploadClutRowFromImageLoadRequest` | accès `ushort` et masques `0x8000` / `0x7FFF` |
+| upload VRAM | `LoadImage` sur `RECT.w = 0x10`, `RECT.h = 1` | ligne CLUT 16x1 | `UploadClutRowFromImageLoadRequest` | géométrie VRAM exacte |
+| index `tbl` async | sélectionne `*(void **)(&g_cdFileBufferTable.reloc_loop_bound + idx*2)` | slot header runtime | `AnimCmd_AsyncLoadTexture` | mapping structurel vers `ptr_section_3/4/5` |
+
+### 39.3 Extrait minimal de preuve
+
+```c
+memmove(temp, imageLoadRequest->dataptr, 0x20);
+puVar5 = (ushort *)((int)temp + imageLoadRequest->field4_0x9 * 2);
+...
+*puVar5 = uVar2;
+if ((imageLoadRequest->field6_0xb & 0x80) != 0) {
+    *puVar5 = uVar2 | 0x8000;
+}
+if ((imageLoadRequest->field6_0xb & 1) != 0) {
+    *puVar5 = *puVar5 & 0x7fff;
+}
+...
+RECT_8009aba8.w = 0x10;
+RECT_8009aba8.h = 1;
+LoadImage(&RECT_8009aba8, temp);
+```
+
+### 39.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- Le chemin async manipule une ligne de `16` couleurs `ushort` et l'upload en `16x1` vers la VRAM.
+- `tex_set` / `AsyncLoadTexture` est donc un chemin CLUT/palette, pas un chargeur d'image générique.
+- Toute section CH_BIN utilisée par `tex_set` doit fournir des données compatibles avec ce format CLUT.
+
+**PROBABLE**
+- `ptr_section_3` est la banque CLUT principale, car `tbl=3` domine dans les hits async et les débuts bruts observés ressemblent à des palettes.
+- `ptr_section_4` peut servir de banque mixte contenant aussi des données CLUT dans certains fichiers.
+- `ptr_section_5` semble rester hors du chemin CLUT async dans les échantillons actuels.
+
+**INCONNU**
+- La structure exacte des sous-données CLUT à l'intérieur des sections `3` et `4`.
+- La raison fonctionnelle précise des rares `tex_set tbl=4`.
+
+### 39.5 Prochaines actions Ghidra recommandées
+
+1. Chercher si le code prépare `field3_0x8..field6_0xb` avec une sémantique déjà connue (cycle palette, indices de couleurs, flags STP/transparency).
+2. Pour un fichier avec `tex_set tbl=4` (`CH_04.BIN` ou `CH_38.BIN`), comparer le début de `ptr_section_4` à la fenêtre `0x20` réellement consommée par l'async.
+3. Garder `ptr_section_5` du côté image tant qu'aucun hit async `tbl=5` n'est observé.
+
+---
+
+## Section 40 — Sémantique minimale prouvée de `ImageLoadRequest`
+
+### 40.1 Résumé factuel
+
+- La structure `ImageLoadRequest` a été relue et ses 4 octets anonymes ont été renommés en Ghidra.
+- `UploadClutRowFromImageLoadRequest` prouve que `palette_first_index` et `palette_last_index` délimitent une sous-plage inclusive de la CLUT.
+- `palette_cycle_offset` sert d'offset modulo dans cette sous-plage; il ne désigne pas un pointeur ni une taille.
+- `palette_flags` porte au minimum deux bits certains sur le STP (`bit7=set`, `bit0=clear`).
+- Le chemin “update” de `AnimCmd_AsyncLoadTexture` montre en plus que `palette_flags[6:4]` sert CERTAINEMENT d'état de reload/countdown décrémenté par pas de `0x10`.
+
+### 40.2 Table des preuves
+
+| Champ | Accès observé | Type minimal | Fonction(s) | Preuve |
+|------|----------------|--------------|-------------|--------|
+| `palette_cycle_offset` | utilisé dans `(cycle % count) + i` | offset de rotation modulo | `UploadClutRowFromImageLoadRequest`, `ExecuteAnimStreamBatch` | décale la sélection des couleurs dans la sous-plage |
+| `palette_first_index` | base de `puVar5` et base de lecture | borne basse inclusive | `UploadClutRowFromImageLoadRequest` | `puVar5 = temp + first*2`; `count = last-first+1` |
+| `palette_last_index` | calcule `count = last-first+1` | borne haute inclusive | `UploadClutRowFromImageLoadRequest` | boucle bornée sur la sous-plage |
+| `palette_flags.bit7` | `| 0x8000` sur la couleur | forcer STP | `UploadClutRowFromImageLoadRequest` | set du bit 15 PSX |
+| `palette_flags.bit0` | `& 0x7FFF` sur la couleur | effacer STP | `UploadClutRowFromImageLoadRequest` | clear du bit 15 PSX |
+| `palette_flags[6:4]` | testé à zéro, rechargé depuis `uVar1 & 0x7000`, puis `-0x10` | état de reload/countdown CERTAIN | `AnimCmd_AsyncLoadTexture` | état persistant décrémenté par palier |
+
+### 40.3 Structure partielle prouvée
+
+```c
+typedef struct ImageLoadRequest {
+    void *dataptr;              // +0x00 CERTAIN
+    short x;                    // +0x04 CERTAIN
+    short y;                    // +0x06 CERTAIN
+    byte palette_cycle_offset;  // +0x08 CERTAIN
+    byte palette_first_index;   // +0x09 CERTAIN
+    byte palette_last_index;    // +0x0A CERTAIN
+    byte palette_flags;         // +0x0B CERTAIN/PROBABLE mixte
+} ImageLoadRequest;
+```
+
+### 40.4 Extraits minimaux de preuve
+
+```c
+puVar5 = (ushort *)((int)temp + imageLoadRequest->palette_first_index * 2);
+count = (imageLoadRequest->palette_last_index - imageLoadRequest->palette_first_index) + 1;
+uVar2 = *(ushort *)((imageLoadRequest->palette_first_index + ((palette_cycle_offset % count) + i) % count) * 2 + dataptr);
+```
+
+```c
+if ((imageLoadRequest->palette_flags & 0x80) != 0) {
+    *puVar5 = uVar2 | 0x8000;
+}
+if ((imageLoadRequest->palette_flags & 1) != 0) {
+    *puVar5 = *puVar5 & 0x7fff;
+}
+```
+
+```c
+if ((req->palette_flags >> 4 & 7) == 0) {
+    req->palette_flags |= (cmdWord >> 8) & 0x70;
+    req->palette_cycle_offset = req->palette_cycle_offset - 1;
+}
+req->palette_flags = req->palette_flags - 0x10;
+```
+
+### 40.5 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `palette_first_index` et `palette_last_index` bornent une sous-plage inclusive de 16 couleurs.
+- `palette_cycle_offset` est un offset de rotation modulo appliqué à cette sous-plage.
+- `palette_flags.bit7` force le bit STP; `palette_flags.bit0` l'efface.
+- `palette_flags[6:4]` est un état de reload/countdown alimenté par le mot de commande async puis décrémenté.
+
+**PROBABLE**
+- Le décrément de `palette_cycle_offset` dans `AnimCmd_AsyncLoadTexture` sert à faire avancer une animation de palette.
+
+**INCONNU**
+- Rôle exact éventuel des bits `1..3` de `palette_flags`.
+- Sémantique gameplay/visuelle précise des deux requêtes globales `g_imageLoadReq1` et `g_imageLoadReq2`.
+
+### 40.6 Prochaines actions Ghidra recommandées
+
+1. Pour un stream `tex_set`, décoder explicitement les mots `[5]` et `[6]` comme `cycle/start/end/flags` sur quelques exemples réels.
+2. Déterminer si l'état `palette_flags[6:4]` code un délai en frames, un nombre de répétitions, ou un diviseur de cadence.
+3. Chercher si des bits `1..3` de `palette_flags` sont jamais positionnés dans les corpus CH_BIN.
+
+---
+
+## Section 45 — Raffinement corpus de `unknown_0x08`
+
+### 45.1 Résumé factuel
+
+- Le scan corpus complet montre que `unknown_0x08` prend 4 valeurs observées, pas seulement `0x00000000` et `0x00010001`.
+- Dans le même corpus, `primitive_count_packed.high16 > 1` n'apparaît que sur `3` entrées : `CH_09.BIN E6/E7` et `CH_31.BIN E4`.
+- Dans `GAME.EXE`, aucun consommateur runtime direct de `unknown_0x08` n'a été observé à ce stade : la table `g_chBinEntryTableBasePtr` n'est relue structurellement que par `RenderBattleScene3D`, et ce champ n'y est pas lu.
+- Distribution observée :
+    - `0x00010001` : 694 occurrences
+    - `0x00000000` : 95 occurrences
+    - `0x00010002` : 2 occurrences
+    - `0x00030001` : 1 occurrence
+- Le `low16` ne prend que `0`, `1`, `2` dans le corpus actuel.
+- Le `high16` correspond presque toujours à `primitive_count_packed.high16`; seules `CH_09.BIN E6/E7` dévient (`primHi=3`, `u08Hi=1`).
+
+### 45.2 Table des cas rares
+
+| Fichier | Entrée | `primitive_count_packed` | `unknown_0x08` | Observation |
+|--------|--------|---------------------------|----------------|-------------|
+| `CH_26.BIN` | `E12` | `0x00010010` | `0x00010002` | classe `low16=2`, `high16` aligné sur `primHi=1` |
+| `CH_26.BIN` | `E13` | `0x00010010` | `0x00010002` | même profil que `E12` |
+| `CH_31.BIN` | `E4` | `0x00030012` | `0x00030001` | `high16=3`, classe basse normale `1` |
+| `CH_09.BIN` | `E6` | `0x00030003` | `0x00010001` | anomalie: `u08Hi=1` au lieu de `3` |
+| `CH_09.BIN` | `E7` | `0x00030003` | `0x00010001` | même anomalie |
+
+### 45.3 Corrélations certaines et probables
+
+| Corrélation | Statut | Preuve |
+|------------|--------|--------|
+| `u08.low16 ∈ {0,1,2}` | CERTAIN | scan corpus complet |
+| `u08.high16 == prim.high16` dans la quasi-totalité des cas | PROBABLE très fort | tous les cas sauf `CH_09 E6/E7` |
+| `prim.high16 > 1` est un cas spécial très rare | CERTAIN | seulement `CH_09 E6/E7` et `CH_31 E4` |
+| aucun lecteur runtime direct de `unknown_0x08` observé dans `GAME.EXE` | CERTAIN | `g_chBinEntryTableBasePtr` uniquement consommé structurellement par `RenderBattleScene3D` |
+| `u08.low16 = 0` pour les entrées shared/header-like | PROBABLE fort | majorité des cas `id=0`, `prim=0`, pointeurs partagés |
+| `u08.low16 = 2` marque une sous-classe rare | PROBABLE | seulement `CH_26 E12/E13` |
+| la classe `low16=2` n'est pas expliquée par `primitive_count_packed` seul | CERTAIN | d'autres entrées animées avec `prim=0x00010010` gardent `u08=0x00010001` |
+
+### 45.3 bis Comparaison structurelle des cas rares
+
+| Cas | `primitive_count_packed` | `unknown_0x08` | `Vertex.counts` | `Mesh.counts` | `Lighting.counts` | Lecture minimale |
+|-----|---------------------------|----------------|-----------------|---------------|-------------------|------------------|
+| `CH_26 E12/E13` | `0x00010010` | `0x00010002` | `0x00010040` | `0x00010001` | `0x00010010` | sous-classe rare `low16=2`, avec mesh-counts compacts |
+| `CH_04 E4/E5` | `0x00010010` | `0x00010001` | `0x00400001` | `0x00100001` | `0x00010010` | même `prim`, mais profil segments différent |
+| `CH_06 E3` | `0x00010010` | `0x00010001` | `0x00010040` | `0x00100001` | `0x00030010` | même `prim`, encore sans `low16=2` |
+| `CH_31 E4` | `0x00030012` | `0x00030001` | `0x00010004` | `0x00120001` | `0x00010001` | seul cas où `u08.high16=3` suit `primHi=3` |
+| `CH_09 E6/E7` | `0x00030003` | `0x00010001` | `0x00010004` | `0x00010100` | `0x00010100` | anomalie: `primHi=3` mais `u08Hi=1`, avec segments `0x0100` |
+
+### 45.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `unknown_0x08` est lui aussi un champ structuré, pas un simple booléen.
+- Son `low16` n'observe actuellement que `0`, `1`, `2`.
+- Sa forme dominante est `0x00010001`.
+- `CH_26 E12/E13` ne se distinguent pas uniquement par `prim=0x00010010` : leurs métadonnées de segments diffèrent aussi des autres cas animés `0x00010010`.
+- `CH_09 E6/E7` et `CH_31 E4` sont les seuls cas observés avec `prim.high16 = 3`, mais ils n'ont pas le même profil de segments.
+- Aucun lecteur runtime direct de `unknown_0x08` n'a été confirmé dans `GAME.EXE`.
+- `CH_26 E12` a une ouverture de stream observée unique dans le corpus (`batch vide`, puis `1207 0100`).
+
+**PROBABLE**
+- `unknown_0x08.high16` encode une information liée à `primitive_count_packed.high16`.
+- `unknown_0x08.low16` encode une classe/type d'entrée, où `1` = normal, `0` = shared/special, `2` = sous-classe rare corrélée à une forme particulière de segment mesh.
+- `CH_26 E13` partage en revanche son ouverture de stream (`batch vide`, puis `1306 2108`) avec au moins `CH_38 E6`, donc cette signature seule n'explique pas `low16=2`.
+
+**INCONNU**
+- Signification exacte de `low16 = 2`.
+- Pourquoi `CH_09 E6/E7` brisent la corrélation `u08Hi == primHi`.
+- S'il existe un lecteur code de ce champ hors `GAME.EXE` ou dans une portion encore non reliée du pipeline.
+
+### 45.5 Prochaines actions Ghidra recommandées
+
+1. Examiner côté code les lecteurs de `mesh.counts_packed = 0x00010100` et `0x00120001`, car ce sont eux qui séparent actuellement les anomalies `CH_09` et `CH_31`.
+2. Comparer en détail `CH_26 E12/E13` aux autres cas animés `prim=0x00010010` pour voir si la classe `low16=2` suit un format mesh spécifique.
+3. Chercher un consommateur code de `unknown_0x08` en partant non pas de la table d'entrées globale, mais de fonctions spécialisées qui traiteraient des cas spéciaux (`single-primitive`, overlay, effets, etc.).
+
+---
+
+## Section 46 — Corpus `load_set` : répartition réelle des slots header `3/4/5`
+
+### 46.1 Résumé factuel
+
+- Un scan heuristique ciblé des `load_set` plausibles (`opcode 0x03`, 7 mots, `tbl in {3,4,5}`) donne `123` hits sur le corpus actuel.
+- Répartition totale observée : `tbl=3` -> `53`, `tbl=4` -> `51`, `tbl=5` -> `19`.
+- Répartition par chemin :
+    - `tbl=3` -> `21 raw`, `32 decomp`
+    - `tbl=4` -> `3 raw`, `48 decomp`
+    - `tbl=5` -> `1 raw`, `18 decomp`
+- `tbl=5` apparaît donc bien en sync, mais presque uniquement sur le chemin décompressé.
+- Le chemin décompressé n'est pas réservé à `tbl=4/5` : `tbl=3` l'utilise aussi via le même `DecompressLZSS -> LoadImage` générique.
+- Le seul cas raw plausible `tbl=5` observé est `CH_04.BIN foff=0x0DAA`, avec upload `16x1` à `y=0x01FF`, compatible CLUT.
+
+### 46.2 Table des preuves
+
+| Cas | Commande | Lecture minimale | Preuve |
+|-----|----------|------------------|--------|
+| `CH_09.BIN foff 0x0242` | `0003 02C0 01FF 0010 0001 0003 0000` | `tbl=3`, chemin raw, upload `16x1` CLUT-like | source `ptr_section_3` commence par `FBDE F79D F35D ...` |
+| `CH_01.BIN foff 0x077A` | `0103 02C0 0100 0040 00FF 0004 0000` | `tbl=4`, chemin décompressé image | dimensions texture plausibles `64x255` |
+| `CH_11.BIN foff 0x06DC` | `0103 02C0 0100 0040 0098 0005 0000` | `tbl=5`, chemin décompressé image | dimensions texture plausibles `64x152` |
+| `CH_04.BIN foff 0x0DAA` | `0003 02E0 01FF 0010 0001 0005 0000` | `tbl=5`, chemin raw, upload `16x1` CLUT-like | source `ptr_section_5` commence par `FF98 DDA9 FEAB ...` |
+
+### 46.3 Lecture minimale par slot
+
+| Slot | Statut | Lecture minimale |
+|------|--------|------------------|
+| `ptr_section_3` | CERTAIN / PROBABLE | slot structurel `tbl=3`; banque CLUT-capable principale, mais aussi utilisée en décompressé |
+| `ptr_section_4` | CERTAIN / PROBABLE | slot structurel `tbl=4`; banque mixte surtout décompressée |
+| `ptr_section_5` | CERTAIN / PROBABLE | slot structurel `tbl=5`; banque surtout décompressée, avec au moins un cas raw CLUT-compatible |
+
+### 46.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `load_set` utilise réellement les trois slots header `3`, `4`, `5` dans le corpus CH_BIN.
+- `tbl=5` n'est pas un faux slot mort : il alimente des uploads sync dans plusieurs fichiers.
+- Le corpus observé montre `tbl=5` quasi exclusivement sur le chemin décompressé, avec un seul cas raw plausible.
+
+**PROBABLE**
+- `ptr_section_3` est la banque CLUT principale observée, sans être limitée au raw.
+- `ptr_section_4` est une banque mixte à dominante image/compressée.
+- `ptr_section_5` est une banque image/compressée secondaire ou spécialisée, mais non exclusivement image.
+
+**INCONNU**
+- Différence exacte de format interne entre `ptr_section_4` et `ptr_section_5`.
+- Pourquoi certains personnages placent une CLUT raw dans `ptr_section_5` au lieu de `ptr_section_3`.
+- Si le choix `tbl=4` vs `tbl=5` reflète un format de compression, une profondeur texture, ou seulement une organisation de contenu par fichier.
+
+### 46.5 Prochaines actions Ghidra recommandées
+
+1. Comparer localement plusieurs paires `load_set tbl=4` / `load_set tbl=5` d'un même personnage pour voir si le flux aval diffère après `DecompressAndLoadImage`.
+2. Examiner le décompresseur utilisé par `AnimCmd_LoadTexture` pour voir si les payloads `ptr_section_4` et `ptr_section_5` ont un marqueur ou un framing distinct.
+3. Vérifier si les rares `load_set raw tbl=4/5` sont tous des CLUT `16x1` ou si certains chargent autre chose.
+
+---
+
+## Section 47 — Format exact de la commande `AnimCmd_LoadTexture`
+
+### 47.1 Résumé factuel
+
+- `AnimCmd_LoadTexture` consomme toujours `7` mots et retourne `streamPtr + 7`.
+- Le `word0.low8` est l'opcode `0x03`.
+- Le bit `0` du byte haut de `word0` choisit le chemin :
+    - `0` -> upload raw direct via `LoadImage_ReturnTPageOrClutId(..., isClut=1)`
+    - `1` -> upload décompressé via `DecompressLZSS` puis `LoadImage_ReturnTPageOrClutId(..., isClut=0)`
+- Les `word1..4` sont exactement `x, y, w, h`.
+- `word5` est l'index `tbl` dans le header runtime CH_BIN.
+- `word6` vaut `0x0000` dans `118/123` hits plausibles; les `5` cas non nuls ressemblent fortement à des faux positifs heuristiques.
+
+### 47.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `word0.low8` | `0x03` | opcode | `AnimCmd_LoadTexture` | dispatch opcode |
+| `word0.high8.bit0 = 0` | branche raw | bit de forme | `AnimCmd_LoadTexture` | appel `LoadImage_ReturnTPageOrClutId(..., '\x01')` |
+| `word0.high8.bit0 = 1` | branche decomp | bit de forme | `AnimCmd_LoadTexture` + `DecompressAndLoadImage` | appel `DecompressLZSS(...)` puis `LoadImage_ReturnTPageOrClutId(..., 0)` |
+| `word1..4` | `x,y,w,h` | coordonnées/dimensions VRAM | `AnimCmd_LoadTexture` | passage direct aux paramètres de chargement |
+| `word5` | `tbl` | index slot header | `AnimCmd_LoadTexture` | `*(... + streamPtr[5] * 2)` |
+| `word6` | quasi toujours `0` | champ réservé probable | scan corpus CH_BIN | `118/123` hits plausibles à zéro |
+
+### 47.3 Structure minimale de la commande
+
+```c
+// word0 low byte = 0x03
+
+word0: control | 0x03
+word1: vram_x
+word2: vram_y
+word3: width
+word4: height
+word5: tbl_index   // 3, 4, 5 observes
+word6: probable reserved_zero
+```
+
+### 47.4 Exemples plausibles
+
+```text
+0003 02C0 01FF 0010 0001 0003 0000
+-> raw, tbl=3, x=0x02C0, y=0x01FF, w=16, h=1 : upload CLUT-compatible
+
+0103 02C0 0100 0040 00FF 0004 0000
+-> decomp, tbl=4, x=0x02C0, y=0x0100, w=64, h=255 : upload image décompressée
+
+0103 02C0 0100 0040 0098 0005 0000
+-> decomp, tbl=5, x=0x02C0, y=0x0100, w=64, h=152 : upload image décompressée
+
+0003 02E0 01FF 0010 0001 0005 0000
+-> raw, tbl=5, x=0x02E0, y=0x01FF, w=16, h=1 : rare upload CLUT-compatible depuis section 5
+```
+
+### 47.5 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `AnimCmd_LoadTexture` a un format fixe de `7` mots.
+- `word1..5` sont exactement `x, y, w, h, tbl`.
+- Le bit `0` du byte haut de `word0` choisit raw CLUT-like vs image décompressée.
+- Le chemin décompressé utilise le même couple générique `DecompressLZSS` -> `LoadImage_ReturnTPageOrClutId` quel que soit `tbl=3/4/5`.
+
+**PROBABLE**
+- `word6` est un champ réservé / padding pour la vraie commande `load_set`.
+- Les hits avec `word6 != 0` sont majoritairement des faux positifs du scan heuristique plutôt que des variantes réelles de format.
+
+**INCONNU**
+- Rôle exact éventuel des autres bits du byte haut de `word0` au-delà de `bit0`.
+- Existence d'une variante réelle de `load_set` avec `word6 != 0` dans des streams non encore validés dynamiquement.
+
+### 47.6 Prochaines actions Ghidra recommandées
+
+1. Valider dynamiquement un cas raw `tbl=5` (`CH_04.BIN`) pour confirmer qu'il produit bien une CLUT et non un artefact de scan.
+2. Vérifier si les bits restants du byte haut de `word0` sont toujours nuls sur des commandes réellement exécutées.
+3. Relier les `load_set` plausibles aux streams d'animation réellement appelés pour écarter définitivement les quelques faux positifs heuristiques.
+
+---
+
+## Section 47 bis — Confirmation du pipeline CH_BIN dans `VS.EXE`
+
+### 47 bis.1 Résumé factuel
+
+- Le pipeline CH_BIN de combat a été retrouvé dans `VS.EXE` avec les mêmes buffers globaux et le même découpage fonctionnel que dans `GAME.EXE`.
+- `0x800358b8` est CERTAINEMENT l'homologue de `RenderBattleScene3D`.
+- `0x80036768` est CERTAINEMENT l'homologue de `ExecuteAnimStreamBatch`.
+- `0x80037f20` est CERTAINEMENT l'homologue de `AnimCmd_SetCharRenderState`.
+- `0x800373a0` est CERTAINEMENT l'homologue de `AnimCmd_RenderEntryGroup`.
+- `0x80037e30` est CERTAINEMENT l'homologue de `AnimCmd_LoadTexture`.
+- `0x80061b0c`, `0x80061a60`, `0x80034e10` sont CERTAINEMENT les homologues de `LoadImage_ReturnTPageOrClutId`, `DecompressAndLoadImage`, `DecompressLZSS`.
+- Dans `VS.EXE`, comme dans `GAME.EXE`, la table d'entrées CH_BIN relocalisée n'est relue structurellement que par `RenderBattleScene3D`, et le champ `CHBinMeshEntry.unknown_0x08` n'y est pas lu.
+
+### 47 bis.2 Table des preuves
+
+| Élément `VS.EXE` | Homologue `GAME.EXE` | Statut | Preuve minimale |
+|------------------|----------------------|--------|-----------------|
+| `0x800358b8` | `RenderBattleScene3D` | CERTAIN | même `g_cdFileBaseOffset = 0x2e800`, même relocalisation header, mêmes buffers `g_renderMetadataBuffer`, `g_meshCountBuffer`, `g_meshStreamPtrBuffer`, `g_meshOffsetBuffer`, même parcours de la table CH_BIN |
+| `0x80036768` | `ExecuteAnimStreamBatch` | CERTAIN | même boucle sur `g_meshStreamPtrBuffer`, même dispatch par `opcode & 0xff`, même décrément de `g_meshOffsetBuffer`, même passage à `terminator + 2 words` |
+| `0x800373a0` | `AnimCmd_RenderEntryGroup` | CERTAIN | même overlay d'un groupe d'entrées CH_BIN vers `g_renderMetadataBuffer`, `g_meshCountBuffer`, `g_meshStreamPtrBuffer`, `g_meshOffsetBuffer`, même absence de lecture du champ `entry[2]` |
+| `0x80037f20` | `AnimCmd_SetCharRenderState` | CERTAIN | même format de commande, même usage de la table partagée, même écriture de `renderFlags` et du compteur/masque associé |
+| `0x80037e30` | `AnimCmd_LoadTexture` | CERTAIN | même format fixe 7 mots, même test `bit0`, même branche raw vers `LoadImage_ReturnTPageOrClutId(..., isClut=1)`, même branche decomp vers `DecompressAndLoadImage(..., isClut=0)` |
+| `0x80061b0c` | `LoadImage_ReturnTPageOrClutId` | CERTAIN | même calcul du retour TPage/CLUT après `LoadImage` |
+| `0x80061a60` | `DecompressAndLoadImage` | CERTAIN | même séquence `DecompressLZSS` puis `LoadImage_ReturnTPageOrClutId` puis `DrawSync(0)` |
+| `0x80034e10` | `DecompressLZSS` | CERTAIN | même décompresseur LZSS, même algorithme, mêmes sites d'appel |
+| `DAT_801faa00` | `g_meshStreamPtrBuffer` | CERTAIN | initialisé par `RenderBattleScene3D`, consommé par `ExecuteAnimStreamBatch` |
+| `DAT_801faa40` | `g_meshOffsetBuffer` | CERTAIN | initialisé à partir du `word +0x02` du stream, consommé comme compteur de batch |
+| `DAT_801fa980` | `g_meshCountBuffer` | CERTAIN | rempli pendant l'overlay des entrées CH_BIN dans `RenderBattleScene3D` |
+| `DAT_801fa880` | `g_renderMetadataBuffer` | CERTAIN | rempli pendant l'overlay des entrées CH_BIN dans `RenderBattleScene3D` |
+| `DAT_801d2008` | base de table `CHBinMeshEntry` runtime | CERTAIN | lu et éventuellement réécrit uniquement dans `RenderBattleScene3D` observé à ce stade |
+
+### 47 bis.3 Lecture spécifique de `unknown_0x08`
+
+| Champ | Fonction | Accès observé | Statut | Preuve |
+|-------|----------|---------------|--------|--------|
+| `entry[0]` (`entry_id_packed`) | `RenderBattleScene3D` | lu | CERTAIN | copié vers `g_renderMetadataBuffer` et `g_meshEntryFlagsHiBuf` |
+| `entry[1]` (`primitive_count_packed`) | `RenderBattleScene3D` | lu | CERTAIN | borne la boucle de rendu des primitives |
+| `entry[2]` (`unknown_0x08`) | `RenderBattleScene3D` | non lu | CERTAIN | aucun accès via `local_38[1]` dans l'homologue `VS.EXE` |
+| `entry[2]` (`unknown_0x08`) | `AnimCmd_RenderEntryGroup` | non lu | CERTAIN | aucun accès au slot `+0x08`; le handler lit `entry[0]`, `entry[1]`, puis `entry[3..6]` |
+| table `DAT_801d2008` hors `RenderBattleScene3D` | autres fonctions observées | non lu | CERTAIN au stade actuel | XREF directs actuels uniquement vers `RenderBattleScene3D` |
+
+### 47 bis.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `VS.EXE` partage le même pipeline CH_BIN de combat que `GAME.EXE` pour les fonctions déjà renommées ci-dessus.
+- Le framing `AnimStream` et le format `load_set` prouvés dans `GAME.EXE` s'appliquent aussi à `VS.EXE`.
+- `unknown_0x08` n'est pas lu dans l'homologue `VS.EXE` de `RenderBattleScene3D`.
+- `unknown_0x08` n'est pas lu non plus dans l'homologue `VS.EXE` de `AnimCmd_RenderEntryGroup`.
+
+**PROBABLE**
+- Les autres handlers principaux du dispatch `AnimStream` de `VS.EXE` correspondent un à un à ceux déjà identifiés dans `GAME.EXE`.
+
+**INCONNU**
+- Existence d'un lecteur de `unknown_0x08` ailleurs dans `VS.EXE`, hors du sous-ensemble de fonctions actuellement relié au pipeline CH_BIN.
+- Possibilité de factoriser immédiatement les structures CH_BIN dans l'archive `DbzLegendsTypes` via MCP. Les outils disponibles ici permettent le renommage, les labels et les commentaires dans les programmes, mais n'exposent pas de déplacement direct d'un type existant vers une archive projet.
+
+### 47 bis.5 Prochaines actions Ghidra recommandées
+
+1. Remonter les autres entrées de la table de dispatch `g_animStreamDispatchTable` de `VS.EXE` pour confirmer les homologues encore anonymes sans recherche globale.
+2. Cibler les rares fonctions qui touchent `g_meshStreamPtrBuffer` hors `RenderBattleScene3D` / `ExecuteAnimStreamBatch` pour vérifier si un cas spécial consomme indirectement `unknown_0x08`.
+3. Si l'archive `DbzLegendsTypes` doit devenir la source unique des structures CH_BIN, effectuer ce déplacement depuis l'UI Ghidra ou via un outil dédié non exposé par MCP, puis réappliquer ces types partagés aux deux EXE.
+
+---
+
+## Section 48 — Framing des batches `AnimStream`
+
+### 48.1 Résumé factuel
+
+- `RenderBattleScene3D` initialise chaque stream animé en copiant `*(u16 *)(streamBase + 2)` dans `g_meshOffsetBuffer` et en positionnant le pointeur courant à `streamBase + 4`.
+- Sur `223/223` streams non nuls observés dans le corpus, le mot `streamBase + 0x00` vaut `0x0000`.
+- Distribution observée de `initial_countdown` (`streamBase + 0x02`) : `1` -> `197`, `4` -> `7`, `0` -> `7`, `2` -> `6`, `8` -> `6`.
+- `ExecuteAnimStreamBatch` exécute alors les commandes jusqu'à rencontrer le mot `0x0000`.
+- Après ce terminator, le code décrémente `g_meshOffsetBuffer`; quand ce compteur atteint `0`, il avance vers `terminator + 2 words` et recharge un nouveau compteur depuis le mot juste après le terminator.
+- Donc un stream est encadré en batches : `commands... 0x0000 next_countdown commands... 0x0000 next_countdown ...`
+- Cela explique les streams qui “commencent” par `0x0000` dans le dump brut : ils ont un premier batch vide avant le batch réel.
+
+### 48.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `streamBase + 0x00` | `0x0000` sur 223/223 streams | mot d'en-tête constant | scan corpus CH_BIN | aucun contre-exemple observé |
+| `streamBase + 0x02` | lu au setup | compteur initial de batch | `RenderBattleScene3D` / `AnimCmd_RenderEntryGroup` | copie vers `g_meshOffsetBuffer` |
+| `streamBase + 0x04` | début exécution | pointeur sur batch courant | `RenderBattleScene3D` / `AnimCmd_RenderEntryGroup` | copie vers `g_meshStreamPtrBuffer` |
+| `0x0000` | fin de batch | terminator | `ExecuteAnimStreamBatch` | boucle `while (*puVar2 != 0)` |
+| `terminator + 1` | relu au changement de batch | prochain countdown | `ExecuteAnimStreamBatch` | `*puVar4 = puVar2[1]` |
+| `terminator + 2` | nouvelle position d'exécution | batch suivant | `ExecuteAnimStreamBatch` | `puVar6 = puVar2 + 2` |
+
+### 48.3 Structure minimale du framing
+
+```c
+typedef struct AnimStreamBatchFraming {
+    uint16_t zero_0x00;            // CERTAIN dans le corpus observé: 0x0000
+    uint16_t initial_countdown;    // CERTAIN
+    uint16_t batch_words[];        // commandes jusqu'au terminator 0x0000
+    // puis répétition implicite:
+    // 0x0000, next_countdown, next_batch_words...
+} AnimStreamBatchFraming;
+```
+
+### 48.4 Exemple explicatif
+
+```text
+CH_26.BIN E12 : 0000 0001 0000 0001 1207 0100 ...
+
+- `initial_countdown = 1`
+- pointeur initial = troisième halfword (`0000`)
+- premier batch = vide (terminator immédiat)
+- `next_countdown = 1`
+- batch réel suivant commence sur `1207 0100 ...`
+```
+
+### 48.5 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- Le premier mot du stream vaut `0x0000` dans tout le corpus non nul observé (`223/223`).
+- Le mot `+0x02` du stream est un countdown initial de batch.
+- Le mot `0x0000` termine un batch d'animation.
+- Le mot qui suit le terminator devient le countdown du batch suivant.
+
+**PROBABLE**
+- Le mot `0x0000` au début du stream est un marqueur fixe de framing, pas une commande.
+- Certains streams utilisent volontairement un premier batch vide pour retarder l'animation utile d'une frame.
+
+**INCONNU**
+- Signification sémantique exacte du mot initial constant `0x0000` au-delà de son rôle de framing.
+- Existence éventuelle d'autres métadonnées avant ou après les batches dans certains fichiers.
+
+### 48.6 Prochaines actions Ghidra recommandées
+
+1. Relire quelques streams avec `initial_countdown > 1` pour vérifier si la cadence des batches suit exactement le mot stocké après chaque terminator.
+2. Déterminer si `unknown_0x00` reste constant sur tout le corpus ou s'il code une variante de framing.
+3. Utiliser ce framing pour nettoyer les scans heuristiques d'opcodes et éliminer les faux positifs hors batch exécuté.
+
+---
+
+## Section 42 — Format exact de la commande `AnimCmd_AsyncLoadTexture`
+
+### 42.1 Résumé factuel
+
+- La commande async `0x0B` n'a pas une taille fixe.
+- Son `word0` contient l'opcode en low-byte (`0x0B`) et un byte de contrôle en high-byte.
+- Si `control.bit7 = 1`, la commande est une initialisation complète et consomme `7` mots.
+- Si `control.bit7 = 0`, la commande est une mise à jour incrémentale et ne consomme qu'`1` mot.
+- `control.bits0..1` sélectionnent l'index de requête `ImageLoadRequest_ARRAY_800a67b0[index]`.
+- `control.bits4..6` alimentent CERTAINEMENT l'état de reload/countdown stocké dans `palette_flags[6:4]`.
+
+### 42.2 Table des preuves
+
+| Élément | Valeur / accès | Type minimal | Fonction | Preuve |
+|--------|-----------------|--------------|----------|--------|
+| `word0.low8` | `0x0B` | opcode | `AnimCmd_AsyncLoadTexture` | dispatch opcode |
+| `word0.high8.bit7` | branche init/update | bit de forme | `AnimCmd_AsyncLoadTexture` | test `if ((uVar3 & 0x80) == 0)` |
+| `word0.high8.bits0..1` | `index = uVar3 & 3` | index de requête | `AnimCmd_AsyncLoadTexture` | sélection de `ImageLoadRequest_ARRAY[index]` |
+| `word0.high8.bits4..6` | `(uVar1 >> 8) & 0x70` | reload/countdown state | `AnimCmd_AsyncLoadTexture` | écrit dans `palette_flags[6:4]` |
+| format init | mots `[0..6]` | commande 7 mots | `AnimCmd_AsyncLoadTexture` | retour `streamPtr + 7` |
+| format update | seul `word0` | commande 1 mot | `AnimCmd_AsyncLoadTexture` | retour `streamPtr + 1` |
+| `word2` init | `0x0000` sur tous les hits plausibles | champ réservé/zero-filled probable | scan corpus CH_BIN | 22/22 exemples plausibles observés à zéro |
+
+### 42.3 Structure minimale de la commande
+
+```c
+// word0 high byte = control, low byte = 0x0B
+
+// format init (control.bit7 = 1)
+word0: control|0x0B
+word1: tbl_index
+word2: probable reserved_zero
+word3: vram_x
+word4: vram_y
+word5: cycle_offset | (first_index << 8)
+word6: last_index | (flags << 8)
+
+// format update (control.bit7 = 0)
+word0: control|0x0B
+```
+
+### 42.4 Exemples plausibles
+
+```text
+800B 0003 0000 02C0 01FF 0100 8008
+-> init, reqIndex=0, tbl=3, x=0x02C0, y=0x01FF, cycle=0, first=1, last=8, flags=0x80
+
+810B 0004 0000 02D0 01FF 0200 8008
+-> init, reqIndex=1, tbl=4, x=0x02D0, y=0x01FF, cycle=0, first=2, last=8, flags=0x80
+
+100B
+-> update, reqIndex=0, reload/countdown bits = 0x10
+```
+
+### 42.5 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- Le byte haut de `word0` est le byte de contrôle du handler async.
+- `bit7` choisit entre format init et format update.
+- `bits0..1` sélectionnent l'entrée `ImageLoadRequest_ARRAY[index]`.
+- `bits4..6` sont copiés dans l'état `palette_flags[6:4]` puis consommés comme compteur décrémenté.
+
+**PROBABLE**
+- `word2` est un champ réservé/zero-filled, ou du padding, car il n'est pas lu par le handler et vaut `0x0000` dans tous les init plausibles observés.
+- Les commandes update `0x100B`, `0x200B`, ... servent à cadencer l'animation de palette sans réinitialiser la source.
+
+**INCONNU**
+- Rôle exact de `word2` dans les séquences init.
+- Rôle exact éventuel des bits `2..3` du byte de contrôle.
+
+### 42.6 Prochaines actions Ghidra recommandées
+
+1. Sur un stream valide contenant `800B ...` suivi de `100B/200B`, vérifier pas à pas en émulation l'effet du countdown sur la cadence d'animation palette.
+2. Tester si `word2` influence le rendu indirectement via un autre état partagé, malgré son absence d'usage direct dans le handler.
+3. Rechercher, localement et sans scan global, des cas où `control.bits2..3` sont non nuls dans des séquences plausibles.
+
+---
+
+## Section 41 — Corpus des `tex_set` plausibles : motifs d'initialisation CLUT
+
+### 41.1 Résumé factuel
+
+- Un scan corpus ciblé sur les commandes plausibles `tex_set` d'initialisation (`opcode 0x0B` avec bit `0x8000`) et `tbl in {3,4,5}` donne des motifs très cohérents.
+- `tbl=3` domine nettement et utilise presque toujours `cycle=0`, `flags=0x80`, avec des sous-plages courtes (`1..8`, `1..7`, `9..14`, etc.).
+- `tbl=4` n'apparaît que dans trois cas plausibles : un cas `2..8, flags=0x80` (`CH_04.BIN`) et deux cas `0..0, flags=0x00` (`CH_38.BIN`).
+- Aucun `tex_set tbl=5` plausible n'a été observé dans ce corpus.
+- Ces motifs confortent fortement l'idée que `ptr_section_3` est la banque CLUT principale, `ptr_section_4` une banque mixte plus rare, et `ptr_section_5` une banque non utilisée par l'async dans l'échantillon actuel.
+
+### 41.2 Table des motifs dominants
+
+| `tbl` | `start..end` | `flags` | Occurrences | Lecture minimale |
+|------|--------------|---------|-------------|------------------|
+| `3` | `1..8` | `0x80` | 11 | CLUT sous-plage standard avec STP forcé |
+| `3` | `1..7` | `0x80` | 2 | variante courte |
+| `3` | `9..14` | `0x80` | 2 | autre sous-plage palette |
+| `3` | `1..15` | `0x00` | 2 | CLUT plus large sans STP forcé |
+| `4` | `2..8` | `0x80` | 1 | cas async rare mais structuré comme une vraie sous-plage CLUT |
+| `4` | `0..0` | `0x00` | 2 | cas async dégénéré / mono-entrée |
+
+### 41.3 Exemples plausibles
+
+```text
+CH_01.BIN E1 : 800B 0003 0000 0000 01FD 0100 8008  -> tbl=3, cycle=0, start=1, end=8, flags=0x80
+CH_12.BIN E1 : 800B 0003 0000 02C0 01FF 0900 800E  -> tbl=3, cycle=0, start=9, end=14, flags=0x80
+CH_43.BIN E1 : 800B 0003 0000 02F0 0050 0100 000F  -> tbl=3, cycle=0, start=1, end=15, flags=0x00
+CH_04.BIN E1 : 810B 0004 0000 02D0 01FF 0200 8008  -> tbl=4, cycle=0, start=2, end=8, flags=0x80
+CH_38.BIN E1 : 810B 0004 0000 02D0 01FF 0000 0000  -> tbl=4, cycle=0, start=0, end=0, flags=0x00
+```
+
+### 41.4 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- Les init async plausibles observés dans le corpus ne ciblent que `tbl=3` et `tbl=4`.
+- Aucun init async plausible `tbl=5` n'a été trouvé.
+- Les mots `[5]` et `[6]` de ces commandes se décodent proprement en `cycle/start/end/flags` compatibles avec `ImageLoadRequest`.
+
+**PROBABLE**
+- `ptr_section_3` est la banque CLUT principale du format CH_BIN.
+- `ptr_section_4` contient parfois des données CLUT-compatible en plus de son rôle image/texture sync.
+- Les cas `tbl=4, start=0, end=0` sont soit des CLUT mono-entrée, soit un usage spécial/neutralisant du mécanisme async.
+
+**INCONNU**
+- Interprétation visuelle exacte des cas `tbl=4, start=0, end=0`.
+- Existence éventuelle de `tbl=5` async dans des séquences non détectées par le scan heuristique.
+
+### 41.5 Prochaines actions Ghidra recommandées
+
+1. Corréler les cas `tbl=4, start=0, end=0` avec le rendu réel pour voir si l'upload mono-entrée a un effet visible.
+2. Tracer les commandes `0x0B` sans bit `0x8000` dans un stream valide pour relier formellement les bits `12..14` du mot de commande au délai de cycle.
+3. Comparer la fenêtre exacte `0x20` lue dans `ptr_section_4` pour `CH_04.BIN` et `CH_38.BIN` avec les indices `start/end` décodés.
