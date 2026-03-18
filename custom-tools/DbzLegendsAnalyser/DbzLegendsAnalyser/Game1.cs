@@ -5,6 +5,7 @@ using MGUI.Core.UI;
 using MGUI.Core.UI.Containers;
 using MGUI.Core.UI.Containers.Grids;
 using MGUI.FontStashSharp;
+using MGUI.Shared.Input;
 using MGUI.Shared.Rendering;
 using MGUI.Shared.Text;
 using MGUI.Shared.Text.Engines;
@@ -107,7 +108,7 @@ namespace DbzLegendsAnalyser
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            MGUIRenderer = new MainRenderer(new GameRenderHost<Game1>(this));
+            MGUIRenderer = new MainRenderer(new GameRenderHost<Game1>(this), new MonoGameRawInputSource());
             Desktop = new MGDesktop(MGUIRenderer);
 
             InitializeFonts();
