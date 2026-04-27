@@ -53,6 +53,7 @@ namespace DbzLegendsAnalyser
         // Data
         private string _gamePath;
         private readonly List<string> _fileEntries = new();
+        private static readonly string[] CHBinDirectories = { "CH_BIN1", "CH_BIN2", "CH_BIN3" };
 
         // Active viewer
         private IAnalyserView? _activeViewer;
@@ -68,6 +69,7 @@ namespace DbzLegendsAnalyser
             { "TITLE_B",   () => new TITLE_B_View() },
             { "STG_TX",    () => new STG_TX_View() },
             { "STG_MD",    () => new STG_MD_View() },
+            { "CH_BIN",    () => new CH_BIN_View() },
         };
 
         // File pattern → viewer type mapping (mirrors WinForms _controlTypes)
@@ -249,6 +251,14 @@ namespace DbzLegendsAnalyser
                     _fileEntries.Add(key);
             }
 
+            foreach (string entry in GetDiscoveredChBinEntries())
+            {
+                if (!_fileEntries.Contains(entry, StringComparer.OrdinalIgnoreCase))
+                    _fileEntries.Add(entry);
+            }
+
+            _fileEntries.Sort(StringComparer.OrdinalIgnoreCase);
+
             if (_fileEntries.Count == 0)
             {
                 // Show all entries even if files don't exist (lets user see what's expected)
@@ -264,7 +274,7 @@ namespace DbzLegendsAnalyser
                 return;
 
             var selectedFile = selection[0].Data;
-            string? viewerType = _controlTypes.GetValueOrDefault(selectedFile);
+            string? viewerType = GetViewerType(selectedFile);
             if (viewerType == null || _gamePath == null) return;
 
             string fullPath = Path.Combine(_gamePath, selectedFile);
@@ -374,6 +384,42 @@ namespace DbzLegendsAnalyser
             _activeViewer?.Dispose();
             _activeViewer = null;
             base.UnloadContent();
+        }
+        private string? GetViewerType(string relativePath)
+        {
+            if (_controlTypes.TryGetValue(relativePath, out string? viewerType))
+                return viewerType;
+
+            string normalized = relativePath.Replace('/', '\\');
+            foreach (string directory in CHBinDirectories)
+            {
+                if (normalized.StartsWith(directory + "\\", StringComparison.OrdinalIgnoreCase)
+                    && normalized.EndsWith(".BIN", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "CH_BIN";
+                }
+            }
+
+            return null;
+        }
+
+        private IEnumerable<string> GetDiscoveredChBinEntries()
+        {
+            if (string.IsNullOrWhiteSpace(_gamePath))
+                yield break;
+
+            foreach (string directory in CHBinDirectories)
+            {
+                string fullDirectory = Path.Combine(_gamePath, directory);
+                if (!Directory.Exists(fullDirectory))
+                    continue;
+
+                foreach (string fullPath in Directory.EnumerateFiles(fullDirectory, "*.BIN", SearchOption.TopDirectoryOnly)
+                    .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    yield return Path.GetRelativePath(_gamePath, fullPath).Replace('/', '\\');
+                }
+            }
         }
     }
 }
