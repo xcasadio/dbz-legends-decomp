@@ -135,7 +135,7 @@ namespace DbzLegendsAnalyser
                 if (!Directory.Exists(ttfDir))
                 {
                     Debug.WriteLine($"[Font] TTF directory not found, using default SpriteFont engine");
-                    Desktop.TextEngine = new SpriteFontTextEngine(Desktop.FontManager);
+                    Desktop.TextEngine = new SpriteFontTextEngine(MGUIRenderer.FontManager);
                     return;
                 }
 
@@ -155,13 +155,13 @@ namespace DbzLegendsAnalyser
                 arialItalic.AddFont(File.ReadAllBytes(Path.Combine(ttfDir, "ariali.ttf")));
                 fssEngine.AddFontSystem(FamilyName, CustomFontStyles.Italic, arialItalic);
 
-                fssEngine.MatchSpriteFontSizing(Desktop.FontManager);
+                fssEngine.MatchSpriteFontSizing(MGUIRenderer.FontManager);
                 Desktop.TextEngine = fssEngine;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[Font] FSS init failed: {ex.Message}");
-                Desktop.TextEngine = new SpriteFontTextEngine(Desktop.FontManager);
+                Desktop.TextEngine = new SpriteFontTextEngine(MGUIRenderer.FontManager);
             }
         }
 
