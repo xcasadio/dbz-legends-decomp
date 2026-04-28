@@ -66,10 +66,11 @@ namespace DbzLegendsAnalyser
             { "LOAD_B",     () => new LOAD_B_View() },
             { "FACE_B",     () => new FACE_B_View() },
             { "EFF_AUTO_B", () => new EFF_AUTO_B_View() },
-            { "TITLE_B",   () => new TITLE_B_View() },
-            { "STG_TX",    () => new STG_TX_View() },
-            { "STG_MD",    () => new STG_MD_View() },
-            { "CH_BIN",    () => new CH_BIN_View() },
+            { "TITLE_B",    () => new TITLE_B_View() },
+            { "USAGI_B",    () => new USAGI_B_View() },
+            { "STG_TX",     () => new STG_TX_View() },
+            { "STG_MD",     () => new STG_MD_View() },
+            { "CH_BIN",     () => new CH_BIN_View() },
         };
 
         // File pattern → viewer type mapping (mirrors WinForms _controlTypes)
@@ -87,7 +88,8 @@ namespace DbzLegendsAnalyser
             { @"STG\STG3TX.B", "STG_TX" }, { @"STG\STG4TX.B", "STG_TX" },
             { @"STG\STG5TX.B", "STG_TX" }, { @"STG\STG6TX.B", "STG_TX" },
             { @"STG\STG7TX.B", "STG_TX" }, { @"STG\STG8TX.B", "STG_TX" },
-            { @"SUB\TITLE.B", "TITLE_B" }
+            { @"SUB\TITLE.B", "TITLE_B" },
+            { @"SUB\USAGI.B", "USAGI_B" }
         };
 
         // IObservableUpdate
