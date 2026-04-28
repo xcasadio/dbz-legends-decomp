@@ -11,7 +11,7 @@ namespace DbzLegendsAnalyser.Viewers
     /// <summary>
     /// Viewer for SUB\USAGI.B.
     /// The file is treated as a set of LZ-compressed VRAM uploads.
-    /// The current presentation uses a mixed 4bpp/8bpp view chosen from validated exports.
+    /// Code-backed USAGI.B uploads are decoded from VRAM-space crops, with a mixed 4bpp/8bpp presentation for the validated views.
     /// </summary>
     public sealed class USAGI_B_View : IAnalyserView
     {
@@ -469,7 +469,7 @@ namespace DbzLegendsAnalyser.Viewers
                     _graphicsDevice,
                     decoded,
                     new PsxImageDecoder.PsxImageLayout(chunk.WidthWords, chunk.Height),
-                    new PsxImageDecoder.PsxImageFormat(PsxImageDecoder.PsxPixelMode.Bpp8),
+                    new PsxImageDecoder.PsxImageFormat(PsxImageDecoder.PsxPixelMode.Bpp8, Index0Transparent: false),
                     Get8bppClut(bank, palette.Row),
                     0);
             }
@@ -478,7 +478,7 @@ namespace DbzLegendsAnalyser.Viewers
                 _graphicsDevice,
                 decoded,
                 new PsxImageDecoder.PsxImageLayout(chunk.WidthWords, chunk.Height),
-                new PsxImageDecoder.PsxImageFormat(pixelMode),
+                new PsxImageDecoder.PsxImageFormat(pixelMode, Index0Transparent: false),
                 bank.Clut,
                 palette.PaletteIndex);
         }
