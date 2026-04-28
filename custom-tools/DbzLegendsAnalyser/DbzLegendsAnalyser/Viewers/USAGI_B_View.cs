@@ -148,6 +148,7 @@ namespace DbzLegendsAnalyser.Viewers
 
         private static readonly ChunkPaletteView[] ChunkPaletteViews =
         {
+            new(4, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F4, "FUN_8002ea8c tpage 0x1D record 04"), "FUN_8002ea8c", "chunk 04 full source sheet with portrait panel and star sprites"),
             new(5, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FA, "FUN_8002ea8c tpage 0x0A"), "FUN_8002ea8c", "chunk 05 full page"),
             new(7, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FB, "FUN_8002b2dc/FUN_8002c048 tpage 0x0B"), "FUN_8002b2dc", "chunk 07 tilesheet full page"),
             new(9, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FC, "FUN_80029684 tpage 0x1D"), "FUN_80029684", "chunk 09 full record"),
@@ -181,7 +182,7 @@ namespace DbzLegendsAnalyser.Viewers
                 PsxImageDecoder.PsxPixelMode.Bpp8,
                 CreatePaletteReference(15, 0x000, 0x1F0, "FUN_8002b2dc tpage 0x10/0x12"),
                 "FUN_8002b2dc",
-                "512x240 background composite",
+                "512x240 background composite; tpage 0x12 spans the tail of chunk 00 and the head of chunk 01",
                 new[]
                 {
                     new CompositePart(0x10, 0x00, 0x00, 0x100, 0x0F0, 0x000, 0x000),
