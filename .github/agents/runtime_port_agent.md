@@ -66,8 +66,8 @@ il faut choisir la solution **structurellement proche du runtime original**.
 
 Toute décision doit être fermée à partir de:
 
-- `SLUS_006.62`
-- `PE.IMG`
+- `SLPS_003.55`
+- le dossier `data`
 - Ghidra
 - PCSX-Redux (documentation des fonctions mcp: docs\pcsx-redux-mcp-tools.md)
 - les preuves déjà documentées dans `docs/`
