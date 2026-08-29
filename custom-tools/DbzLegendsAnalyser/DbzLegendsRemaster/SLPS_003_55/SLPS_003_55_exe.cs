@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Buffers.Binary;
+using DbzLegendsRemaster.MOVIE_EXE;
 using PsxSdkMonogame;
+using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
 using static PsxSdkMonogame.LibGpu;
@@ -76,9 +78,7 @@ internal sealed class SLPS_003_55_exe
         FUN_8002165c();
 
         MainLoop();
-
-        // BLOCKED: the original never returns here because FUN_800215c0 loads MOVIE.EXE.
-        // The first approved slice ends at that overlay boundary.
+        FUN_800215c0("cdrom:\\MOVIE.EXE;1");
     }
 
     // GHIDRA: MainLoop @ 0x80020DE8
@@ -150,7 +150,55 @@ internal sealed class SLPS_003_55_exe
         } while ((pad & 0x800) == 0);
 
         SetDispMask(0);
-        // BLOCKED: FUN_800215c0("cdrom:\\MOVIE.EXE;1") belongs to the next overlay slice.
+    }
+
+    // GHIDRA: FUN_800215c0 @ 0x800215C0
+    private static void FUN_800215c0(string exeFileName)
+    {
+        StopRCnt(unchecked((long)0xf2000000));
+        StopRCnt(unchecked((long)0xf2000001));
+        StopRCnt(unchecked((long)0xf2000002));
+        StopRCnt(unchecked((long)0xf2000003));
+        PadStop();
+        FUN_8002c84c();
+        FUN_8002c8f0();
+        ResetGraph(0);
+        CdFlush();
+        StopCallback();
+        _96_init();
+        LoadExec(exeFileName);
+    }
+
+    // GHIDRA: FUN_8002c84c @ 0x8002C84C
+    private static void FUN_8002c84c()
+    {
+        // PARTIAL: the paired sound-sequencer timer initialization remains BLOCKED, so no timer
+        // or VSync callback exists to unregister in this slice.
+    }
+
+    // GHIDRA: FUN_8002c8f0 @ 0x8002C8F0
+    private static void FUN_8002c8f0()
+    {
+        // PARTIAL: this wrapper calls FUN_800378c8, whose body tears down the libspu transfer
+        // callback/event. The paired transfer-event initialization is not modeled in this slice;
+        // the continuously running desktop SPU mixer is a separate hardware adaptation.
+    }
+
+    // GHIDRA: _96_init @ 0x800218AC
+    private static void _96_init()
+    {
+        // PARTIAL: compiler overlay runtime initialization is provided by the CLR.
+    }
+
+    // GHIDRA: LoadExec @ 0x800218BC
+    private static void LoadExec(string exeFileName)
+    {
+        // PARTIAL: the desktop adapter handles the only path currently proven at this call site.
+        if (string.Equals(exeFileName, "cdrom:\\MOVIE.EXE;1", StringComparison.Ordinal))
+        {
+            PsxSdkBridges.ActivateMovieExe();
+            new MOVIE_EXE_exe().Main();
+        }
     }
 
     // GHIDRA: FUN_800210a4 @ 0x800210A4

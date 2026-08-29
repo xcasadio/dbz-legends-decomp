@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using DbzLegendsRemaster.MOVIE_EXE;
 using DbzLegendsRemaster.SLPS_003_55;
 using PsxSdkMonogame;
 
@@ -28,5 +29,12 @@ internal static class PsxSdkBridges
             string candidate = Path.Combine(discRoot, relative);
             return File.Exists(candidate) ? candidate : null;
         };
+    }
+
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: LoadExec replaces the resident executable and its overlapping RAM ranges.
+    internal static void ActivateMovieExe()
+    {
+        PsxRam.AddressResolver = MOVIE_EXE_exe.ResolveAddress;
     }
 }
