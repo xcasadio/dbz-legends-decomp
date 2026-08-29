@@ -24,24 +24,6 @@ git clone git@github.com:YOUR_USERNAME/dbz-legends.git --recursive
 cd dbz-legends
 ```
 
-Install the necessary dependencies:
-
-```shell
-make requirements
-
-# Debian/Ubuntu
-sudo add-apt-repository ppa:longsleep/golang-backports
-sudo apt update
-sudo apt install golang-go ninja-build binutils-mipsel-linux-gnu gcc-mipsel-linux-gnu
-
-# Arch Linux
-sudo pacman -S go ninja
-yay mipsel-linux-gnu-binutils mipsel-linux-gnu-gcc
-
-# Windows (MSYS2)
-pacman -S mingw-w64-x86_64-go ninja
-```
-
 ### Game Files
 
 Place the required game disc files:
@@ -78,64 +60,13 @@ disks/jp/
 
 ## Building
 
-```shell
-# Build the project
-make build
-
-# Clean generated files
-make clean
-
-# Format source code
-make format
-
-# Check matching status
-make report
-```
-
-## Tooling
-
-- `make build`: Build project and compare against original
-- `make clean`: Remove generated files
-- `make format`: Format the codebase with clang-format
-- `make extract`: Extract game files from disc image
-- `./mako.sh rank <overlay>`: Find remaining functions to decompile
-- `./mako.sh dec <function_name>`: Decompile a function
-- `./mako.sh symbols add <path> <name> <offset>`: Add or rename a symbol
-
-## Project Structure
-
-```
-dbz-legends/
-├── asm/              # Generated assembly files
-├── assets/           # Extracted game assets
-├── build/            # Build output
-├── config/           # Configuration files
-│   ├── jp.yaml       # Main project config (Japan version)
-│   └── symbols.*.txt # Symbol definitions
-├── disks/            # Game disc images/files
-├── include/          # Header files
-│   ├── common.h      # Common types and macros
-│   ├── game.h        # Game-specific types
-│   └── psxsdk/       # PSX SDK headers
-├── src/              # Decompiled source code
-│   ├── main/         # Main executable (SLPS_003.55)
-│   ├── game/         # GAME.EXE overlay
-│   ├── title/        # TITLE.EXE overlay
-│   ├── select/       # SELECT.EXE overlay
-│   ├── vs/           # VS.EXE overlay
-│   ├── sp/           # SP.EXE overlay
-│   ├── demo/         # DEMO.EXE overlay
-│   ├── movie/        # MOVIE.EXE overlay
-│   └── ending/       # ENDING.EXE overlay
-└── tools/            # Development tools
-```
+TODO
 
 ## Contributing
 
 Contributions are welcome! If you'd like to help decompile this game:
 
 1. Fork the repository
-2. Pick a function to decompile (use `./mako.sh rank` to find easy ones)
 3. Decompile and test your changes
 4. Submit a pull request
 

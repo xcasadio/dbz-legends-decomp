@@ -511,7 +511,9 @@ namespace DbzLegendsAnalyser.Viewers
 
                 drewTextured = true;
                 texturedEffect.Texture = texture;
-                VertexPositionColorTexture[] vertices = primitive.GetVertices(materialKey, uvRect);
+                VertexPositionColorTexture[] vertices = _document.TryGetAnimatedQuadOverride(primitive.GlobalPrimitiveIndex, out ChBinQuadVertexOverride quadOverride)
+                    ? primitive.GetVertices(materialKey, uvRect, quadOverride)
+                    : primitive.GetVertices(materialKey, uvRect);
                 foreach (EffectPass pass in texturedEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();

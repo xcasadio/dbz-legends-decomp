@@ -459,7 +459,7 @@ uint16  param_word: dépend de l'opcode — présent pour opcodes 2, 5, 6, ...
 | `0x06` | `trans_set` | `AnimCmd_SetBodyPartTransforms (0x80038308)` | CERTAIN | Set transforms (translation) 3 body parts |
 | `0x07` | `rotate_set` | `AnimCmd_SetBodyPartTransforms_v2 (0x800384e0)` | PROBABLE | Set transforms (rotation) 3 body parts |
 | `0x08` | `scale_set` | `AnimCmd_SetBodyPartTransforms_v3 (0x800386a8)` | PROBABLE | Set transforms (scale) 3 body parts |
-| `0x09` | `cul_set` | `AnimCmd_SetMeshPaletteRange (0x80038874)` | PROBABLE | SetMeshPaletteRange : modes via bits |
+| `0x09` | `cul_set` (nom debug) | `AnimCmd_SetMeshPaletteRange (0x80038874)` | CERTAIN | Reprojette un mesh via `TransformAndProjectMesh` puis décale `g_polyOTDepthTable`; n'écrit pas de CBA |
 | `0x0A` | `pri_set` | `AnimCmd_AddPrimsToOT (0x80038b88)` | CERTAIN | **AddPrimsToOT** : ajoute N `POLY_GT4` dans l'ordering table |
 | `0x0B` | `colrol_set` | `AnimCmd_AsyncLoadTexture (0x80038d24)` | CERTAIN | **AsyncLoadTexture** : poll ou init requête async CD |
 | `0x0C` | `eye_set` | `AnimCmd_ApplyCharEffect (0x80038eb0)` | PROBABLE | Lie deux personnages + set 3 params effet visuel |
@@ -563,7 +563,7 @@ uint16 operand_k:   une valeur par spec active (`spec.low4 != 0xF`)
 | `0x06` | `0x80038308` | `AnimCmd_SetBodyPartTransforms` | `trans_set` | CERTAIN |
 | `0x07` | `0x800384e0` | `AnimCmd_SetBodyPartTransforms_v2` | `rotate_set` | PROBABLE |
 | `0x08` | `0x800386a8` | `AnimCmd_SetBodyPartTransforms_v3` | `scale_set` | PROBABLE |
-| `0x09` | `0x80038874` | `AnimCmd_SetMeshPaletteRange` | `cul_set` | PROBABLE |
+| `0x09` | `0x80038874` | `AnimCmd_SetMeshPaletteRange` | `cul_set` (nom debug) | CERTAIN |
 | `0x0A` | `0x80038b88` | `AnimCmd_AddPrimsToOT` | `pri_set` | CERTAIN |
 | `0x0B` | `0x80038d24` | `AnimCmd_AsyncLoadTexture` | `colrol_set` | CERTAIN |
 | `0x0C` | `0x80038eb0` | `AnimCmd_ApplyCharEffect` | `eye_set` | PROBABLE |
@@ -631,7 +631,8 @@ uint16 operand_k:   une valeur par spec active (`spec.low4 != 0xF`)
 - ✅ 3 alias NOP : opcodes 0x00, 0x04, 0x24 → même fonction `0x800374c8`
 - ✅ 6 catégories fonctionnelles identifiées par noms debug :
   - **Transforms** : trans_set(0x06), rotate_set(0x07), scale_set(0x08), x_add_set(0x10), x_max_set(0x12), move_set(0x1F), movexp_set(0x1D)
-  - **Couleurs** : rgb_set(0x0E), cul_set(0x09), tpclut_set(0x0D), rgb2_set(0x13), auto_rgb(0x2B), colrol_set(0x0B)
+    - **Couleurs** : rgb_set(0x0E), tpclut_set(0x0D), rgb2_set(0x13), auto_rgb(0x2B), colrol_set(0x0B)
+    - **Projection / OT** : cul_set(0x09, nom debug embarqué) = `AnimCmd_SetMeshPaletteRange`, pri_set(0x0A) = `AnimCmd_AddPrimsToOT`
   - **UV/Géométrie** : uv0123_set(0x20), xy0123_set(0x25), ot_z_set(0x26), base_culX/Y/Z/P(0x1A-0x1C, 0x31), hitz_set(0x29), auto_otz(0x2A)
   - **Logique/Contrôle** : cmp_set(0x0F), bit_chk(0x17), bit_set(0x18), if_set(0x23), end_set(0x19), obj*_get(0x15-0x16)
   - **Effets** : eff_set(0x21), ch_eff_set(0x27), eye_set(0x0C), cheff_wait(0x2C)
@@ -909,7 +910,7 @@ Valeurs observees pour entry[0] :
 [4] ptr=NULL (terminateur)
 ```
 
-**PROBABLE** : modificateurs de teinte RGBA pour primitives POLY_GT4 (lie a opcode `cul_set 0x09`).
+**INCONNU (preuve insuffisante)** : ces records ne sont plus reliés à `cul_set 0x09`. Le nom debug `cul_set` est trompeur ici, car l'handler prouvé `AnimCmd_SetMeshPaletteRange` reprojette un mesh et ajuste l'OT sans écrire la CLUT.
 
 ### 18.5 MeshRecordList (ptr_mesh_records)
 
@@ -1679,12 +1680,12 @@ Labels Ghidra ajoutés :
 - `DAT_801d200c` → `g_chBinClutTablePtr`
 - `DAT_DOT801d200c` — voir XREF relocation RenderBattleScene3D
 
-### 26.2 opcode 0x10 `pal_set` — AnimCmd_SetMeshPaletteRange @ 0x80038874
+### 26.2 opcode 0x09 `cul_set` (nom debug) — AnimCmd_SetMeshPaletteRange @ 0x80038874
 
 **Format : 4 × uint16 = 8 bytes (return streamPtr+4)**
 
 ```
-word[0]: opcode=0x10 | b1<<8
+word[0]: opcode=0x09 | b1<<8
   b1 = flags (cVar1):
     bits[3:0] = mesh_group_id → cherche mesh correspondant dans g_renderMetadataBuffer
     bit[4]    = indirect word[1] (g_animSharedVarTable)
@@ -5154,6 +5155,7 @@ CH_26.BIN E12 : 0000 0001 0000 0001 1207 0100 ...
 | `0x12` | lit `param_1[1]`, `param_1[2]`, puis `return param_1 + 3` | taille fixe `3` mots | `AnimCmd_XMaxSet` | décompilation Ghidra `0x8003a188` |
 | `0x1B` | lit `word1`, `word2`, puis `4` mots dans `local_40[4]`, et retourne ensuite `param_1` avancé | taille fixe `7` mots | `AnimCmd_BaseCulY` | décompilation Ghidra `0x8003b758` |
 | `0x2C` | ne lit pas d'opérande supplémentaire, `return param_1 + 1` | taille fixe `1` mot | `AnimCmd_CheffWait` | décompilation Ghidra `0x8003ebcc` |
+| `ExecuteAnimStreamBatch` | appelle `AnimCmd_ChEffSet(local_30)` avec `local_30[0] = 0x8000` avant la boucle des streams | tick global `1` fois / frame | `ExecuteAnimStreamBatch` | décompilation Ghidra `0x800368b4`, lignes 26-29 |
 
 #### 48.9.3 CERTAIN / PROBABLE / INCONNU
 
@@ -5161,6 +5163,7 @@ CH_26.BIN E12 : 0000 0001 0000 0001 1207 0100 ...
 - `0x23 if_set` n'est plus un opcode de taille inconnue: sa structure minimale est maintenant bornée pour les modes `00`, `01/11` et `10`.
 - Les paires `0x4xxx -> 0x8xxx` de même `tag12` sont effectivement utilisées en corpus comme sauts forward / marqueurs de fermeture.
 - `0x12 x_max_set`, `0x1B base_culY` et `0x2C cheff_wait` ne sont plus des bloqueurs de taille.
+- L'avancement des slots `ch_eff_set` ne dépend pas uniquement d'un opcode `0x2C`: `ExecuteAnimStreamBatch` force un appel global `AnimCmd_ChEffSet(0x8000)` à chaque frame avant de rejouer les batches actifs.
 
 **PROBABLE**
 - Les séquences observées `0023 ... 4023 ... 8023` et `0123 ... 4123 ... 8123` correspondent à un squelette `if / skip / marker` imbriqué réutilisé sur plusieurs fichiers du sous-corpus rebalayé.
@@ -5168,6 +5171,417 @@ CH_26.BIN E12 : 0000 0001 0000 0001 1207 0100 ...
 **INCONNU**
 - Valeurs runtime exactes de `g_animSharedVarTable` qui déterminent, combat par combat, quelle branche `if_set` est effectivement suivie.
 - Existence en corpus d'un usage distinct du mode `11`, au-delà du comportement structurel déjà prouvé par la décompilation.
+
+### 48.10 Fermeture locale `ch_eff_set` / `eff_set` sur `CH_10.BIN`
+
+#### 48.10.1 Résumé factuel
+
+- Le batch `CH_10.BIN E05/B03` contient `0027 0401 0000 0000 78C0` et `E05/B04` contient `0027 040C 0000 0000 78C0`: les deux inits `ch_eff_set` chargent donc CERTAINEMENT un `base_clut = 0x78C0`.
+- `AnimCmd_ChEffSet` écrit la CLUT courante par `base_clut + (record.word0 & 0x1F)` et recharge `base_uv_word` depuis `g_charEffectSlotInitUvClut[slot].low16`.
+- Le résidu viewer `CBA 801A` observé après `F09` était causé par un clear local erroné du replay `ch_eff_set`: le viewer restaurait les materials/UV/quads statiques quand un groupe plus court arrivait, quand un slot finissait, et lors de `cheff_wait bit0`, alors que `AnimCmd_ChEffSet` cesse seulement d'écrire et ne réapplique pas l'état de base du modèle.
+- Le `CBA 0000` précédemment vu sur la primitive 2 n'était pas une écriture runtime séparée de `ch_eff_set`: il venait du même clear local erroné combiné au `tpclut_set` concurrent `CH_10 E03/B02`. Après suppression du clear viewer, la primitive 2 garde `CBA 78D1` et ne commute plus que son `TPAGE` entre `001B` et `007B`.
+- `B05/B06` n'écrivent pas la CLUT: `0x09` appelle `AnimCmd_SetMeshPaletteRange`, qui reprojette un mesh par `TransformAndProjectMesh` puis ajuste `g_polyOTDepthTable`; `0x0A` appelle `AnimCmd_AddPrimsToOT`, qui ne fait que pousser les primitives déjà préparées dans l'OT.
+- `eff_set` est CERTAINEMENT un pipeline séparé: `AnimCmd_EffSet` spawn ou pilote une task effet via `g_effectObjectPtrs`, `SpawnEffectTask` crée `EffectTaskMainLoop`, puis cette task appelle `ProcessEntityScript` et `RenderTransformedSprites` sur des `POLY_FT4`, pas sur le pool mesh principal `POLY_GT4_801f7180`.
+
+#### 48.10.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `CH_10 E05/B03 ch_eff_set.word4` | `0x78C0` | `base_clut` init | stream `CH_10.BIN` | dump batch `B03`: `0027 0401 0000 0000 78C0` |
+| `CH_10 E05/B04 ch_eff_set.word4` | `0x78C0` | `base_clut` init | stream `CH_10.BIN` | dump batch `B04`: `0027 040C 0000 0000 78C0` |
+| `g_charEffectSlotInitUvClut[slot]` | low16 = `base_uv_word`, high16 = `base_clut` | `uint32[16]` | `AnimCmd_ChEffSet` | write init `*(undefined4 *)(param_1 + 3)`, reads line 154 and lines 230-239 |
+| `g_charEffectSlotTable[slot].low8` | décrémenté puis comparé à `0` | compteur frame | `AnimCmd_ChEffSet` | `uVar14 = iVar25 - 1; if ((uVar14 & 0xff) == 0)` |
+| `g_charEffectSlotTable[slot].bits8..15` | indexe `POLY_GT4_801f7180` et `g_uvOrTexCoordBuffer` | `primitive_start_index` | `AnimCmd_ChEffSet` | `uVar11 = uVar14 >> 8 & 0xff; puVar21 = &g_uvOrTexCoordBuffer + uVar11 * 0x10` |
+| `g_charEffectSlotTable[slot].bits16..23` | sélectionne `g_cdFileBufferTable[slot]` | index slot payload | `AnimCmd_ChEffSet` | init: `uVar20 = stream[1] >> 8`; write dans `g_charEffectSlotTable` |
+| `g_charEffectSlotTable[slot].bits24..27` | skip de groupes lors du restart | compteur de groupes à sauter | `AnimCmd_ChEffSet` | reset loop: `uVar11 = uVar14 >> 0x18 & 0xf; ... do { uVar2 = *puVar22; puVar22 += 2 + 5 * record_count; }` |
+| `g_charEffectSlotTable[slot].bit30` | termine après le groupe courant | terminate flag | `AnimCmd_ChEffSet` | update: `(uVar2 >> 8 & 0x80) << 0x17` |
+| `g_charEffectSlotTable[slot].bit31` | boucle sur base ptr au lieu de clear | loop flag | `AnimCmd_ChEffSet` | init: `(uVar14 & 4) * 0x20` dans l'octet haut; test runtime `if (-1 < (int)uVar14)` |
+| opcode `0x09` (`8209/8709`) | reprojection mesh + OT depth | aucun write CBA | `AnimCmd_SetMeshPaletteRange` | décompilation `0x80038874`, aucun accès CLUT/TPAGE, appel `TransformAndProjectMesh` |
+| opcode `0x0A` (`020A/070A`) | AddPrim sur primitives existantes | aucun write CBA | `AnimCmd_AddPrimsToOT` | décompilation `0x80038b88`, aucun accès CLUT/TPAGE |
+| `CH_10 E03/B02 0x050D 0x0102 0x0000 0x0060` | start=`0x02`, count=`0x01`, mode=`xor`, CLUT operand=`0x0000`, TPAGE operand=`0x0060` | `tpclut_set` ciblant primitive 2 | `AnimCmd_AnimateVertexColors` | décompilation `0x80039290` + `ApplyMathOp(mode 5 = xor)` + dump stream `E03/B02` |
+| probe viewer corrigee F09..F12 | primitive 2 = `007B/78D1` aux frames impaires, `001B/78D1` aux frames paires; primitives 3/12/13/14 = `001B/78D1` stables | etat viewer apres fix local | `PsxTools.ChBinVisuals` | validation `CH_10.BIN` sur build `psxtools-verify4` |
+| probe viewer sans `E03` F09..F12 | primitive 2 = `001B/78D1` stable | attribution du seul `TPAGE 007B` a `E03/B02` | `PsxTools.ChBinVisuals` | A/B apres desactivation locale du stream `EntryIndex=3` |
+| `runtimePointers.dataPtr12.high16` | `0 -> 1 -> 2 -> 3 -> 4` | etat de phase du pipeline battle scene | `FUN_80034ed0`, `FUN_80035054`, `LoadCHBinFileAsync`, `RenderBattleScene3D`, `ExecuteAnimStreamBatch`, `FUN_80036bb0` | switch direct dans `FUN_80034ed0`; `FUN_80035054` ecrit `1`, `LoadCHBinFileAsync` ecrit `2`, `RenderBattleScene3D` ecrit `3`, `ExecuteAnimStreamBatch` ecrit `4`, `FUN_80036bb0` reboucle vers `0` sur les branches de transition |
+| `g_uvOrTexCoordBuffer` | writers directs = `RenderBattleScene3D`, `AnimCmd_RenderEntryGroup`, `AnimCmd_ChEffSet` | buffer UV/coords persistant | XREFs + decompilations | XREFs directs sur `0x801f2180`; aucune autre ecriture globale vue dans `ExecuteAnimStreamBatch` |
+| `POLY_GT4_801f7180` | rebuilds de base = `RenderBattleScene3D`, `AnimCmd_RenderEntryGroup`; mutations materials = `AnimCmd_ChEffSet`, `AnimCmd_AnimateVertexColors` | pool scene GT4 persistant | XREFs + decompilations | XREFs directs sur `0x801f7180` + decompilations deja fermees de `0x27` et `0x0D` |
+| `eff_set` init | spawn task si slot libre, sinon reinit conditionnelle | pipeline tâche séparée | `AnimCmd_EffSet` | décompilation `0x8003cf38` |
+| `EffectTaskMainLoop` | `ProcessEntityScript` puis `RenderTransformedSprites` | rendu sprite FT4 | `EffectTaskMainLoop` | décompilation `0x8003fddc`, lignes 17-39 |
+| `RenderTransformedSprites` | écrit `POLY_FT4.clut/tpage/u/v`, puis `AddPrim` | renderer sprite autonome | `RenderTransformedSprites` | décompilation `0x80053188`, lignes 89-119 et 165-173 |
+
+#### 48.10.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `AnimCmd_ChEffSet` ne réécrit pas l'état de base du modèle quand un groupe plus court arrive, quand un slot se termine, ou quand `cheff_wait bit0` vide `g_charEffectSlotTable`: il cesse d'avancer les slots, point. Le clear viewer antérieur était donc un écart local, pas un comportement runtime.
+- Après correction locale, le replay viewer `CH_10` ne produit plus de `CBA 0000` ni `CBA 801A` sur `F09..F12`: toutes les primitives touchées par `ch_eff_set` restent à `CBA 78D1`.
+- `CH_10 E03/B02` explique CERTAINEMENT le seul écart material résiduel sur primitive 2: `tpclut_set 0x050D 0x0102 0x0000 0x0060` applique `xor 0x0000` sur la CLUT et `xor 0x0060` sur le `TPAGE` d'une seule primitive (`start=2`, `count=1`), ce qui donne `001B ^ 0x0060 = 007B` sans changer `CBA 78D1`.
+- `g_charEffectSlotTable` est maintenant borné comme un état packé `uint32[16]` avec compteur frame, primitive start index, payload slot index, skip-count de boucle, terminate flag et loop flag.
+- Le pipeline battle scene du dispatcher est maintenant fermé: `FUN_80035054` pose l'etat `1`, `LoadCHBinFileAsync` pose l'etat `2`, `RenderBattleScene3D` pose l'etat `3`, `ExecuteAnimStreamBatch` tourne sur l'etat `3` et ne pose `4` qu'une fois tous les mesh streams finis, puis `FUN_80036bb0` traite l'etat `4` et peut reboucler vers `0`.
+- Pendant l'etat `3`, il n'existe aucun clear global de `g_uvOrTexCoordBuffer` ni du pool `POLY_GT4_801f7180` dans `ExecuteAnimStreamBatch`: les seules reecritures prouvees passent par `AnimCmd_RenderEntryGroup`, `AnimCmd_ChEffSet` et `AnimCmd_AnimateVertexColors`.
+- La fin de vie runtime des UV/quads/materials deja ecrits par `ch_eff_set` est donc fermee pour ce pipeline: sans nouveau writer, les dernieres valeurs restent en place jusqu'a un ecrasement ulterieur par `table_set`, `ch_eff_set`, `tpclut_set` ou par une nouvelle reconstruction `RenderBattleScene3D`.
+- `eff_set` ne doit pas être rejoué comme un simple override de primitives mesh: il instancie une task effet distincte et rend des `POLY_FT4` via `RenderTransformedSprites`.
+
+**PROBABLE**
+- aucun sur ce sous-probleme local
+
+**INCONNU**
+- aucun sur le sous-probleme `CH_10 ch_eff_set/tpclut_set` traite ici
+
+---
+
+### 48.11 Fermeture locale du bloc `FUN_80036bb0` (dispatcher state 4)
+
+#### 48.11.1 Résumé factuel
+
+- `FUN_80036bb0` n'est appelé CERTAINEMENT que par le dispatcher battle-scene `FUN_80034ed0`, quand `runtimePointers.dataPtr12.high16 == 4`.
+- Son sélecteur interne est CERTAINEMENT `runtimePointers.dataPtr13.low16`.
+- Les sous-états `0`, `1` et `2` partagent une sortie commune: ils incrémentent `dataPtr13.low16` de `+1` en fin de fonction.
+- Le sous-état `0` exécute une suite de gardes sur `FUN_8006571c(2)`, `FUN_80065948()` et `FUN_80064b9c()`; tant qu'une de ces gardes échoue, il retourne sans avancer. Si elles passent, il atteint la sortie commune et avance vers le sous-état `1`.
+- Le sous-état `1` réinitialise des champs render/couleur sur les `charPointers`, pose `g_effectObjectPtrs[*]+0x50 = 1` quand le pointeur existe, appelle éventuellement `FUN_800642f8()`, puis avance vers le sous-état `2`.
+- Le sous-état `2` ne passe pas par la logique lourde du sous-état `3`: il ne fait que relier `charPointers[1..2]` au `polyGt4` courant et `charPointers[4..5]` au `polyFt3` courant, puis avance vers le sous-état `3`.
+- Le sous-état `3` restaure d'abord des couleurs personnage, puis suit deux chemins CERTAINS: soit il trouve un candidat et reboucle le dispatcher principal en écrivant `runtimePointers.dataPtr12.high16 = 0`, soit il termine en écrivant une valeur `uVar14` dans `PTR_8009aa30->polyFt4.high16`, nettoie `g_fileLoadFlags &= ~0x40`, puis retire la task courante via `RemoveTaskFromList`.
+- Les valeurs qui peuvent atteindre cette écriture terminale sont maintenant CERTAINES: `uVar14` vaut soit un index trouve par les deux scans sur `battleChars[0xb].field_0x104`, soit la constante `0x0F`, soit la constante `0x0005`.
+
+#### 48.11.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `runtimePointers.dataPtr12.high16 == 4` | dispatch externe | état de phase | `FUN_80034ed0` | switch direct `case 4 -> FUN_80036bb0()` |
+| `runtimePointers.dataPtr13.low16` | lecture en entrée | compteur de sous-état | `FUN_80036bb0` | `sVar12 = *(short *)&runtimePointers.dataPtr13` |
+| `dataPtr13 == 0` | branche locale | sous-état attente/préparation | `FUN_80036bb0` | branche `else if (sVar12 < 2) { if (sVar12 != 0) return; ... }` |
+| `dataPtr13 == 1` | branche locale | sous-état reset | `FUN_80036bb0` | branche `if (sVar12 == 1)` |
+| `dataPtr13 == 2` | branche locale | sous-état relink pointeurs de primitives | `FUN_80036bb0` | branche `else { if (sVar12 != 2) { ... } ... *(POLY_GT4 **)(iVar7 + 0xac) = pGVar15->polyGt4; ... }` |
+| `dataPtr13 == 3` | branche locale | sous-état restore/selection/teardown | `FUN_80036bb0` | branche `if (sVar12 != 3) return;` + chemins suivants |
+| `runtimePointers.dataPtr12.high16 = 0` | write | rebouclage dispatcher principal | `FUN_80036bb0` | écritures directes lignes 238 et 274 de la décompilation |
+| `dataPtr13.low16 += 1` | write en sortie commune | incrément sous-état | `FUN_80036bb0` | épilogue commun `*(short *)&runtimePointers.dataPtr13 += 1` |
+| `uVar14` terminal | index de scan ou `0x000F` ou `0x0005` | `uint16` minimal | `FUN_80036bb0` | scans lignes 233/269, write constant `0x0F` ligne 206, write constant `0x0005` ligne 297 |
+| `g_effectObjectPtrs[*] + 0x50 = 1` | write si pointeur non nul | champ `uint16` minimal | `FUN_80036bb0` | boucle sur 16 slots en sous-état `1` |
+| `charPointer + 0xAC` | write | pointeur de primitive liée | `FUN_80036bb0` | sous-état `2`: slots `1..2 -> polyGt4`, `4..5 -> polyFt3` |
+
+#### 48.11.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `FUN_80036bb0` est un sous-automate à 4 sous-états indexés par `runtimePointers.dataPtr13.low16`.
+- Les sous-états `0`, `1` et `2` avancent uniquement par l'incrément final commun de `dataPtr13.low16`.
+- Le sous-état `3` est terminal pour cette task: soit il reboucle le dispatcher battle-scene en posant `dataPtr12.high16 = 0`, soit il termine explicitement via `RemoveTaskFromList`.
+- Le sous-état `2` ne nettoie ni `g_uvOrTexCoordBuffer` ni `POLY_GT4_801f7180`; il ne fait que rebrancher des pointeurs de primitives secondaires.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- la signification metier exacte du champ destination `PTR_8009aa30->polyFt4.high16` reste INCONNUE (preuve insuffisante). En revanche, les valeurs qui y sont ecrites et les branches qui les produisent sont maintenant CERTAINES.
+
+---
+
+### 48.12 Fermeture locale du bloc `FUN_80035054` (dispatcher state 0)
+
+#### 48.12.1 Résumé factuel
+
+- `FUN_80035054` n'est appelé CERTAINEMENT que par le dispatcher battle-scene `FUN_80034ed0`, quand `runtimePointers.dataPtr12.high16 == 0`.
+- Le bloc remet CERTAINEMENT `runtimePointers.dataPtr13.low16 = 0`, puis, si `g_fileLoadFlags & 0x0C` est non nul, appelle `FUN_80064d70(runtimePointers.dataPtr12.low16, 0)` et remplace `dataPtr13.low16` par le sous-état retourné.
+- `FUN_80064d70` est maintenant identifié CERTAINEMENT comme une machine de chargement `CD + VAB`: elle enchaine `CdControl/CdSync/CdRead/CdReadSync`, lit vers `DAT_801c4000` puis `g_cdFileBufferTable`, puis exécute `SsVabOpenHeadSticky`, `SsVabTransBody` et `SsVabTransCompleted`.
+- `FUN_80035054` ne poursuit CERTAINEMENT que si une porte de drapeaux sur les 12 battle tasks reste non nulle; sinon il retourne avant toute reconstruction de scene.
+- Si cette porte passe, le bloc vide `g_renderScratchBuffer`, appelle `FUN_80065358(0,0)`, remet `battleGlobalState.charPointers[0..5]` à `NULL`, puis rebâtit ces 6 slots à partir des battle task slots: `charPointers[0]` reçoit la payload FT3 du slot `animationState.field_0x5a`, `charPointers[3]` reçoit une payload GT4 associée avec recherche de secours, `charPointers[1..2]` et `charPointers[4..5]` sont remplis avec des slots additionnels dont `field_0x104` a le bit `0x0200`.
+- Le bloc calcule ensuite une valeur `uVar18` à partir de `polyFt3->tag`, de `polyF3Array & 8`, des tables `DAT_80087838` / `DAT_800877c0` et de `g_teamModeConfigurationSelected`, puis écrit CERTAINEMENT cette valeur dans `runtimePointers.dataPtr12.low16` et dans `PTR_8009aa30->polyFt4.low16`. Comme cette même valeur est ensuite passée CERTAINEMENT en `param_1` à `FUN_80064d70`, `uVar18` est un index de ressource chargee par la machine `CD + VAB`, pas un simple drapeau local.
+- Enfin il snapshotte les couleurs courantes dans `runtimePointers.spriteDataBlock.attributes`, copie 2 mots de `charPointers[0]->reserved_0x4 + 0x68` vers `DAT_8009ac5c`, et passe le dispatcher au `state1` en écrivant `runtimePointers.dataPtr12.high16 = 1`.
+
+#### 48.12.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `runtimePointers.dataPtr12.high16 == 0` | dispatch externe | état de phase | `FUN_80034ed0` | switch direct `case 0 -> FUN_80035054()` |
+| `runtimePointers.dataPtr13.low16 = 0` | write en entrée | reset sous-état loader | `FUN_80035054` | écriture directe au début du bloc |
+| `FUN_80064d70(runtimePointers.dataPtr12.low16, 0)` | call + writeback | progression loader `CD/VAB` | `FUN_80035054` | appel conditionnel si `g_fileLoadFlags & 0x0C`, retour stocké dans `dataPtr13.low16` |
+| `FUN_80064d70` | switch `param_2 = 0..8` | machine de chargement `CD + VAB` | `FUN_80064d70` | appels directs `CdControl`, `CdSync`, `CdRead`, `CdReadSync`, `SsVabOpenHeadSticky`, `SsVabTransBody`, `SsVabTransCompleted` |
+| gate sur 12 tasks | `uVar13 &= flags134` pour tasks qualifiées | masque de drapeaux minimal | `FUN_80035054` | boucle lignes 39..50, retour immédiat si `uVar13 == 0` |
+| `g_renderScratchBuffer` | `bzero(..., 0x8c48)` | clear bulk scene scratch | `FUN_80035054` | appel direct |
+| `battleGlobalState.charPointers[0]` | write depuis payload FT3 du slot `animationState.field_0x5a` | pointeur `CharacterSpriteObject *` | `FUN_80035054` | lignes 66..69 |
+| `battleGlobalState.charPointers[3]` | write depuis payload GT4 avec fallback search | pointeur `CharacterSpriteObject *` | `FUN_80035054` | lignes 70..105 |
+| `battleGlobalState.charPointers[1..2]` | writes conditionnels | pointeurs auxiliaires | `FUN_80035054` | slots non nuls avec `field_0x104 & 0x0200` |
+| `battleGlobalState.charPointers[4..5]` | writes conditionnels | pointeurs auxiliaires | `FUN_80035054` | seconde boucle symétrique avec même test `0x0200` |
+| `runtimePointers.dataPtr12.low16` | write | index de ressource / mode calculé | `FUN_80035054` | écriture directe `*(ushort *)&runtimePointers.dataPtr12 = uVar18` |
+| `PTR_8009aa30->polyFt4.low16` | write miroir | copie du même index `uVar18` | `FUN_80035054` | écriture directe `*(ushort *)&pGVar2->polyFt4 = uVar18` |
+| `DAT_80087838` | lecture 2 octets par tag + latch bit7 | table de sélection indexée par tag | `FUN_80035054`, `FUN_800400ac` | `FUN_80035054` lit `&DAT_80087838 + tag*2`; `FUN_800400ac` pose `|= 0x80` |
+| `DAT_800877c0` | lecture/écriture 3 octets par tag + latch bit7 | table tournante de sélection indexée par tag | `FUN_80035054` | scan des 3 entrées `tag*3 + [0..2]`, pose `|= 0x80`, rouvre la rotation si toutes sont épuisées |
+| `DAT_8009ac5c` | write de 2 mots | cache 2x32-bit | `FUN_80035054` | copie depuis `charPointers[0]->reserved_0x4 + 0x68` |
+| `DAT_8009ac5c` | read | source coord/scale alternative | `EffectTaskMainLoop`, `FUN_80043474` | XREFs lectures directes; `EffectTaskMainLoop` lit les 2 mots comme `scaleX/scaleY`, `FUN_80043474` les reprend sur un chemin task type `2` |
+| `runtimePointers.dataPtr12.high16 = 1` | write en sortie | transition vers dispatcher state 1 | `FUN_80035054` | écriture terminale directe |
+
+#### 48.12.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `FUN_80035054` est le constructeur d'etat `state0` du pipeline battle-scene: il nettoie les buffers scratch, rebâtit les pointeurs scene utiles, sélectionne un index `uVar18`, snapshotte l'état courant, puis passe en `state1`.
+- `runtimePointers.dataPtr12.low16` sert CERTAINEMENT d'index d'entrée pour `FUN_80064d70`, donc d'identifiant de ressource pour la machine de chargement `CD/VAB`.
+- `DAT_80087838` et `DAT_800877c0` sont CERTAINEMENT des tables locales de sélection latched par tag, utilisées pour produire certains de ces index `uVar18`.
+- `DAT_8009ac5c` n'est pas un bruit temporaire: c'est un cache 2 mots relu plus tard par `EffectTaskMainLoop` et `FUN_80043474` sur des chemins de tâches spécifiques.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- le contenu metier exact de chaque index `uVar18` (quelle ressource audio/VAB precise correspond a `0x40`, `0x41`, `0x42`, `0x12`, etc.) reste INCONNU (preuve insuffisante). En revanche, leur nature d'index de ressource et leurs sources de calcul sont CERTAINES.
+
+---
+
+### 48.13 Fermeture locale du bloc `LoadCHBinFileAsync` (dispatcher state 1)
+
+#### 48.13.1 Résumé factuel
+
+- `LoadCHBinFileAsync` n'est appelé CERTAINEMENT que par le dispatcher battle-scene `FUN_80034ed0`, quand `runtimePointers.dataPtr12.high16 == 1`.
+- Le bloc n'entre dans son chemin principal que si `FUN_8006578c()` vaut `0`; sinon il appelle `FUN_8006571c(2)` puis retourne.
+- `runtimePointers.dataPtr13.low16` est le sous-état local de chargement. Si ce sous-état est `< 8`, `LoadCHBinFileAsync` délègue CERTAINEMENT la progression à `FUN_80064d70(runtimePointers.dataPtr12.low16, dataPtr13.low16)` et réécrit le sous-état retourné.
+- Le sous-état `8` lance un chargement asynchrone du fichier `g_ch_bin_filenames[dataPtr12.low16]` vers `g_cdFileBufferTable` via `SearchFileAndLoadIntoBuffer(..., mode=1)`.
+- `SearchFileAndLoadIntoBuffer` est CERTAINEMENT un simple wrapper `SearchFile -> LoadFileIntoBuffer`. `LoadFileIntoBuffer(mode!=0)` lance la lecture CD asynchrone puis retourne `0` immédiatement. Donc, sur ce chemin actuel, la branche de repli `if (uVar3 == 0xffffffff)` est une garde morte non expliquée par le chaînage de callees courant.
+- Si le lancement du sous-état `8` retourne `0`, le bloc avance CERTAINEMENT `dataPtr13.low16` de `+1` vers le sous-état `9`.
+- Le sous-état `9` poll `CdReadSync(1)`: sur succès `0`, il écrit `runtimePointers.dataPtr12.high16 = 2` et rend la main au bloc `RenderBattleScene3D`; sur `-1`, il décrémente `dataPtr13.low16` et reboucle vers le sous-état `8`.
+
+#### 48.13.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `runtimePointers.dataPtr12.high16 == 1` | dispatch externe | état de phase | `FUN_80034ed0` | switch direct `case 1 -> LoadCHBinFileAsync()` |
+| `FUN_8006578c()` | test d'entrée | gate globale minimale | `LoadCHBinFileAsync` | seul chemin principal quand retour == `0`; sinon appel `FUN_8006571c(2)` |
+| `FUN_8006578c` | retour direct `DAT_8009aa94` | getter minimal | `FUN_8006578c` | décompilation `return (int)DAT_8009aa94;` |
+| `runtimePointers.dataPtr13.low16 < 8` | branche locale | sous-état loader delegué | `LoadCHBinFileAsync` | call `FUN_80064d70(dataPtr12.low16, dataPtr13.low16)` |
+| `FUN_80064d70(...)` | call + writeback | progression loader `CD/VAB` | `LoadCHBinFileAsync` | retour stocké dans `dataPtr13.low16` |
+| `runtimePointers.dataPtr13.low16 == 8` | branche locale | lancement async CH_BIN | `LoadCHBinFileAsync` | `SearchFileAndLoadIntoBuffer(g_ch_bin_filenames[dataPtr12.low16], &g_cdFileBufferTable, 1)` |
+| `SearchFileAndLoadIntoBuffer` | wrapper direct | `SearchFile + LoadFileIntoBuffer` | `SearchFileAndLoadIntoBuffer` | décompilation + assembly synchronisée |
+| `LoadFileIntoBuffer(mode != 0)` | write CD async + return `0` | helper de lancement async | `LoadFileIntoBuffer` | décompilation: `if (mode != 0) break; ... return 0;` |
+| branche `uVar3 == 0xffffffff` | garde de repli | garde morte sur chemin courant | `LoadCHBinFileAsync` | incompatible avec le retour direct de `LoadFileIntoBuffer(..., mode=1)` qui vaut `0` |
+| `runtimePointers.dataPtr13.low16 == 9` | branche locale | poll de completion async | `LoadCHBinFileAsync` | `CdReadSync(1)` |
+| `runtimePointers.dataPtr12.high16 = 2` | write | transition vers dispatcher state 2 | `LoadCHBinFileAsync` | écriture directe sur succès `CdReadSync == 0` |
+| `dataPtr13.low16 -= 1` | write | retour vers sous-état `8` | `LoadCHBinFileAsync` | écriture directe sur `CdReadSync == -1` |
+
+#### 48.13.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `LoadCHBinFileAsync` est le handler `state1` du dispatcher battle-scene.
+- Les sous-états `< 8` sont un simple proxy de `FUN_80064d70`.
+- Le couple `state8/state9` correspond au lancement puis à l'attente de la lecture asynchrone du CH_BIN vers `g_cdFileBufferTable`.
+- `SearchFileAndLoadIntoBuffer(..., mode=1)` retourne CERTAINEMENT `0` sur son chemin de succès actuel, donc la branche `0xffffffff` de `LoadCHBinFileAsync` n'est pas expliquée par le chaînage de callees présent.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- la raison historique de la garde `if (uVar3 == 0xffffffff)` reste INCONNUE (preuve insuffisante) tant qu'aucune autre version ou implémentation alternative de `SearchFile` / `LoadFileIntoBuffer` n'est comparée. Cela n'affecte pas le comportement prouvé du bloc courant.
+
+---
+
+### 48.14 Fermeture locale de la machine `DAT_8009aa94` et des gates `FUN_8006571c` / `FUN_80065948`
+
+#### 48.14.1 Résumé factuel
+
+- `DAT_8009aa94` n'est pas un simple drapeau: c'est CERTAINEMENT l'état d'une machine de streaming `CD/SPU` pilotée principalement par `FUN_800630e4`.
+- `FUN_800655c8` est le lanceur de requête: quand `(g_fileLoadFlags & 0x3A) == 0`, il écrit `entityData.field_0x128`, pose `*(DAT_8009aa48 + 0x180) = DAT_801c1000`, `*(DAT_8009aa48 + 0x174) = 6`, `DAT_8009aa94 = 1`, puis `g_fileLoadFlags |= 0x20`.
+- `FUN_800630e4` consomme `DAT_8009aa94 & 0x3F` comme sous-état, avance la machine via `CdSync`, `CdRead`, `CdReadSync` et `SpuStTransfer`, puis incrémente `DAT_8009aa94` à la fin de chaque pas réussi.
+- Le bit `0x40` de `DAT_8009aa94` est une demande alternative: `FUN_80065798` le pose directement, et les états `9/0x10` de `FUN_800630e4` ne prennent leur branche utile que si ce bit est présent.
+- Le bit `0x80` est un marqueur de callback terminé: `FUN_80064154` force `DAT_8009aa94 = 0x8B`, puis `FUN_800630e4` normalise toute valeur avec bit `0x80` vers l'état terminal de cleanup `0x0B`.
+- L'état `0x0B` est CERTAINEMENT le cleanup terminal: `FUN_800630e4` y remet `DAT_8009aa94 = 0`, `DAT_8009aad4 = 0`, et enlève `g_fileLoadFlags & ~0x20`.
+- `FUN_8006571c` et `FUN_80065948` ne pilotent pas la machine: ce sont deux sondes de disponibilité. Les deux écrivent `*(DAT_8009aa48 + 0x174) = 2`; `FUN_8006571c` retourne `1` tant que la machine reste active hors cas terminaux, alors que `FUN_80065948` retourne `1` une fois la machine idle/terminee, et nettoie aussi le chemin terminal `9/0x10`.
+
+#### 48.14.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `DAT_8009aa94 = 1` | write | entrée machine CD/SPU | `FUN_800655c8` | écriture directe après setup `SpuSetVoiceAttr`, avec `g_fileLoadFlags |= 0x20` |
+| `DAT_8009aa94 & 0x3F` | lecture switch | sous-état machine | `FUN_800630e4` | switch direct sur les cas `1,2,3,4,5,6,7,8,9,0x0B,0x0C,0x0D,0x0E,0x0F,0x10` |
+| `DAT_8009aa94 += 1` | write | avancement d'état | `FUN_800630e4` | incrément en fin de bloc après les pas réussis |
+| `DAT_8009aa94 |= 0x40` | write | requête branche alternative | `FUN_80065798` | décompilation entière = OR `0x40` |
+| `FUN_80065798` caller 1 | call | source de requête `0x40` | `AnimCmd_VoiceCall` | XREF direct |
+| `FUN_80065798` caller 2 | call | source de requête `0x40` | `FUN_8005d1ec` | XREF direct |
+| états `9/0x10` + bit `0x40` | lecture + write | branche de transfert SPU | `FUN_800630e4` | `if ((DAT_8009aa94 & 0x40) != 0) { DAT_8009aa94 = 10; SpuStTransfer(4,0x800000); ... }` |
+| `DAT_8009aa94 = 0x8B` | write | marqueur callback terminé | `FUN_80064154` | écriture directe dans callback `SpuSetKey` |
+| `if (DAT_8009aa94 & 0x80) DAT_8009aa94 = 0x0B` | read + write | normalisation callback -> cleanup | `FUN_800630e4` | branche terminale en fin de fonction |
+| `DAT_8009aa94 = 0`, `DAT_8009aad4 = 0`, `g_fileLoadFlags &= ~0x20` | write | cleanup terminal | `FUN_800630e4` case `0x0B` | écritures directes |
+| `FUN_8006571c` | lecture + return | sonde “busy” | `FUN_8006571c` | retourne `1` hors cas `0`, `0x0B`, bit `0x80`, `9`, `0x10`; les cas `9/0x10` nettoient puis retournent `0` |
+| `FUN_80065948` | lecture + return | sonde “ready/complete” | `FUN_80065948` | retourne `0` tant que la machine reste active, et `1` quand elle est idle/terminee; nettoie aussi le chemin `9/0x10` |
+
+#### 48.14.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `DAT_8009aa94` est une machine d'état `CD/SPU` et non un booléen de disponibilité brut.
+- `g_fileLoadFlags bit 0x20` est lié CERTAINEMENT à cette machine: il est posé par `FUN_800655c8`, puis effacé par les chemins terminaux de `FUN_800630e4`, `FUN_8006571c` et `FUN_80065948`.
+- `FUN_80065798` ne démarre pas une lecture par lui-même: il marque seulement la machine avec le bit `0x40`, consommé ensuite par `FUN_800630e4` aux états `9/0x10`.
+- `FUN_8006571c` et `FUN_80065948` sont deux lectures inversées du même état global: la première sert de test “encore occupé”, la seconde de test “prêt/terminé”.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- la sémantique métier exacte de chaque sous-état numéroté `1..0x10` reste partiellement INCONNUE au-delà des appels `CD/SPU` déjà prouvés. En revanche, leur appartenance à une seule machine de streaming, leurs transitions structurales, et les bits `0x40/0x80` sont maintenant CERTAINS.
+
+---
+
+### 48.15 Fermeture locale du couple `AnimCmd_FUN_0x32` / `FUN_800657b0`
+
+#### 48.15.1 Résumé factuel
+
+- `FUN_800657b0` n'a qu'un seul appelant direct prouvé: `AnimCmd_FUN_0x32`.
+- `FUN_800657b0` est CERTAINEMENT un wrapper local en 3 sous-états (`battleChars[0].field_0x14 = 0 -> 1 -> 2`) autour de la machine `DAT_8009aa94`.
+- Au sous-état `0`, `FUN_800657b0` sélectionne une valeur 16-bit dans une table `DAT_800921d8` structurée en `3 x uint16` par tag `(tag & 0x7F)`, la copie dans `battleChars[0].field_0x16`, puis lance `FUN_800655c8(0,0,value & 0x3FFF)`.
+- Les mots `0` et `1` de chaque triplet utilisent CERTAINEMENT le bit `0x8000` comme latch local de rotation; le mot `2` est lu directement quand l'argument d'entrée de `FUN_800657b0` porte le bit `0x8000`.
+- Au sous-état `1`, `FUN_800657b0` attend `DAT_8009aa94 == 9`, force `DAT_8009aa94 = 0x49`, puis avance vers le sous-état `2`.
+- Au sous-état `2`, il attend `DAT_8009aa94 == 0`; si la valeur stockée en `field_0x16` n'a pas le bit `0x4000`, il retourne `1` et reboucle au sous-état `0`. Si ce bit `0x4000` est présent, il relance `FUN_800655c8` avec `(value & 0x3FFF) + 1` après avoir effacé ce bit.
+- `AnimCmd_FUN_0x32` utilise trois formes CERTAINES: `mode 0x00` et `mode 0x40` démarrent `FUN_800657b0(...)` et consomment `1` mot; `mode 0x80` poll `FUN_800657b0(0)` et, lorsqu'il retourne `1`, OR le mot suivant dans `g_animSharedVarTable[cmd.high4]` avant de consommer `2` mots.
+
+#### 48.15.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `AnimCmd_FUN_0x32 -> FUN_800657b0` | call unique | appelant direct unique | `AnimCmd_FUN_0x32` | XREFs: 3 appels, tous depuis `0x8003f058` |
+| `battleChars[0].field_0x14` | read/write | sous-état local `0/1/2` | `FUN_800657b0` | branches explicites `==0`, `==1`, `==2` |
+| `DAT_800921d8 + tag*6 + 0` | read/write bit `0x8000` | mot 0 d'un triplet | `FUN_800657b0` | accès direct + pose éventuelle du bit `0x8000` |
+| `DAT_800921d8 + tag*6 + 2` | read/write bit `0x8000` | mot 1 d'un triplet | `FUN_800657b0` | accès direct + pose/clear éventuel du bit `0x8000` |
+| `DAT_800921d8 + tag*6 + 4` | read | mot 2 d'un triplet | `FUN_800657b0` | lecture directe quand `param_1 & 0x8000` |
+| `battleChars[0].field_0x16` | write/read | cache valeur 16-bit locale | `FUN_800657b0` | write au sous-état 0, relu au sous-état 2 |
+| `FUN_800655c8(0,0,value&0x3FFF)` | call | lancement machine streaming | `FUN_800657b0` | appel terminal des sous-états 0 et 2 |
+| `DAT_8009aa94 == 9` | lecture | attente intermediaire | `FUN_800657b0` | branche unique du sous-état 1 |
+| `DAT_8009aa94 = 0x49` | write | relance machine + bit `0x40` | `FUN_800657b0` | écriture directe au passage `1 -> 2` |
+| `DAT_8009aa94 == 0` | lecture | attente de fin | `FUN_800657b0` | branche unique du sous-état 2 |
+| mode `0x00` | call `FUN_800657b0(tag & 0x7F)` | forme 1 mot | `AnimCmd_FUN_0x32` | décompilation lignes 19..24 |
+| mode `0x40` | call `FUN_800657b0((tag & 0x7F) | 0x8000)` | forme 1 mot | `AnimCmd_FUN_0x32` | décompilation lignes 15..17 |
+| mode `0x80` | poll + OR mask | forme 2 mots | `AnimCmd_FUN_0x32` | décompilation lignes 29..35 |
+| `g_animSharedVarTable[(cmd.high8 & 0x0F)] |= word1` | write | set bits runtime | `AnimCmd_FUN_0x32` | write directe au succès du mode `0x80` |
+
+#### 48.15.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `AnimCmd_FUN_0x32` est maintenant fermé structurellement: il a une forme `1` mot pour lancer une séquence, et une forme `2` mots pour attendre sa fin puis poser des bits dans `g_animSharedVarTable`.
+- `FUN_800657b0` ne joue pas directement le son: il orchestre la sélection d'une valeur de table, puis délègue l'exécution à `FUN_800655c8` / `DAT_8009aa94`.
+- `DAT_800921d8` est au minimum une table de `3 x uint16` par tag, avec latch `0x8000` sur les deux premiers mots.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- la signification métier exacte des valeurs 14 bits stockées dans `DAT_800921d8[*] & 0x3FFF` reste INCONNUE (preuve insuffisante). En revanche, leur rôle structurel de sélection pour `FUN_800655c8` est CERTAIN.
+
+---
+
+### 48.16 Fermeture locale des appelants de `FUN_800630e4` et des champs de contexte du streamer audio
+
+#### 48.16.1 Résumé factuel
+
+- `FUN_80062834` est CERTAINEMENT le wrapper `init/update` du sous-système audio/streaming: il lit `entityNode.y.high16`, appelle `FUN_80062894` quand cette valeur vaut `0`, puis `FUN_800630e4` quand elle vaut `1`.
+- `FUN_80062894` est l'initialisateur du sous-système: il prépare l'environnement SPU streaming, charge plusieurs ressources sonores, cherche `CR.B` dans `runtimePointers.polyGt3Index`, remet `DAT_8009aa94/DAT_8009aad4/DAT_8009ab30` à zéro, initialise `field_0x128 = 0`, puis incrémente `entityNode.y.high16` pour que le wrapper passe au mode update.
+- `FUN_800660f4` est le teardown/drain correspondant: il coupe les canaux, coupe la reverb, force `*(DAT_8009aa48 + 0x174) = 2`, boucle sur `FUN_800630e4()` tant que `g_fileLoadFlags & 0x20` reste posé, puis ferme les handles `NCK/VAB` actifs.
+- `entityData.field_0x128` est maintenant borné CERTAINEMENT comme un index de requête: `FUN_800655c8` le pose, puis `FUN_800630e4` l'utilise pour calculer un offset CD à partir de la base `CR.B` stockée dans `runtimePointers.polyGt3Index`.
+- `entityData.field_0x12e` est CERTAINEMENT un compteur restant de transfert: il est chargé depuis `DAT_801c1a22`, puis consommé en blocs de `0x40` ou traité comme queue finale `< 0x41` par `FUN_800630e4`, `FUN_80063ef8` et `FUN_80063fc0`.
+- `runtimePointers.dataPtr1` est la position `CdlLOC` courante de la source streamée active; `FUN_80063fc0` l'avance quand des blocs supplémentaires restent à transférer.
+- `runtimePointers.dataPtr10` n'est pas une base importée depuis l'init: `FUN_800630e4` l'initialise localement au case `5` comme `runtimePointers.dataPtr1 + 2 secteurs`, puis le réutilise au case `0x0C` comme base alternative pour recalculer la position CD suivante.
+
+#### 48.16.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `entityNode.y.high16 == 0` | branche locale | état init | `FUN_80062834` | call direct `FUN_80062894()` |
+| `entityNode.y.high16 == 1` | branche locale | état update | `FUN_80062834` | call direct `FUN_800630e4()` |
+| `runtimePointers.polyGt3Index` | write via `CdSearchFile("\\SOUND\\CR.B;1")` | base `CdlLOC` fichier CR.B | `FUN_80062894` | décompilation lignes 233..239 |
+| `field_0x128` | write/read | index de requête stream | `FUN_800655c8`, `FUN_800630e4` | écrit par `FUN_800655c8`, relu au case `1` pour calculer `CdPosToInt(base) + index * 0x22 + corrections` |
+| `field_0x12e` | write/read/decr | compteur restant | `FUN_800630e4`, `FUN_80063ef8`, `FUN_80063fc0` | chargé depuis `DAT_801c1a22`, décrémenté de `0x40`, queue finale traitée par `<< 3` |
+| `runtimePointers.dataPtr1` | read/write | position CD courante | `FUN_80062894`, `FUN_800630e4`, `FUN_80063fc0` | setloc initial depuis `ABTL.B`, puis avancé/repositionné pendant le streaming |
+| `runtimePointers.dataPtr10` | write/read | base alternative `CdlLOC` | `FUN_800630e4` | initialisé au case `5` depuis `dataPtr1 + 2 secteurs`, relu au case `0x0C` |
+| `g_fileLoadFlags bit 0x20` | read/write | bit activité streamer audio | `FUN_800655c8`, `FUN_800630e4`, `FUN_800660f4` | posé au launch, drainé au teardown, effacé au cleanup |
+
+#### 48.16.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- `FUN_80062834`, `FUN_80062894` et `FUN_800660f4` ferment maintenant le contexte immédiat d'exécution de `FUN_800630e4`.
+- `field_0x128`, `field_0x12e`, `runtimePointers.dataPtr1`, `runtimePointers.dataPtr10` ont tous un rôle structurel minimal prouvé dans la machine de streaming audio.
+
+**PROBABLE**
+- aucun sur ce bloc local
+
+**INCONNU**
+- l'unité métier exacte du compteur `field_0x12e` reste INCONNUE (preuve insuffisante). En revanche, son usage structurel de compteur restant consommé par tranches est CERTAIN.
+
+---
+
+### 48.17 Inventaire local des writers de `g_animSharedVarTable`
+
+#### 48.17.1 Résumé factuel
+
+- `g_animSharedVarTable` n'est plus seulement une table lue par `if_set`: plusieurs handlers `AnimCmd_*` y écrivent CERTAINEMENT.
+- Les writers prouvés se répartissent en trois familles locales.
+- Famille `OR de masques`: `AnimCmd_ConditionalBranch`, `AnimCmd_SetCharRenderState`, `AnimCmd_VoiceCall`, `AnimCmd_FUN_0x32`, `AnimCmd_ChDanSet`, `AnimCmd_AttSet`, `AnimCmd_HitzSet`.
+- Famille `clear puis OR a completion`: `AnimCmd_MoveSet` retire d'abord un masque d'un slot partagé, puis le repose quand les trois axes ont atteint leur destination.
+- Famille `écriture/arithmétique directe`: `AnimCmd_BitSet` via `ApplyMathOp`, plus `ApplyMathOp(mode 0x0A)` lui-même qui écrit directement dans un slot partagé.
+- Famille `mesure -> stockage`: `AnimCmd_ObjIntGet` écrit une distance 3D entre deux body parts dans un slot partagé; `AnimCmd_ObjLongGet` écrit la somme d'une plage `g_meshXOffsetBuffer`.
+- La passe XREF locale est maintenant fermée: `AnimCmd_IfSet` et tous les autres handlers encore référencés dans cette zone ne font que lire `g_animSharedVarTable` comme source d'opérandes, d'indices ou de sélecteurs avant d'écrire ailleurs.
+
+#### 48.17.2 Table des preuves
+
+| Élément | Accès | Type minimal | Fonction | Preuve |
+|--------|-------|--------------|----------|--------|
+| `g_animSharedVarTable[dst] |= mask` | write OR | writer conditionnel | `AnimCmd_ConditionalBranch` | write directe ligne 59 après comparaison des slots |
+| `g_animSharedVarTable[targetIdx] |= g_charSharedVarMaskBuf[i]` | write OR | writer différé | `AnimCmd_SetCharRenderState` | writes lignes 52..54 et 65..67 |
+| `g_animSharedVarTable[cmd.low4] |= word1` | write OR | writer synchronisé audio | `AnimCmd_VoiceCall` | write directe lignes 50..51 |
+| `g_animSharedVarTable[cmd.high4] |= word1` | write OR | writer synchronisé opcode `0x32` | `AnimCmd_FUN_0x32` | write directe lignes 39..40 |
+| `g_animSharedVarTable[targetIdx]` clear/OR | write read-modify-write | writer lié à task dégâts | `AnimCmd_ChDanSet` | clears/ORs lignes 42..48 et 63..64 |
+| `g_animSharedVarTable[dstIdx] |= local_32` ou `local_32<<1` | write OR | writer lié à attack zone | `AnimCmd_AttSet` | writes lignes 37..43 |
+| `g_animSharedVarTable[dstIdx] |= shifted_mask` | write OR | writer lié à hitbox | `AnimCmd_HitzSet` | write directe lignes 36..37 après résolution du propriétaire |
+| `g_animSharedVarTable[targetIdx] &= ~mask; ... |= mask` | write read-modify-write | writer de completion mouvement | `AnimCmd_MoveSet` | clear lignes 119..120, OR à completion lignes 124..124 |
+| `g_animSharedVarTable[targetIdx] = ApplyMathOp(...)` | write directe | writer arithmétique | `AnimCmd_BitSet` | lignes 21..25 |
+| `g_animSharedVarTable[operand] = current_val` | write directe | helper d'écriture générique | `ApplyMathOp` | case `0x0A`, ligne 42 |
+| `g_animSharedVarTable[dstIdx] = distance3D` | write directe | writer mesure | `AnimCmd_ObjIntGet` | ligne 39 |
+| `g_animSharedVarTable[dstIdx] = sum(g_meshXOffsetBuffer[range])` | write directe | writer mesure | `AnimCmd_ObjLongGet` | ligne 21 |
+| `AnimCmd_IfSet` | read only | consumer de branchement | `AnimCmd_IfSet` | lit `g_animSharedVarTable[var_idx]`, ne l'écrit pas |
+
+#### 48.17.2b Lecteurs seuls prouvés par XREF
+
+- `AnimCmd_ChEffSet`, `AnimCmd_AnimateVertexColors`, `AnimCmd_SetBodyPartTransforms`, `AnimCmd_SetBodyPartTransforms_v2`, `AnimCmd_SetBodyPartTransforms_v3`, `AnimCmd_SetMeshPaletteRange`, `AnimCmd_AddPrimsToOT`.
+- `AnimCmd_ApplyCharEffect`, `AnimCmd_XAddSet`, `AnimCmd_XMaxSet`, `AnimCmd_Rgb2Set`, `AnimCmd_BaseCulX`, `AnimCmd_BaseCulY`, `AnimCmd_BaseCulZ`, `AnimCmd_BaseCulP`, `AnimCmd_MovexpSet`.
+- `AnimCmd_IfSet`, `AnimCmd_BitChk`, `AnimCmd_Xy0123Set`, `AnimCmd_Uv0123Set`, `AnimCmd_OtZSet`, `AnimCmd_EffSet`, `AnimCmd_AutoOtz`, `AnimCmd_AutoRgb`, `AnimCmd_ChseCall`, `AnimCmd_ChseVol`, `AnimCmd_AtseCall`.
+- Preuve commune: dans chacun de ces handlers, les XREFs vers `g_animSharedVarTable` servent seulement à charger un opérande ou un sélecteur; les écritures suivantes partent vers buffers UV/XYZP, OT, couleurs, état audio/effect, ou pointeurs de flux, pas vers la table partagée.
+
+#### 48.17.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- L'inventaire local des XREFs directs vers `g_animSharedVarTable` est maintenant classé sur cette passe Ghidra.
+- Les seuls writers prouvés sont `AnimCmd_ConditionalBranch`, `AnimCmd_SetCharRenderState`, `AnimCmd_VoiceCall`, `AnimCmd_FUN_0x32`, `AnimCmd_ChDanSet`, `AnimCmd_AttSet`, `AnimCmd_HitzSet`, `AnimCmd_MoveSet`, `AnimCmd_BitSet`, `AnimCmd_ObjIntGet`, `AnimCmd_ObjLongGet`, et `ApplyMathOp(mode 0x0A)`.
+- `if_set` et tous les autres handlers listés en `48.17.2b` sont des consommateurs seuls de cette table; le choix de branche dépend donc d'écritures amont diverses, pas d'un opcode caché dans ces lecteurs.
+
+**PROBABLE**
+- Les masques observés en combat (`0x4000`, `0x2000`, `0x1000`, `0x0800`, `0x0400`) proviennent d'une combinaison de plusieurs writers d'animation, pas d'un writer unique restant dans la liste XREF locale désormais classée.
+
+**INCONNU**
+- quelle séquence runtime précise pose chaque masque métier (`0x4000`, `0x2000`, `0x1000`, `0x0800`, `0x0400`) dans chaque combat reste INCONNUE (preuve insuffisante). En revanche, les familles de writers capables de les produire sont maintenant CERTAINES.
+
+### 48.18 Provenance locale des masques écrits dans `g_animSharedVarTable`
+
+#### 48.18.1 Résumé factuel
+
+- Sur les writers de type `OR` relus dans cette passe, la source du masque n'est pas une table cachée de l'EXE.
+- `AnimCmd_ConditionalBranch`, `AnimCmd_VoiceCall`, `AnimCmd_FUN_0x32`, `AnimCmd_AttSet`, `AnimCmd_HitzSet`, `AnimCmd_MoveSet` et `AnimCmd_ChDanSet` prennent leur masque de base depuis un mot immédiat du flux de commande.
+- `AnimCmd_SetCharRenderState` ne fait pas exception: il OR plus tard `g_charSharedVarMaskBuf[charIndex]`, mais ce buffer est initialisé depuis `streamPtr[3]` dans la forme d'initialisation du même handler.
+- `AttSet`, `HitzSet` et `ChDanSet` peuvent ensuite décaler ce masque de base selon l'owner trouvé; `MoveSet` fait un cycle clear/re-OR sur son masque immédiat; `ConditionalBranch`, `VoiceCall` et `FUN_0x32` ORent directement leur mot immédiat.
+- La réduction d'incertitude restante n'est donc plus côté code d'interprétation EXE: elle est dans les mots immédiats réellement présents dans les streams CH_BIN exécutés en combat.
+
+#### 48.18.2 Table des preuves
+
+| Writer | Source du masque de base | Transformation locale | Preuve |
+|--------|---------------------------|-----------------------|--------|
+| `AnimCmd_ConditionalBranch` | `streamPtr[2]` | aucune, OR direct vers `slot = word1.high8` | lignes 22..24 puis 63..64 |
+| `AnimCmd_SetCharRenderState` | `streamPtr[3]` stocké dans `g_charSharedVarMaskBuf[charIndex]` | OR différé quand la condition de render-state/countdown se ferme | lignes 37..37 puis 56..58 / 69..71 |
+| `AnimCmd_VoiceCall` | `*puVar4` (mot suivant) | aucune, OR direct dans le mode synchronisé | lignes 19..19 puis 54..55 |
+| `AnimCmd_FUN_0x32` | `*puVar4` (mot suivant) | aucune, OR direct après `FUN_800657b0(0)==1` | lignes 34..40 |
+| `AnimCmd_AttSet` | `param_1[2]` -> `local_32` | OR direct ou `local_32 << 1`, puis décalages successifs par owner en mode `1` | lignes 26..26, 40..46, 54..54 |
+| `AnimCmd_HitzSet` | `param_1[3]` -> `uVar2` | OR de `uVar2`, puis `uVar2 << 1` par owner parcouru | lignes 23..23, 35..40, 45..45 |
+| `AnimCmd_MoveSet` | `param_1[3]` -> `uVar3` | clear `&= ~uVar3`, puis OR `|= uVar3` à complétion | lignes 31..31, 119..124 |
+| `AnimCmd_ChDanSet` | `param_1[2]` -> `uVar5` | clear via `~(uVar5 * 0x7f)`, puis OR de `uVar5` ou d'une version décalée dans la boucle owner | lignes 42..49, 52..52, 63..68 |
+
+#### 48.18.3 CERTAIN / PROBABLE / INCONNU
+
+**CERTAIN**
+- Aucun writer `OR` relu ici n'introduit une table de masques EXE cachée: la base du masque vient toujours du flux de commande immédiat, directement ou via un buffer intermédiaire initialisé depuis ce flux.
+- Les décalages supplémentaires observés dans `AttSet`, `HitzSet` et `ChDanSet` sont des décalages runtime par owner/slot, pas des lectures de nouvelles constantes depuis l'EXE.
+
+**PROBABLE**
+- Les masques métier observés (`0x4000`, `0x2000`, `0x1000`, `0x0800`, `0x0400`) proviennent de mots immédiats présents dans les streams CH_BIN, éventuellement décalés par ces writers orientés owner.
+
+**INCONNU**
+- Quelles commandes de stream concrètes portent ces mots immédiats dans chaque combat reste INCONNU (preuve insuffisante dans `GAME.EXE` seul). La prochaine réduction d'incertitude doit lire ou tracer les streams CH_BIN exécutés, pas poursuivre les XREFs code de ce sous-chemin.
 
 ---
 

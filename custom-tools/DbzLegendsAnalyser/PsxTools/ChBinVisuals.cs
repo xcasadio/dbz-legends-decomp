@@ -578,6 +578,8 @@ public static class ChBinVisuals
         private PrimitiveMaterialState[] _animatedPrimitiveMaterials = Array.Empty<PrimitiveMaterialState>();
         private PrimitiveUvState[] _basePrimitiveUvs = Array.Empty<PrimitiveUvState>();
         private PrimitiveUvState[] _animatedPrimitiveUvs = Array.Empty<PrimitiveUvState>();
+        private PrimitiveQuadState[] _animatedPrimitiveQuads = Array.Empty<PrimitiveQuadState>();
+        private readonly CharEffectSlotState[] _charEffectSlots = new CharEffectSlotState[16];
         private readonly ushort[] _vram = new ushort[VramWidth * VramHeight];
         private readonly Dictionary<uint, bool> _paletteVisibilityCache = new();
         private readonly IReadOnlyDictionary<ushort, ushort[]> _paletteOverrides;
@@ -638,6 +640,9 @@ public static class ChBinVisuals
             Array.Clear(_rotationSlots, 0, _rotationSlots.Length);
             Array.Clear(_scaleSlots, 0, _scaleSlots.Length);
             Array.Clear(_sharedVars, 0, _sharedVars.Length);
+            if (_animatedPrimitiveQuads.Length > 0)
+                Array.Clear(_animatedPrimitiveQuads, 0, _animatedPrimitiveQuads.Length);
+            Array.Clear(_charEffectSlots, 0, _charEffectSlots.Length);
             if (_basePrimitiveMaterials.Length > 0)
                 Array.Copy(_basePrimitiveMaterials, _animatedPrimitiveMaterials, _basePrimitiveMaterials.Length);
             if (_basePrimitiveUvs.Length > 0)
@@ -666,6 +671,7 @@ public static class ChBinVisuals
             _animatedPrimitiveMaterials = new PrimitiveMaterialState[primitiveCount];
             _basePrimitiveUvs = new PrimitiveUvState[primitiveCount];
             _animatedPrimitiveUvs = new PrimitiveUvState[primitiveCount];
+            _animatedPrimitiveQuads = new PrimitiveQuadState[primitiveCount];
 
             foreach (ChBinRenderableModel model in models)
             {
@@ -827,6 +833,8 @@ public static class ChBinVisuals
             bool poseDirty = false;
             textureDirty = false;
 
+            poseDirty |= AdvanceCharEffectSlots();
+
             foreach (StreamState stream in _streams)
             {
                 if (stream.IsFinished || stream.Batches.Length == 0)
@@ -901,6 +909,20 @@ public static class ChBinVisuals
 
             PrimitiveUvState state = _animatedPrimitiveUvs[primitiveIndex];
             return state.IsAssigned ? state.UvRect : fallbackUvRect;
+        }
+
+        public bool TryGetAnimatedQuadOverride(int primitiveIndex, out ChBinQuadVertexOverride quadOverride)
+        {
+            quadOverride = default;
+            if ((uint)primitiveIndex >= (uint)_animatedPrimitiveQuads.Length)
+                return false;
+
+            PrimitiveQuadState state = _animatedPrimitiveQuads[primitiveIndex];
+            if (!state.IsAssigned)
+                return false;
+
+            quadOverride = new ChBinQuadVertexOverride(state.P0, state.P1, state.P2, state.P3);
+            return true;
         }
 
         private IReadOnlyList<ChBinMaterialKey> EnumerateUploadPageCandidates()
@@ -1096,6 +1118,12 @@ public static class ChBinVisuals
                         break;
                     case 0x0D when size >= 4:
                         textureDirty |= ApplyTexturePageOrClutSet(words, cursor);
+                        break;
+                    case 0x27 when size >= 1:
+                        poseDirty |= ApplyCharEffectSet(words, cursor, size);
+                        break;
+                    case 0x2C when size >= 1:
+                        poseDirty |= ApplyCharEffectWait(word0);
                         break;
                     case 0x20 when size >= 6:
                         poseDirty |= ApplyUv0123Set(words, cursor);
@@ -1370,6 +1398,267 @@ public static class ChBinVisuals
             }
 
             return dirty;
+        }
+
+        private bool ApplyCharEffectSet(ushort[] words, int cursor, int size)
+        {
+            ushort word0 = words[cursor];
+            if ((word0 & 0x8000) != 0)
+                return AdvanceCharEffectSlots();
+
+            if (size < 5)
+                return false;
+
+            int primitiveStartIndex = ResolveCharEffectPrimitiveStart((byte)(word0 >> 8), words[cursor + 1]);
+            if (primitiveStartIndex < 0)
+                return false;
+
+            int slotIndex = ResolveCharEffectSlotIndex(words[cursor + 2]);
+            if ((uint)slotIndex >= (uint)_charEffectSlots.Length)
+                return false;
+
+            _charEffectSlots[slotIndex] = new CharEffectSlotState
+            {
+                IsActive = true,
+                Loop = (((word0 >> 8) & 0x04) != 0),
+                Countdown = 1,
+                PrimitiveStartIndex = primitiveStartIndex,
+                HeaderSlotIndex = (words[cursor + 1] >> 8) & 0xFF,
+                PayloadWordOffset = 0,
+                RestartGroupSkipCount = (word0 >> 11) & 0x0F,
+                BaseUvWord = words[cursor + 3],
+                BaseClut = words[cursor + 4],
+                InitialDelay = (byte)(words[cursor + 2] & 0xFF),
+                LastRecordCount = 0,
+            };
+
+            return false;
+        }
+
+        private bool ApplyCharEffectWait(ushort word0)
+        {
+            if (((word0 >> 8) & 0x01) != 0)
+                return ClearCharEffectSlots();
+
+            return AdvanceCharEffectSlots();
+        }
+
+        private bool AdvanceCharEffectSlots()
+        {
+            bool dirty = false;
+
+            for (int slotIndex = 0; slotIndex < _charEffectSlots.Length; slotIndex++)
+            {
+                CharEffectSlotState slot = _charEffectSlots[slotIndex];
+                if (!slot.IsActive)
+                    continue;
+
+                slot.Countdown--;
+                if (slot.Countdown > 0)
+                {
+                    _charEffectSlots[slotIndex] = slot;
+                    continue;
+                }
+
+                if (slot.TerminateAfterGroup)
+                {
+                    if (!slot.Loop)
+                    {
+                        _charEffectSlots[slotIndex] = default;
+                        continue;
+                    }
+
+                    if (!TryResetCharEffectLoop(ref slot))
+                    {
+                        _charEffectSlots[slotIndex] = default;
+                        continue;
+                    }
+                }
+
+                dirty |= ApplyCharEffectGroup(ref slot);
+                _charEffectSlots[slotIndex] = slot;
+            }
+
+            return dirty;
+        }
+
+        private bool ClearCharEffectSlots()
+        {
+            for (int slotIndex = 0; slotIndex < _charEffectSlots.Length; slotIndex++)
+            {
+                _charEffectSlots[slotIndex] = default;
+            }
+
+            return false;
+        }
+
+        private bool ApplyCharEffectGroup(ref CharEffectSlotState slot)
+        {
+            byte[] payload = GetSlotPayload(slot.HeaderSlotIndex);
+            if (payload.Length == 0)
+            {
+                slot = default;
+                return false;
+            }
+
+            int groupOffsetBytes = slot.PayloadWordOffset * 2;
+            if (groupOffsetBytes + 4 > payload.Length)
+            {
+                slot = default;
+                return false;
+            }
+
+            bool groupDirty = false;
+
+            ushort headerWord0 = ReadPayloadWord(payload, slot.PayloadWordOffset + 0);
+            ushort headerWord1 = ReadPayloadWord(payload, slot.PayloadWordOffset + 1);
+            int recordCount = headerWord0 & 0xFF;
+            bool terminal = (headerWord0 & 0x8000) != 0;
+            int recordCursor = slot.PayloadWordOffset + 2;
+
+            for (int recordIndex = 0; recordIndex < recordCount; recordIndex++)
+            {
+                int recordOffsetBytes = (recordCursor + 4) * 2;
+                if (recordOffsetBytes >= payload.Length)
+                {
+                    slot = default;
+                    return groupDirty;
+                }
+
+                groupDirty |= ApplyCharEffectRecord(slot, payload, recordCursor, slot.PrimitiveStartIndex + recordIndex);
+                recordCursor += 5;
+            }
+
+            slot.PayloadWordOffset = recordCursor;
+            slot.LastRecordCount = recordCount;
+            slot.TerminateAfterGroup = terminal;
+            slot.Countdown = NormalizeCountdown((ushort)(slot.InitialDelay + (headerWord1 & 0xFF)));
+
+            return groupDirty;
+        }
+
+        private bool TryResetCharEffectLoop(ref CharEffectSlotState slot)
+        {
+            byte[] payload = GetSlotPayload(slot.HeaderSlotIndex);
+            if (payload.Length == 0)
+                return false;
+
+            int wordOffset = 0;
+            for (int index = 0; index < slot.RestartGroupSkipCount; index++)
+            {
+                if (!TrySkipCharEffectGroup(payload, ref wordOffset))
+                    return false;
+            }
+
+            slot.PayloadWordOffset = wordOffset;
+            slot.TerminateAfterGroup = false;
+            return true;
+        }
+
+        private static bool TrySkipCharEffectGroup(byte[] payload, ref int wordOffset)
+        {
+            int headerByteOffset = wordOffset * 2;
+            if ((uint)(headerByteOffset + 3) >= (uint)payload.Length)
+                return false;
+
+            ushort headerWord0 = ReadPayloadWord(payload, wordOffset);
+            int recordCount = headerWord0 & 0xFF;
+            int nextWordOffset = wordOffset + 2 + (recordCount * 5);
+            if ((uint)(nextWordOffset * 2) > (uint)payload.Length)
+                return false;
+
+            wordOffset = nextWordOffset;
+            return true;
+        }
+
+        private bool ApplyCharEffectRecord(CharEffectSlotState slot, byte[] payload, int wordOffset, int primitiveIndex)
+        {
+            if ((uint)primitiveIndex >= (uint)_animatedPrimitiveMaterials.Length)
+                return false;
+
+            PrimitiveMaterialState fallbackMaterial = _basePrimitiveMaterials[primitiveIndex];
+            if (!fallbackMaterial.IsAssigned)
+                return false;
+
+            ushort control = ReadPayloadWord(payload, wordOffset + 0);
+            short signedPacked = (short)ReadPayloadWord(payload, wordOffset + 1);
+            ushort sizeWord = ReadPayloadWord(payload, wordOffset + 2);
+            short deltaUvWord = (short)ReadPayloadWord(payload, wordOffset + 3);
+            short spanUvWord = (short)ReadPayloadWord(payload, wordOffset + 4);
+
+            int baseX = (sbyte)(signedPacked & 0xFF);
+            int baseY = (sbyte)(signedPacked >> 8);
+            int width = sizeWord & 0xFF;
+            int height = (sizeWord >> 8) & 0xFF;
+
+            (Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3) = BuildCharEffectQuad(control, baseX, baseY, width, height);
+            _animatedPrimitiveQuads[primitiveIndex] = new PrimitiveQuadState(p0, p1, p2, p3, true);
+
+            ChBinMaterialKey currentMaterial = _animatedPrimitiveMaterials[primitiveIndex].IsAssigned
+                ? _animatedPrimitiveMaterials[primitiveIndex].MaterialKey
+                : fallbackMaterial.MaterialKey;
+            _animatedPrimitiveMaterials[primitiveIndex] = new PrimitiveMaterialState(
+                new ChBinMaterialKey(currentMaterial.TPage, (ushort)(slot.BaseClut + (control & 0x1F))),
+                true);
+
+            int baseU = (sbyte)(slot.BaseUvWord & 0xFF) + (sbyte)(deltaUvWord & 0xFF);
+            int baseV = (sbyte)(slot.BaseUvWord >> 8) + (sbyte)(deltaUvWord >> 8);
+            int spanU = (sbyte)(spanUvWord & 0xFF);
+            int spanV = (sbyte)(spanUvWord >> 8);
+
+            var uvRect = new ChBinUvRect(
+                new StgUV((byte)baseU, (byte)baseV),
+                new StgUV((byte)(baseU + spanU), (byte)baseV),
+                new StgUV((byte)baseU, (byte)(baseV + spanV)),
+                new StgUV((byte)(baseU + spanU), (byte)(baseV + spanV)));
+            _animatedPrimitiveUvs[primitiveIndex] = new PrimitiveUvState(uvRect, true);
+
+            return true;
+        }
+
+        private static (Vector3 P0, Vector3 P1, Vector3 P2, Vector3 P3) BuildCharEffectQuad(ushort control, int baseX, int baseY, int width, int height)
+        {
+            Vector3 topLeft = new(baseX, baseY, 0f);
+            Vector3 topRight = new(baseX + width, baseY, 0f);
+            Vector3 bottomLeft = new(baseX, baseY + height, 0f);
+            Vector3 bottomRight = new(baseX + width, baseY + height, 0f);
+
+            return (control & 0x0C00) switch
+            {
+                0x0400 => (topRight, topLeft, bottomRight, bottomLeft),
+                0x0800 => (bottomLeft, bottomRight, topLeft, topRight),
+                0x0C00 => (bottomRight, bottomLeft, topRight, topLeft),
+                _ => (topLeft, topRight, bottomLeft, bottomRight),
+            };
+        }
+
+        private static int ResolveCharEffectPrimitiveStart(byte flags, ushort word1)
+        {
+            int mode = flags & 0x03;
+            return mode == 0 ? word1 & 0xFF : -1;
+        }
+
+        private int ResolveCharEffectSlotIndex(ushort word2)
+        {
+            if ((word2 & 0x0700) != 0)
+                return ((word2 >> 8) & 0x07) - 1;
+
+            for (int slotIndex = 4; slotIndex < _charEffectSlots.Length; slotIndex++)
+            {
+                if (!_charEffectSlots[slotIndex].IsActive)
+                    return slotIndex;
+            }
+
+            return 4;
+        }
+
+        private static ushort ReadPayloadWord(byte[] payload, int wordOffset)
+        {
+            int byteOffset = wordOffset * 2;
+            if ((uint)(byteOffset + 1) >= (uint)payload.Length)
+                return 0;
+
+            return (ushort)(payload[byteOffset] | (payload[byteOffset + 1] << 8));
         }
 
         private Vector3 ResolveTransformValue(TransformVectorState[] slots, int index, Vector3 defaultValue)
@@ -1791,6 +2080,7 @@ public static class ChBinVisuals
                 0x21 => (high8 & 0x80) != 0 ? 1 : 3,
                 0x23 => (high8 & 0x03) == 0 ? 3 : 1,
                 0x25 => cursor + 4 < words.Count ? 5 + CountXySpecs(words[cursor + 2], words[cursor + 3], words[cursor + 4]) : 1,
+                0x27 => (high8 & 0x80) != 0 ? 1 : 5,
                 0x2C => 1,
                 0x2D => 2,
                 0x2F => (high8 & 0xC0) == 0x80 ? 1 : 2,
@@ -1845,6 +2135,24 @@ public static class ChBinVisuals
         private readonly record struct PrimitiveMaterialState(ChBinMaterialKey MaterialKey, bool IsAssigned);
 
         private readonly record struct PrimitiveUvState(ChBinUvRect UvRect, bool IsAssigned);
+
+        private readonly record struct PrimitiveQuadState(Vector3 P0, Vector3 P1, Vector3 P2, Vector3 P3, bool IsAssigned);
+
+        private struct CharEffectSlotState
+        {
+            public bool IsActive;
+            public bool Loop;
+            public bool TerminateAfterGroup;
+            public int Countdown;
+            public int PrimitiveStartIndex;
+            public int HeaderSlotIndex;
+            public int PayloadWordOffset;
+            public int RestartGroupSkipCount;
+            public ushort BaseUvWord;
+            public ushort BaseClut;
+            public byte InitialDelay;
+            public int LastRecordCount;
+        }
     }
 
     private sealed class StreamState
@@ -2018,6 +2326,9 @@ public sealed class ChBinVisualDocument
 
     public ChBinUvRect GetAnimatedUvRect(int primitiveIndex, ChBinUvRect fallbackUvRect)
         => _animator.GetAnimatedUvRect(primitiveIndex, fallbackUvRect);
+
+    public bool TryGetAnimatedQuadOverride(int primitiveIndex, out ChBinQuadVertexOverride quadOverride)
+        => _animator.TryGetAnimatedQuadOverride(primitiveIndex, out quadOverride);
 }
 
 public sealed class ChBinRenderableModel
@@ -2065,7 +2376,13 @@ public sealed class ChBinTexturedPrimitive
         => GetVertices(materialKey, BaseUvRect);
 
     public VertexPositionColorTexture[] GetVertices(ChBinMaterialKey materialKey, ChBinUvRect uvRect)
+        => GetVertices(materialKey, uvRect, null);
+
+    public VertexPositionColorTexture[] GetVertices(ChBinMaterialKey materialKey, ChBinUvRect uvRect, ChBinQuadVertexOverride? quadOverride)
     {
+        if (quadOverride is not null)
+            return BuildVertices(materialKey, GetMappedUvs(uvRect), quadOverride.Value);
+
         if (uvRect == BaseUvRect)
         {
             return materialKey.ColorMode switch
@@ -2078,6 +2395,19 @@ public sealed class ChBinTexturedPrimitive
         }
 
         return BuildVertices(materialKey, GetMappedUvs(uvRect));
+    }
+
+    private VertexPositionColorTexture[] BuildVertices(ChBinMaterialKey materialKey, IReadOnlyList<StgUV> mappedUvs, ChBinQuadVertexOverride quadOverride)
+    {
+        var vertices = new VertexPositionColorTexture[_rawVertices.Length];
+        for (int index = 0; index < _rawVertices.Length; index++)
+        {
+            ChBinRawTexturedVertex rawVertex = _rawVertices[index];
+            StgUV uv = index < mappedUvs.Count ? mappedUvs[index] : rawVertex.Uv;
+            vertices[index] = new VertexPositionColorTexture(GetOverridePosition(index, quadOverride), rawVertex.Color, materialKey.Normalize(uv));
+        }
+
+        return vertices;
     }
 
     private VertexPositionColorTexture[] BuildVertices(ChBinMaterialKey materialKey, IReadOnlyList<StgUV> mappedUvs)
@@ -2131,6 +2461,25 @@ public sealed class ChBinTexturedPrimitive
         return _rawVertices.Select(static vertex => vertex.Uv).ToArray();
     }
 
+    private Vector3 GetOverridePosition(int vertexIndex, ChBinQuadVertexOverride quadOverride)
+    {
+        if (_primitiveMode == 0 && _rawVertices.Length == 6)
+        {
+            return vertexIndex switch
+            {
+                0 => quadOverride.P0,
+                1 => quadOverride.P1,
+                2 => quadOverride.P2,
+                3 => quadOverride.P1,
+                4 => quadOverride.P3,
+                5 => quadOverride.P2,
+                _ => _rawVertices[vertexIndex].Position,
+            };
+        }
+
+        return _rawVertices[vertexIndex].Position;
+    }
+
     private void CacheVertices(int colorMode, VertexPositionColorTexture[] vertices)
     {
         switch (colorMode)
@@ -2175,3 +2524,5 @@ public readonly record struct ChBinTexturePage(int Width, int Height, Color[] Pi
 }
 
 public readonly record struct ChBinUvRect(StgUV UV0, StgUV UV1, StgUV UV2, StgUV UV3);
+
+public readonly record struct ChBinQuadVertexOverride(Vector3 P0, Vector3 P1, Vector3 P2, Vector3 P3);

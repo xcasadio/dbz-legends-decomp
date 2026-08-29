@@ -495,7 +495,7 @@ public static class ChBinLoader
             int sizeWords = GuessCommandSize(words, cursor);
             sizeWords = Math.Clamp(sizeWords, 1, Math.Max(1, words.Count - cursor));
 
-            int argCount = Math.Min(sizeWords - 1, 3);
+            int argCount = Math.Max(0, sizeWords - 1);
             ushort[] args = new ushort[argCount];
             for (int i = 0; i < argCount; i++)
                 args[i] = words[cursor + 1 + i];
@@ -555,6 +555,7 @@ public static class ChBinLoader
             0x21 => (high8 & 0x80) != 0 ? 1 : 3,
             0x23 => (high8 & 0x03) == 0 ? 3 : 1,
             0x25 => cursor + 4 < words.Count ? 5 + CountXySpecs(words[cursor + 2], words[cursor + 3], words[cursor + 4]) : 1,
+            0x27 => (high8 & 0x80) != 0 ? 1 : 5,
             0x2C => 1,
             0x2D => 2,
             0x2F => (high8 & 0xC0) == 0x80 ? 1 : 2,
@@ -644,6 +645,7 @@ public static class ChBinLoader
             0x1B => "base_culY",
             0x25 => "xy0123_set",
             0x23 => "if_set",
+            0x27 => "ch_eff_set",
             0x2C => "cheff_wait",
             0x2D => "chse_call",
             0x2F => "voice_call",

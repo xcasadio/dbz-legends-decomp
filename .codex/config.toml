@@ -1,0 +1,13 @@
+[mcp_servers.ReVa]
+url = "http://127.0.0.1:8080/mcp/message"
+
+[mcp_servers.ReVa.tools.list-project-files]
+approval_mode = "approve"
+
+[mcp_servers.pcsx-redux]
+command = "node"
+args = ["D:/development/repo/pcsx-redux/tools/mcp-server/dist/index.js"]
+
+[mcp_servers.pcsx-redux.env]
+PCSX_HOST = "localhost"
+PCSX_PORT = "8081"

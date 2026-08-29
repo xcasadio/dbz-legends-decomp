@@ -2,8 +2,13 @@
   <Folder Name="/MGUI/">
     <Project Path="../MGUI/MGUI.Core/MGUI.Core.csproj" />
     <Project Path="../MGUI/MGUI.FontStashSharp/MGUI.FontStashSharp.csproj" />
+    <Project Path="../MGUI/MGUI.MonoGame.Integration/MGUI.MonoGame.Integration.csproj" />
+    <Project Path="../MGUI/MGUI.MonoGame.LegacyRenderer/MGUI.MonoGame.LegacyRenderer.csproj" />
+    <Project Path="../MGUI/MGUI.Rendering.Abstractions/MGUI.Rendering.Abstractions.csproj" />
     <Project Path="../MGUI/MGUI.Shared/MGUI.Shared.csproj" />
   </Folder>
+  <Project Path="../PsxSdkMonogame/PsxSdkMonogame/PsxSdkMonogame.csproj" />
   <Project Path="DbzLegendsAnalyser/DbzLegendsAnalyser.csproj" />
+  <Project Path="DbzLegendsRemaster/DbzLegendsRemaster.csproj" Id="46b93ae2-d8a8-4ebf-82ed-841c8810cc92" />
   <Project Path="PsxTools/PsxTools.csproj" />
 </Solution>

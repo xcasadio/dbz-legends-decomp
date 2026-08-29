@@ -1,5 +1,0 @@
-# DBZ Legends (Japan) - MOVIE.EXE overlay symbols
-# Add symbols as they are discovered during decompilation
-
-MovieInit = 0x800A0000;  # TODO: Find actual address
-MoviePlay = 0x800A0100;  # TODO: Find actual address
