@@ -13,33 +13,34 @@ Le lot s'arrête volontairement avant le chargement de `TITLE.EXE`.
 
 - `start @ 0x8002B954` appelle `main @ 0x800209FC`.
 - `main` initialise les services PSY-Q graphiques/CD/pad, écrit `0x1E` dans
-  `DAT_8003ff2c`, puis appelle `Mainloop @ 0x80020A90`.
-- `Mainloop` est l'unique référence à `\MOVIE\DBZ_OP.STR;1` à `0x80020000`.
-- Le pipeline local est constitué de `FUN_80020d58`, `FUN_80020dcc`,
-  `FUN_80020e64`, `FUN_80020f98`, `FUN_80021020`, `FUN_80021164` et
-  `FUN_80021228`.
+  `g_MovieEndCountdown`, puis appelle `PlayDbzOpeningMovie @ 0x80020A90`.
+- `PlayDbzOpeningMovie` est l'unique référence à `\MOVIE\DBZ_OP.STR;1` à
+  `0x80020000`.
+- Le pipeline local est constitué de `InitializeMoviePlaybackState`,
+  `StartMovieStream`, `MovieMdecOutputCallback`, `DecodeNextMovieFrameVlc`,
+  `GetNextMovieFrame`, `WaitForMovieFrameUpload` et `SeekAndStartMovieStream`.
 - `DecDCTin` reçoit le mode `1`, contrairement au mode `3` du lecteur Bandai.
 - La boucle attend avec `VSync(4)` et lit le pad deux fois sur le chemin de fin.
-- `FUN_80021020` passe l'état à 1 lorsque `frameNumber > 0x3A1`: la frame 930
+- `GetNextMovieFrame` passe l'état à 1 lorsque `frameNumber > 0x3A1`: la frame 930
   déclenche l'arrêt et les frames 1 à 929 sont soumises au MDEC.
-- Après le délai final, `Mainloop` appelle
-  `FUN_80021274("cdrom:\\TITLE.EXE;1")`.
+- Après le délai final, `PlayDbzOpeningMovie` appelle
+  `ShutdownAndLoadExecutable("cdrom:\\TITLE.EXE;1")`.
 
 ### État FMV
 
 Le type créé et appliqué dans `/MOVIE.EXE` est:
 
 ```c
-struct UnkStruct_8008DC30 {
-    u_long *field_0x00;
-    u_long *field_0x04;
-    u_long field_0x08;
-    u_long *field_0x0C;
-    RECT field_0x10;
-    RECT field_0x18;
-    u_long field_0x20;
-    RECT field_0x24;
-    u_long field_0x2C;
+struct MoviePlaybackState {
+  u_long *vlcBuffer0;
+  u_long *vlcBuffer1;
+  u_long vlcBufferIndex;
+  u_long *mdecOutputBuffer;
+  RECT frameBuffer0Rect;
+  RECT frameBuffer1Rect;
+  u_long writeBufferIndex;
+  RECT mdecOutputRect;
+  u_long frameUploadComplete;
 };
 ```
 
@@ -47,11 +48,11 @@ Taille: `0x30` octets, alignement 4.
 
 | Adresse | Taille | Usage prouvé |
 |---|---:|---|
-| `0x8003FF30` | `0x25800` | buffer VLC 0 |
-| `0x80065730` | `0x25800` | buffer VLC 1 |
-| `0x8008AF30` | `0x2D00` | bande MDEC RGB24 |
-| `0x8008DC30` | `0x30` | état FMV |
-| `0x8008DC60` | `0x10000` | ring STR de 32 slots |
+| `0x8003FF30` | `0x25800` | `g_MovieVlcBuffer0` |
+| `0x80065730` | `0x25800` | `g_MovieVlcBuffer1` |
+| `0x8008AF30` | `0x2D00` | `g_MovieMdecOutputBuffer`, bande RGB24 |
+| `0x8008DC30` | `0x30` | `g_MoviePlayback` |
+| `0x8008DC60` | `0x10000` | `g_MovieStreamRing`, ring STR de 32 slots |
 
 Ces plages chevauchent celles de `SLPS_003.55`. Elles ne peuvent pas être
 résolues simultanément: l'adaptation `LoadExec` remplace le résolveur RAM actif
@@ -59,15 +60,17 @@ au passage dans `MOVIE.EXE`.
 
 ### Synchronisation Ghidra
 
-- `FUN_80020e64 @ 0x80020E64` est une vraie fonction de `0x134` octets, jusqu'à
+- `MovieMdecOutputCallback @ 0x80020E64` est une vraie fonction de `0x134`
+  octets, jusqu'à
   `0x80020F97`.
-- `UnkStruct_8008DC30` est appliqué à `DAT_8008dc30`.
-- `CdlLOC` est appliqué à `DAT_8003ff18`; `CdlATV` à `DAT_8003ff24`.
+- `MoviePlaybackState` est appliqué à `g_MoviePlayback @ 0x8008DC30`.
+- `CdlLOC` est appliqué à `g_MovieStartLocation @ 0x8003FF18`; `CdlATV` à
+  `g_MovieCdAudioMix @ 0x8003FF24`.
 - Les dimensions, l'état et le compteur ont leurs largeurs scalaires prouvées.
-- Les prototypes de `main`, `Mainloop` et des fonctions locales du pipeline sont
-  synchronisés avec ces types.
-- Les labels `DAT_...` restent primaires; aucun renommage sémantique spéculatif
-  n'a été effectué.
+- Les prototypes de `main`, `PlayDbzOpeningMovie` et des fonctions locales du
+  pipeline sont synchronisés avec ces types et les paramètres prouvés.
+- Les fonctions et globales FMV suivent la matrice CERTAIN de
+  `FMV_NAMING_SYNC.md`; aucun élément exclu n'a été renommé.
 
 ## Fichier DBZ_OP.STR
 
@@ -114,7 +117,8 @@ dotnet run --project .\custom-tools\DbzLegendsAnalyser\DbzLegendsRemaster\DbzLeg
 
 Résultats:
 
-- layout C# `UnkStruct_8008DC30`: taille et offsets conformes à Ghidra;
+- layout C# `MoviePlaybackState`: taille `0x30`, `Types.RECT`: `0x8`, offsets
+  conformes à Ghidra;
 - 945 en-têtes complets et séquentiels; premier seuil de sortie à la frame 930;
 - frames 1, 300, 600 et 929: 300 macroblocs et 20 bandes RGB24;
 - 1 184 secteurs XA, PCM non silencieux;

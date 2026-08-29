@@ -12,16 +12,19 @@ Le lot s'arrête volontairement avant le chargement de `MOVIE.EXE`.
 ### Entrée et contrôle de flux
 
 - `start @ 0x8002BF00` appelle `main @ 0x80020D10`.
-- `main` initialise les bibliothèques PSY-Q puis appelle `MainLoop @ 0x80020DE8`.
-- `MainLoop` est l'unique référence à la chaîne `\MOVIE\BANDAI.STR;1` située à
+- `main` initialise les bibliothèques PSY-Q puis appelle
+  `PlayBandaiMovie @ 0x80020DE8`.
+- `PlayBandaiMovie` est l'unique référence à la chaîne
+  `\MOVIE\BANDAI.STR;1` située à
   `0x80020000`.
-- Le lecteur appelle, dans l'ordre, `CdSearchFile`, `FUN_800210a4`,
-  `FUN_80021118`, `FUN_800212e4`, `DecDCTin`, `DecDCTout`, `FUN_800214b0`, puis
-  attend avec `VSync(4)`.
-- `FUN_8002136c` passe l'état à 1 lorsque le numéro de frame est supérieur à
-  `0x59`. La frame 90 termine donc le flux; les frames 1 à 89 sont présentées.
+- Le lecteur appelle, dans l'ordre, `CdSearchFile`,
+  `InitializeMoviePlaybackState`, `StartMovieStream`,
+  `DecodeNextMovieFrameVlc`, `DecDCTin`, `DecDCTout`,
+  `WaitForMovieFrameUpload`, puis attend avec `VSync(4)`.
+- `GetNextMovieFrame` passe l'état à 1 lorsque le numéro de frame est supérieur
+  à `0x59`. La frame 90 termine donc le flux; les frames 1 à 89 sont présentées.
 - Après le délai final initialisé à `0x1E`, l'original appelle
-  `FUN_800215c0("cdrom:\\MOVIE.EXE;1")`.
+  `ShutdownAndLoadExecutable("cdrom:\\MOVIE.EXE;1")`.
 
 ### Fichier STR
 
@@ -47,16 +50,16 @@ de 32 octets. Le premier payload commence par l'en-tête BS
 Ghidra et une lecture RAM PCSX pendant la vidéo ferment la structure suivante:
 
 ```c
-struct UnkStruct_8009A594 {
-    u_long *field_0x00;
-    u_long *field_0x04;
-    u_long field_0x08;
-    u_long *field_0x0C;
-    RECT field_0x10;
-    RECT field_0x18;
-    u_long field_0x20;
-    RECT field_0x24;
-    u_long field_0x2C;
+struct MoviePlaybackState {
+  u_long *vlcBuffer0;
+  u_long *vlcBuffer1;
+  u_long vlcBufferIndex;
+  u_long *mdecOutputBuffer;
+  RECT frameBuffer0Rect;
+  RECT frameBuffer1Rect;
+  u_long writeBufferIndex;
+  RECT mdecOutputRect;
+  u_long frameUploadComplete;
 };
 ```
 
@@ -64,34 +67,34 @@ Taille: `0x30` octets.
 
 Valeurs observées pendant `BANDAI.STR`:
 
-- `field_0x10 = (0, 0, 480, 240)`
-- `field_0x18 = (0, 240, 480, 240)`
-- `field_0x24 = (0, 240, 24, 240)` au moment de la capture
-- `field_0x20 = 1`
+- `frameBuffer0Rect = (0, 0, 480, 240)`
+- `frameBuffer1Rect = (0, 240, 480, 240)`
+- `mdecOutputRect = (0, 240, 24, 240)` au moment de la capture
+- `writeBufferIndex = 1`
 
 Les plages adjacentes sont:
 
 | Adresse | Taille | Usage prouvé |
 |---|---:|---|
-| `0x8004C894` | `0x25800` | buffer VLC 0 |
-| `0x80072094` | `0x25800` | buffer VLC 1 |
-| `0x80097894` | `0x2D00` | bande MDEC RGB24, 16 x 240 x 3 |
-| `0x8009A594` | `0x30` | état FMV |
-| `0x8009A5C4` | `0x10000` | ring STR de 32 slots |
+| `0x8004C894` | `0x25800` | `g_MovieVlcBuffer0` |
+| `0x80072094` | `0x25800` | `g_MovieVlcBuffer1` |
+| `0x80097894` | `0x2D00` | `g_MovieMdecOutputBuffer`, bande RGB24 16 x 240 x 3 |
+| `0x8009A594` | `0x30` | `g_MoviePlayback` |
+| `0x8009A5C4` | `0x10000` | `g_MovieStreamRing`, ring STR de 32 slots |
 
 ## Synchronisation Ghidra
 
-- Création de `FUN_800211b0 @ 0x800211B0` avec prototype `void(void)`.
-- Création et application de `UnkStruct_8009A594` à `0x8009A594`.
+- `MovieMdecOutputCallback @ 0x800211B0` conserve son prototype `void(void)`.
+- Création et application de `MoviePlaybackState` à `0x8009A594`; taille
+  `0x30`, alignement 4 et offsets identiques à la structure précédente.
 - Application des types Psy-Q existants `CdlLOC` à `0x8004C87C` et `CdlATV`
   à `0x8004C888`.
-- Prototypes synchronisés pour `main`, `MainLoop`, `FUN_800210a4`,
-  `FUN_80021118`, `FUN_800212e4`, `FUN_8002136c`, `FUN_800214b0`,
-  `FUN_80021574`, `SetVolume`, `FUN_8002c57c`, `FUN_8002c80c`,
-  `FUN_8002c9dc`, `FUN_80035410` et `FUN_8002165c`.
-- Aucun `FUN_` ou `DAT_` n'a reçu de nom sémantique spéculatif.
+- Fonctions et globales FMV renommées selon la matrice CERTAIN de
+  `FMV_NAMING_SYNC.md`; les prototypes utilisent `MoviePlaybackState * state`
+  et les noms de paramètres prouvés.
+- Les routines audio/séquenceur incomplètes conservent leurs noms `FUN_...`.
 
-Note ReVa: `FUN_800211b0` se décompile sur le corps complet jusqu'au `jr ra` à
+Note ReVa: `MovieMdecOutputCallback` se décompile sur le corps complet jusqu'au `jr ra` à
 `0x800212DC`, mais la métadonnée `sizeInBytes` renvoyée par ReVa reste à 1.
 
 ## Adaptations desktop
@@ -125,7 +128,7 @@ dotnet run --project .\custom-tools\DbzLegendsAnalyser\DbzLegendsRemaster\DbzLeg
 
 Résultats observés:
 
-- layout C# `UnkStruct_8009A594`: `0x30`, offsets conformes;
+- layout C# `MoviePlaybackState`: `0x30`, `Types.RECT`: `0x8`, offsets conformes;
 - flux DBZ: frames 1 à 90, en-têtes 320 x 240 v3 conformes;
 - frames 1, 8, 30 et 89: 300 macroblocs et 20 bandes RGB24;
 - frame 8 C#: non uniforme, visuellement identique à l'oracle jPSXdec;
@@ -145,6 +148,7 @@ Résultats observés:
 
 ## Limites explicites
 
-- `BLOCKED`: chargement et exécution de `MOVIE.EXE`, prochain lot.
+- `RESOLVED`: chargement et exécution de `MOVIE.EXE`, documentés dans
+  `MOVIE_EXE_DBZ_OP_STR.md`.
 - `BLOCKED`: corps de `FUN_8002c57c`, initialisation des timers/IRQ du séquenceur
   audio; le flux matériel XA est indépendant et fonctionne via le pump SPU.

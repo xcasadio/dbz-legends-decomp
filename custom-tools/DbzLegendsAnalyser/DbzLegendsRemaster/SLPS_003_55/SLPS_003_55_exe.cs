@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers.Binary;
 using DbzLegendsRemaster.MOVIE_EXE;
+using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
@@ -13,46 +14,46 @@ namespace DbzLegendsRemaster.SLPS_003_55;
 
 internal sealed class SLPS_003_55_exe
 {
-    private const int DAT_8004C894_ADDRESS = unchecked((int)0x8004C894);
-    private const int DAT_80072094_ADDRESS = unchecked((int)0x80072094);
-    private const int DAT_80097894_ADDRESS = unchecked((int)0x80097894);
-    private const int DAT_8009A5C4_ADDRESS = unchecked((int)0x8009A5C4);
+    private const int MovieVlcBuffer0Address = unchecked((int)0x8004C894);
+    private const int MovieVlcBuffer1Address = unchecked((int)0x80072094);
+    private const int MovieMdecOutputBufferAddress = unchecked((int)0x80097894);
+    private const int MovieStreamRingAddress = unchecked((int)0x8009A5C4);
 
-    // GHIDRA: DAT_8004c874 @ 0x8004C874
-    private static uint DAT_8004c874;
+    // GHIDRA: g_MovieFrameWidth @ 0x8004C874
+    private static uint g_MovieFrameWidth;
 
-    // GHIDRA: DAT_8004c878 @ 0x8004C878
-    private static uint DAT_8004c878;
+    // GHIDRA: g_MovieFrameHeight @ 0x8004C878
+    private static uint g_MovieFrameHeight;
 
-    // GHIDRA: DAT_8004c87c @ 0x8004C87C
-    private static readonly CdlLOC DAT_8004c87c = new();
+    // GHIDRA: g_MovieStartLocation @ 0x8004C87C
+    private static readonly CdlLOC g_MovieStartLocation = new();
 
-    // GHIDRA: DAT_8004c880 @ 0x8004C880
-    private static int DAT_8004c880;
+    // GHIDRA: g_MovieStatus @ 0x8004C880
+    private static int g_MovieStatus;
 
-    // GHIDRA: DAT_8004c888 @ 0x8004C888
-    private static readonly CdlATV DAT_8004c888 = new();
+    // GHIDRA: g_MovieCdAudioMix @ 0x8004C888
+    private static readonly CdlATV g_MovieCdAudioMix = new();
 
-    // GHIDRA: DAT_8004c890 @ 0x8004C890
-    private static int DAT_8004c890;
+    // GHIDRA: g_MovieEndCountdown @ 0x8004C890
+    private static int g_MovieEndCountdown;
 
-    // GHIDRA: DAT_8004c894 @ 0x8004C894
-    internal static readonly byte[] DAT_8004c894 = new byte[0x25800];
+    // GHIDRA: g_MovieVlcBuffer0 @ 0x8004C894
+    internal static readonly byte[] g_MovieVlcBuffer0 = new byte[0x25800];
 
-    // GHIDRA: DAT_80072094 @ 0x80072094
-    internal static readonly byte[] DAT_80072094 = new byte[0x25800];
+    // GHIDRA: g_MovieVlcBuffer1 @ 0x80072094
+    internal static readonly byte[] g_MovieVlcBuffer1 = new byte[0x25800];
 
-    // GHIDRA: DAT_80097894 @ 0x80097894
-    internal static readonly byte[] DAT_80097894 = new byte[0x2D00];
+    // GHIDRA: g_MovieMdecOutputBuffer @ 0x80097894
+    internal static readonly byte[] g_MovieMdecOutputBuffer = new byte[0x2D00];
 
-    // GHIDRA: DAT_8009a594 @ 0x8009A594
-    private static UnkStruct_8009A594 DAT_8009a594;
+    // GHIDRA: g_MoviePlayback @ 0x8009A594
+    private static MoviePlaybackState g_MoviePlayback;
 
-    // GHIDRA: DAT_8009a5c4 @ 0x8009A5C4
-    internal static readonly byte[] DAT_8009a5c4 = new byte[0x10000];
+    // GHIDRA: g_MovieStreamRing @ 0x8009A5C4
+    internal static readonly byte[] g_MovieStreamRing = new byte[0x10000];
 
-    // GHIDRA: DAT_800b1704 @ 0x800B1704
-    private static int DAT_800b1704 = 0;
+    // GHIDRA: g_StCdInterruptPending @ 0x800B1704
+    private static int g_StCdInterruptPending = 0;
 
     // GHIDRA: SHORT_ARRAY_801ff000 @ 0x801FF000
     private static readonly short[] SHORT_ARRAY_801ff000 = new short[0x124];
@@ -69,59 +70,59 @@ internal sealed class SLPS_003_55_exe
         SpuInit();
         SetVolume(0x7f, 0x7f);
         FUN_8002c80c();
-        FUN_80035410(0, 0, 1);
-        FUN_8002c9dc(0, 0x3f, 0x3f);
+        SetSpuInputAttribute(0, 0, 1);
+        SetSpuInputVolume(0, 0x3f, 0x3f);
         FntLoad(0x3c0, 0x100);
-        int id = FntOpen(0x20, 0x20, 0x140, 200, 0, 0x200);
-        SetDumpFnt(id);
-        DAT_8004c890 = 0x1e;
+        int fontId = FntOpen(0x20, 0x20, 0x140, 200, 0, 0x200);
+        SetDumpFnt(fontId);
+        g_MovieEndCountdown = 0x1e;
         FUN_8002165c();
 
-        MainLoop();
-        FUN_800215c0("cdrom:\\MOVIE.EXE;1");
+        PlayBandaiMovie();
+        ShutdownAndLoadExecutable("cdrom:\\MOVIE.EXE;1");
     }
 
-    // GHIDRA: MainLoop @ 0x80020DE8
-    private static void MainLoop()
+    // GHIDRA: PlayBandaiMovie @ 0x80020DE8
+    private static void PlayBandaiMovie()
     {
-        CdlFILE local_30;
+        CdlFILE movieFile;
         // PARTIAL: the managed CdSearchFile adapter represents failure as null; it has no pointer
         // value corresponding to the original secondary (CdlFILE *)-1 sentinel.
         do
         {
-            local_30 = CdSearchFile(new CdlFILE(), "\\MOVIE\\BANDAI.STR;1".ToCharArray());
-        } while (local_30 == null);
+            movieFile = CdSearchFile(new CdlFILE(), "\\MOVIE\\BANDAI.STR;1".ToCharArray());
+        } while (movieFile == null);
 
-        DAT_8004c87c.minute = local_30.pos.minute;
-        DAT_8004c87c.second = local_30.pos.second;
-        DAT_8004c87c.sector = local_30.pos.sector;
-        FUN_800210a4(ref DAT_8009a594, 0, 0, 0, 0xf0);
-        FUN_80021118(DAT_8004c87c, FUN_800211b0);
-        FUN_800212e4(ref DAT_8009a594);
+        g_MovieStartLocation.minute = movieFile.pos.minute;
+        g_MovieStartLocation.second = movieFile.pos.second;
+        g_MovieStartLocation.sector = movieFile.pos.sector;
+        InitializeMoviePlaybackState(ref g_MoviePlayback, 0, 0, 0, 0xf0);
+        StartMovieStream(g_MovieStartLocation, MovieMdecOutputCallback);
+        DecodeNextMovieFrameVlc(ref g_MoviePlayback);
 
         uint pad;
         do
         {
-            if (DAT_8004c880 == 0)
+            if (g_MovieStatus == 0)
             {
-                uint bufferAddress = DAT_8009a594.field_0x08 == 0
-                    ? DAT_8009a594.field_0x00
-                    : DAT_8009a594.field_0x04;
+                uint bufferAddress = g_MoviePlayback.vlcBufferIndex == 0
+                    ? g_MoviePlayback.vlcBuffer0
+                    : g_MoviePlayback.vlcBuffer1;
                 DecDCTin(unchecked((int)bufferAddress), 3);
                 DecDCTout(
-                    unchecked((int)DAT_8009a594.field_0x0C),
-                    DAT_8009a594.field_0x28 * DAT_8009a594.field_0x2A / 2);
-                FUN_800212e4(ref DAT_8009a594);
-                FUN_800214b0(ref DAT_8009a594);
+                    unchecked((int)g_MoviePlayback.mdecOutputBuffer),
+                    g_MoviePlayback.mdecOutputRect.w * g_MoviePlayback.mdecOutputRect.h / 2);
+                DecodeNextMovieFrameVlc(ref g_MoviePlayback);
+                WaitForMovieFrameUpload(ref g_MoviePlayback);
             }
 
             VSync(4);
 
-            bool displaySecondRect = DAT_8009a594.field_0x20 == 0;
-            short x = displaySecondRect ? DAT_8009a594.field_0x18 : DAT_8009a594.field_0x10;
-            short y = displaySecondRect ? DAT_8009a594.field_0x1A : DAT_8009a594.field_0x12;
-            short w = displaySecondRect ? DAT_8009a594.field_0x1C : DAT_8009a594.field_0x14;
-            short h = displaySecondRect ? DAT_8009a594.field_0x1E : DAT_8009a594.field_0x16;
+            bool displaySecondRect = g_MoviePlayback.writeBufferIndex == 0;
+            short x = displaySecondRect ? g_MoviePlayback.frameBuffer1Rect.x : g_MoviePlayback.frameBuffer0Rect.x;
+            short y = displaySecondRect ? g_MoviePlayback.frameBuffer1Rect.y : g_MoviePlayback.frameBuffer0Rect.y;
+            short w = displaySecondRect ? g_MoviePlayback.frameBuffer1Rect.w : g_MoviePlayback.frameBuffer0Rect.w;
+            short h = displaySecondRect ? g_MoviePlayback.frameBuffer1Rect.h : g_MoviePlayback.frameBuffer0Rect.h;
 
             var dispEnv = new DISPENV();
             var drawEnv = new DRAWENV();
@@ -134,15 +135,15 @@ internal sealed class SLPS_003_55_exe
             SetDispMask(1);
 
             pad = PadRead(1);
-            if (DAT_8004c880 == 3)
+            if (g_MovieStatus == 3)
             {
                 break;
             }
 
-            if (DAT_8004c880 == 1)
+            if (g_MovieStatus == 1)
             {
-                DAT_8004c890--;
-                if (DAT_8004c890 == -1 || (pad & 0x800) != 0)
+                g_MovieEndCountdown--;
+                if (g_MovieEndCountdown == -1 || (pad & 0x800) != 0)
                 {
                     break;
                 }
@@ -152,8 +153,8 @@ internal sealed class SLPS_003_55_exe
         SetDispMask(0);
     }
 
-    // GHIDRA: FUN_800215c0 @ 0x800215C0
-    private static void FUN_800215c0(string exeFileName)
+    // GHIDRA: ShutdownAndLoadExecutable @ 0x800215C0
+    private static void ShutdownAndLoadExecutable(string exeFileName)
     {
         StopRCnt(unchecked((long)0xf2000000));
         StopRCnt(unchecked((long)0xf2000001));
@@ -201,106 +202,106 @@ internal sealed class SLPS_003_55_exe
         }
     }
 
-    // GHIDRA: FUN_800210a4 @ 0x800210A4
-    private static void FUN_800210a4(ref UnkStruct_8009A594 param_1, short param_2,
-        short param_3, short param_4, short param_5)
+    // GHIDRA: InitializeMoviePlaybackState @ 0x800210A4
+    private static void InitializeMoviePlaybackState(ref MoviePlaybackState state, short frameBuffer0X,
+        short frameBuffer0Y, short frameBuffer1X, short frameBuffer1Y)
     {
-        param_1.field_0x00 = unchecked((uint)DAT_8004C894_ADDRESS);
-        param_1.field_0x04 = unchecked((uint)DAT_80072094_ADDRESS);
-        param_1.field_0x0C = unchecked((uint)DAT_80097894_ADDRESS);
-        param_1.field_0x08 = 0;
-        param_1.field_0x20 = 0;
-        param_1.field_0x2C = 0;
-        param_1.field_0x10 = param_2;
-        param_1.field_0x12 = param_3;
-        param_1.field_0x14 = 0x3c0;
-        param_1.field_0x16 = 0xf0;
-        param_1.field_0x18 = param_4;
-        param_1.field_0x1A = param_5;
-        param_1.field_0x1C = 0x3c0;
-        param_1.field_0x1E = 0xf0;
-        param_1.field_0x24 = param_2;
-        param_1.field_0x26 = param_3;
-        param_1.field_0x28 = 0x18;
-        param_1.field_0x2A = 0xf0;
+        state.vlcBuffer0 = unchecked((uint)MovieVlcBuffer0Address);
+        state.vlcBuffer1 = unchecked((uint)MovieVlcBuffer1Address);
+        state.mdecOutputBuffer = unchecked((uint)MovieMdecOutputBufferAddress);
+        state.vlcBufferIndex = 0;
+        state.writeBufferIndex = 0;
+        state.frameUploadComplete = 0;
+        state.frameBuffer0Rect.x = frameBuffer0X;
+        state.frameBuffer0Rect.y = frameBuffer0Y;
+        state.frameBuffer0Rect.w = 0x3c0;
+        state.frameBuffer0Rect.h = 0xf0;
+        state.frameBuffer1Rect.x = frameBuffer1X;
+        state.frameBuffer1Rect.y = frameBuffer1Y;
+        state.frameBuffer1Rect.w = 0x3c0;
+        state.frameBuffer1Rect.h = 0xf0;
+        state.mdecOutputRect.x = frameBuffer0X;
+        state.mdecOutputRect.y = frameBuffer0Y;
+        state.mdecOutputRect.w = 0x18;
+        state.mdecOutputRect.h = 0xf0;
     }
 
-    // GHIDRA: FUN_80021118 @ 0x80021118
-    private static void FUN_80021118(CdlLOC param_1, Action param_2)
+    // GHIDRA: StartMovieStream @ 0x80021118
+    private static void StartMovieStream(CdlLOC startLocation, Action mdecOutputCallback)
     {
         DecDCTReset(0);
-        DAT_8004c880 = 0;
-        DecDCToutCallback(param_2);
-        StSetRing(DAT_8009A5C4_ADDRESS, 0x20);
+        g_MovieStatus = 0;
+        DecDCToutCallback(mdecOutputCallback);
+        StSetRing(MovieStreamRingAddress, 0x20);
         StSetStream(1, 1, -1, null, null);
-        FUN_80021574(param_1);
-        DAT_8004c888.val0 = 0x80;
-        DAT_8004c888.val1 = 0;
-        DAT_8004c888.val2 = 0x80;
-        DAT_8004c888.val3 = 0;
-        CdMix(DAT_8004c888);
+        SeekAndStartMovieStream(startLocation);
+        g_MovieCdAudioMix.val0 = 0x80;
+        g_MovieCdAudioMix.val1 = 0;
+        g_MovieCdAudioMix.val2 = 0x80;
+        g_MovieCdAudioMix.val3 = 0;
+        CdMix(g_MovieCdAudioMix);
     }
 
-    // GHIDRA: FUN_800211b0 @ 0x800211B0
-    private static void FUN_800211b0()
+    // GHIDRA: MovieMdecOutputCallback @ 0x800211B0
+    private static void MovieMdecOutputCallback()
     {
-        if (DAT_800b1704 != 0)
+        if (g_StCdInterruptPending != 0)
         {
             StCdInterrupt();
-            DAT_800b1704 = 0;
+            g_StCdInterruptPending = 0;
         }
 
-        var rect = new RECT
+        var rect = new LibGpu.RECT
         {
-            x = DAT_8009a594.field_0x24,
-            y = DAT_8009a594.field_0x26,
-            w = DAT_8009a594.field_0x28,
-            h = DAT_8009a594.field_0x2A,
+            x = g_MoviePlayback.mdecOutputRect.x,
+            y = g_MoviePlayback.mdecOutputRect.y,
+            w = g_MoviePlayback.mdecOutputRect.w,
+            h = g_MoviePlayback.mdecOutputRect.h,
         };
-        LoadImage(rect, unchecked((int)DAT_8009a594.field_0x0C));
-        DAT_8009a594.field_0x24 += DAT_8009a594.field_0x28;
+        LoadImage(rect, unchecked((int)g_MoviePlayback.mdecOutputBuffer));
+        g_MoviePlayback.mdecOutputRect.x += g_MoviePlayback.mdecOutputRect.w;
 
-        short targetX = DAT_8009a594.field_0x20 == 0
-            ? DAT_8009a594.field_0x10
-            : DAT_8009a594.field_0x18;
-        short targetWidth = DAT_8009a594.field_0x20 == 0
-            ? DAT_8009a594.field_0x14
-            : DAT_8009a594.field_0x1C;
-        if (DAT_8009a594.field_0x24 < targetX + targetWidth)
+        short targetX = g_MoviePlayback.writeBufferIndex == 0
+            ? g_MoviePlayback.frameBuffer0Rect.x
+            : g_MoviePlayback.frameBuffer1Rect.x;
+        short targetWidth = g_MoviePlayback.writeBufferIndex == 0
+            ? g_MoviePlayback.frameBuffer0Rect.w
+            : g_MoviePlayback.frameBuffer1Rect.w;
+        if (g_MoviePlayback.mdecOutputRect.x < targetX + targetWidth)
         {
             DecDCTout(
-                unchecked((int)DAT_8009a594.field_0x0C),
-                DAT_8009a594.field_0x28 * DAT_8009a594.field_0x2A / 2);
+                unchecked((int)g_MoviePlayback.mdecOutputBuffer),
+                g_MoviePlayback.mdecOutputRect.w * g_MoviePlayback.mdecOutputRect.h / 2);
         }
         else
         {
-            DAT_8009a594.field_0x2C = 1;
-            DAT_8009a594.field_0x20 = DAT_8009a594.field_0x20 == 0 ? 1u : 0u;
-            if (DAT_8009a594.field_0x20 == 0)
+            g_MoviePlayback.frameUploadComplete = 1;
+            g_MoviePlayback.writeBufferIndex = g_MoviePlayback.writeBufferIndex == 0 ? 1u : 0u;
+            if (g_MoviePlayback.writeBufferIndex == 0)
             {
-                DAT_8009a594.field_0x24 = DAT_8009a594.field_0x10;
-                DAT_8009a594.field_0x26 = DAT_8009a594.field_0x12;
+                g_MoviePlayback.mdecOutputRect.x = g_MoviePlayback.frameBuffer0Rect.x;
+                g_MoviePlayback.mdecOutputRect.y = g_MoviePlayback.frameBuffer0Rect.y;
             }
             else
             {
-                DAT_8009a594.field_0x24 = DAT_8009a594.field_0x18;
-                DAT_8009a594.field_0x26 = DAT_8009a594.field_0x1A;
+                g_MoviePlayback.mdecOutputRect.x = g_MoviePlayback.frameBuffer1Rect.x;
+                g_MoviePlayback.mdecOutputRect.y = g_MoviePlayback.frameBuffer1Rect.y;
             }
         }
     }
 
-    // GHIDRA: FUN_800212e4 @ 0x800212E4
-    private static int FUN_800212e4(ref UnkStruct_8009A594 param_1)
+    // GHIDRA: DecodeNextMovieFrameVlc @ 0x800212E4
+    private static int DecodeNextMovieFrameVlc(ref MoviePlaybackState state)
     {
         int timeout = 0x800000;
         do
         {
-            int frameAddress = FUN_8002136c(ref param_1);
+            int frameAddress = GetNextMovieFrame(ref state);
             timeout--;
             if (frameAddress != 0)
             {
-                param_1.field_0x08 = param_1.field_0x08 == 0 ? 1u : 0u;
-                uint bufferAddress = param_1.field_0x08 == 0 ? param_1.field_0x00 : param_1.field_0x04;
+                state.vlcBufferIndex = state.vlcBufferIndex == 0 ? 1u : 0u;
+                uint bufferAddress = state.vlcBufferIndex == 0 ? state.vlcBuffer0 : state.vlcBuffer1;
                 DecDCTvlc(frameAddress, unchecked((int)bufferAddress));
                 StFreeRing(frameAddress);
                 return 0;
@@ -310,8 +311,8 @@ internal sealed class SLPS_003_55_exe
         return -1;
     }
 
-    // GHIDRA: FUN_8002136c @ 0x8002136C
-    private static int FUN_8002136c(ref UnkStruct_8009A594 param_1)
+    // GHIDRA: GetNextMovieFrame @ 0x8002136C
+    private static int GetNextMovieFrame(ref MoviePlaybackState state)
     {
         int timeout = 0x800000;
         do
@@ -329,31 +330,31 @@ internal sealed class SLPS_003_55_exe
                 uint frameNumber = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(8));
                 if (frameNumber > 0x59)
                 {
-                    DAT_8004c880 = 1;
-                    DAT_8004c888.val0 = 0;
-                    DAT_8004c888.val1 = 0;
-                    DAT_8004c888.val2 = 0;
-                    DAT_8004c888.val3 = 0;
-                    CdMix(DAT_8004c888);
+                    g_MovieStatus = 1;
+                    g_MovieCdAudioMix.val0 = 0;
+                    g_MovieCdAudioMix.val1 = 0;
+                    g_MovieCdAudioMix.val2 = 0;
+                    g_MovieCdAudioMix.val3 = 0;
+                    CdMix(g_MovieCdAudioMix);
                     CdControlB(9, null, null);
                 }
 
                 ushort width = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(0x10));
                 ushort height = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(0x12));
-                if (DAT_8004c874 != width || DAT_8004c878 != height)
+                if (g_MovieFrameWidth != width || g_MovieFrameHeight != height)
                 {
-                    ClearImage(new RECT { x = 0, y = 0, w = 0x280, h = 0x1e0 }, 0, 0, 0);
-                    DAT_8004c874 = width;
-                    DAT_8004c878 = height;
+                    ClearImage(new LibGpu.RECT { x = 0, y = 0, w = 0x280, h = 0x1e0 }, 0, 0, 0);
+                    g_MovieFrameWidth = width;
+                    g_MovieFrameHeight = height;
                 }
 
-                short vramWidth = (short)((DAT_8004c874 * 3) / 2);
-                short frameHeight = (short)DAT_8004c878;
-                param_1.field_0x14 = vramWidth;
-                param_1.field_0x1C = vramWidth;
-                param_1.field_0x16 = frameHeight;
-                param_1.field_0x1E = frameHeight;
-                param_1.field_0x2A = frameHeight;
+                short vramWidth = (short)((g_MovieFrameWidth * 3) / 2);
+                short frameHeight = (short)g_MovieFrameHeight;
+                state.frameBuffer0Rect.w = vramWidth;
+                state.frameBuffer1Rect.w = vramWidth;
+                state.frameBuffer0Rect.h = frameHeight;
+                state.frameBuffer1Rect.h = frameHeight;
+                state.mdecOutputRect.h = frameHeight;
                 return frameAddress;
             }
         } while (timeout != 0);
@@ -361,38 +362,38 @@ internal sealed class SLPS_003_55_exe
         return 0;
     }
 
-    // GHIDRA: FUN_800214b0 @ 0x800214B0
-    private static void FUN_800214b0(ref UnkStruct_8009A594 param_1)
+    // GHIDRA: WaitForMovieFrameUpload @ 0x800214B0
+    private static void WaitForMovieFrameUpload(ref MoviePlaybackState state)
     {
         int timeout = 0x800000;
-        while (param_1.field_0x2C == 0)
+        while (state.frameUploadComplete == 0)
         {
             timeout--;
             if (timeout == 0)
             {
                 Console.WriteLine("time out in decoding !");
-                param_1.field_0x2C = 1;
-                param_1.field_0x20 = param_1.field_0x20 == 0 ? 1u : 0u;
-                if (param_1.field_0x20 == 0)
+                state.frameUploadComplete = 1;
+                state.writeBufferIndex = state.writeBufferIndex == 0 ? 1u : 0u;
+                if (state.writeBufferIndex == 0)
                 {
-                    param_1.field_0x24 = param_1.field_0x10;
-                    param_1.field_0x26 = param_1.field_0x12;
+                    state.mdecOutputRect.x = state.frameBuffer0Rect.x;
+                    state.mdecOutputRect.y = state.frameBuffer0Rect.y;
                 }
                 else
                 {
-                    param_1.field_0x24 = param_1.field_0x18;
-                    param_1.field_0x26 = param_1.field_0x1A;
+                    state.mdecOutputRect.x = state.frameBuffer1Rect.x;
+                    state.mdecOutputRect.y = state.frameBuffer1Rect.y;
                 }
             }
         }
 
-        param_1.field_0x2C = 0;
+        state.frameUploadComplete = 0;
     }
 
-    // GHIDRA: FUN_80021574 @ 0x80021574
-    private static void FUN_80021574(CdlLOC param_1)
+    // GHIDRA: SeekAndStartMovieStream @ 0x80021574
+    private static void SeekAndStartMovieStream(CdlLOC startLocation)
     {
-        while (CdControl(0x15, param_1, null) == 0)
+        while (CdControl(0x15, startLocation, null) == 0)
         {
         }
 
@@ -434,8 +435,8 @@ internal sealed class SLPS_003_55_exe
         // BLOCKED: sound-sequencer timer/IRQ initialization is outside the video-only acceptance.
     }
 
-    // GHIDRA: FUN_80035410 @ 0x80035410
-    private static void FUN_80035410(byte param_1, byte param_2, uint param_3)
+    // GHIDRA: SetSpuInputAttribute @ 0x80035410
+    private static void SetSpuInputAttribute(byte inputIndex, byte attributeIndex, uint value)
     {
         var attr = new SpuCommonAttr
         {
@@ -443,38 +444,38 @@ internal sealed class SLPS_003_55_exe
             ext = new SpuExtAttr { volume = new SpuVolume() },
         };
 
-        if (param_1 == 0)
+        if (inputIndex == 0)
         {
-            if (param_2 == 0)
+            if (attributeIndex == 0)
             {
                 attr.mask = 0x200;
-                attr.cd.mix = (int)(param_3 & 0xff);
+                attr.cd.mix = (int)(value & 0xff);
             }
-            if (param_2 == 1)
+            if (attributeIndex == 1)
             {
                 attr.mask = 0x100;
-                attr.cd.reverb = (int)(param_3 & 0xff);
+                attr.cd.reverb = (int)(value & 0xff);
             }
         }
-        if (param_1 == 1)
+        if (inputIndex == 1)
         {
-            if (param_2 == 0)
+            if (attributeIndex == 0)
             {
                 attr.mask = 0x2000;
-                attr.ext.mix = (int)(param_3 & 0xff);
+                attr.ext.mix = (int)(value & 0xff);
             }
-            if (param_2 == 1)
+            if (attributeIndex == 1)
             {
                 attr.mask = 0x1000;
-                attr.ext.reverb = (int)(param_3 & 0xff);
+                attr.ext.reverb = (int)(value & 0xff);
             }
         }
 
         SpuSetCommonAttr(attr);
     }
 
-    // GHIDRA: FUN_8002c9dc @ 0x8002C9DC
-    private static void FUN_8002c9dc(byte param_1, short param_2, short param_3)
+    // GHIDRA: SetSpuInputVolume @ 0x8002C9DC
+    private static void SetSpuInputVolume(byte inputIndex, short leftVolume, short rightVolume)
     {
         var attr = new SpuCommonAttr
         {
@@ -482,21 +483,21 @@ internal sealed class SLPS_003_55_exe
             ext = new SpuExtAttr { volume = new SpuVolume() },
         };
 
-        if (param_1 == 0)
+        if (inputIndex == 0)
         {
             attr.mask = 0xc0;
-            if (param_2 > 0x7f) param_2 = 0x7f;
-            if (param_3 > 0x7f) param_3 = 0x7f;
-            attr.cd.volume.left = (short)(param_2 * 0x7fff / 0x7f);
-            attr.cd.volume.right = (short)(param_3 * 0x7fff / 0x7f);
+            if (leftVolume > 0x7f) leftVolume = 0x7f;
+            if (rightVolume > 0x7f) rightVolume = 0x7f;
+            attr.cd.volume.left = (short)(leftVolume * 0x7fff / 0x7f);
+            attr.cd.volume.right = (short)(rightVolume * 0x7fff / 0x7f);
         }
-        if (param_1 == 1)
+        if (inputIndex == 1)
         {
             attr.mask = 0xc00;
-            if (param_2 > 0x7f) param_2 = 0x7f;
-            if (param_3 > 0x7f) param_3 = 0x7f;
-            attr.ext.volume.left = (short)(param_2 * 0x7fff / 0x7f);
-            attr.ext.volume.right = (short)(param_3 * 0x7fff / 0x7f);
+            if (leftVolume > 0x7f) leftVolume = 0x7f;
+            if (rightVolume > 0x7f) rightVolume = 0x7f;
+            attr.ext.volume.left = (short)(leftVolume * 0x7fff / 0x7f);
+            attr.ext.volume.right = (short)(rightVolume * 0x7fff / 0x7f);
         }
 
         SpuSetCommonAttr(attr);
@@ -583,21 +584,21 @@ internal sealed class SLPS_003_55_exe
     // RELATION: resolves the original PSX buffer addresses to their byte-array representations.
     internal static (byte[] Buffer, int Offset)? ResolveAddress(int address)
     {
-        if (address >= DAT_8004C894_ADDRESS && address < DAT_8004C894_ADDRESS + DAT_8004c894.Length)
+        if (address >= MovieVlcBuffer0Address && address < MovieVlcBuffer0Address + g_MovieVlcBuffer0.Length)
         {
-            return (DAT_8004c894, address - DAT_8004C894_ADDRESS);
+            return (g_MovieVlcBuffer0, address - MovieVlcBuffer0Address);
         }
-        if (address >= DAT_80072094_ADDRESS && address < DAT_80072094_ADDRESS + DAT_80072094.Length)
+        if (address >= MovieVlcBuffer1Address && address < MovieVlcBuffer1Address + g_MovieVlcBuffer1.Length)
         {
-            return (DAT_80072094, address - DAT_80072094_ADDRESS);
+            return (g_MovieVlcBuffer1, address - MovieVlcBuffer1Address);
         }
-        if (address >= DAT_80097894_ADDRESS && address < DAT_80097894_ADDRESS + DAT_80097894.Length)
+        if (address >= MovieMdecOutputBufferAddress && address < MovieMdecOutputBufferAddress + g_MovieMdecOutputBuffer.Length)
         {
-            return (DAT_80097894, address - DAT_80097894_ADDRESS);
+            return (g_MovieMdecOutputBuffer, address - MovieMdecOutputBufferAddress);
         }
-        if (address >= DAT_8009A5C4_ADDRESS && address < DAT_8009A5C4_ADDRESS + DAT_8009a5c4.Length)
+        if (address >= MovieStreamRingAddress && address < MovieStreamRingAddress + g_MovieStreamRing.Length)
         {
-            return (DAT_8009a5c4, address - DAT_8009A5C4_ADDRESS);
+            return (g_MovieStreamRing, address - MovieStreamRingAddress);
         }
 
         return null;

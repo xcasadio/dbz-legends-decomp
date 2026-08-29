@@ -4,8 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using DbzLegendsRemaster.MOVIE_EXE;
-using DbzLegendsRemaster.SLPS_003_55;
+using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.Validation;
@@ -109,28 +108,29 @@ internal static class BandaiStrValidation
     private static bool ValidateMovieRuntimeStructure(out string error)
     {
         error = null;
-        if (Marshal.SizeOf<UnkStruct_8008DC30>() != 0x30)
+        if (Marshal.SizeOf<MoviePlaybackState>() != 0x30 || Marshal.SizeOf<RECT>() != 0x8)
         {
-            error = $"size is 0x{Marshal.SizeOf<UnkStruct_8008DC30>():X}, expected 0x30";
+            error = $"state/RECT sizes are 0x{Marshal.SizeOf<MoviePlaybackState>():X}/" +
+                $"0x{Marshal.SizeOf<RECT>():X}, expected 0x30/0x8";
             return false;
         }
 
         (string Name, int Expected)[] fields =
         {
-            (nameof(UnkStruct_8008DC30.field_0x00), 0x00),
-            (nameof(UnkStruct_8008DC30.field_0x04), 0x04),
-            (nameof(UnkStruct_8008DC30.field_0x08), 0x08),
-            (nameof(UnkStruct_8008DC30.field_0x0C), 0x0C),
-            (nameof(UnkStruct_8008DC30.field_0x10), 0x10),
-            (nameof(UnkStruct_8008DC30.field_0x18), 0x18),
-            (nameof(UnkStruct_8008DC30.field_0x20), 0x20),
-            (nameof(UnkStruct_8008DC30.field_0x24), 0x24),
-            (nameof(UnkStruct_8008DC30.field_0x2C), 0x2C),
+            (nameof(MoviePlaybackState.vlcBuffer0), 0x00),
+            (nameof(MoviePlaybackState.vlcBuffer1), 0x04),
+            (nameof(MoviePlaybackState.vlcBufferIndex), 0x08),
+            (nameof(MoviePlaybackState.mdecOutputBuffer), 0x0C),
+            (nameof(MoviePlaybackState.frameBuffer0Rect), 0x10),
+            (nameof(MoviePlaybackState.frameBuffer1Rect), 0x18),
+            (nameof(MoviePlaybackState.writeBufferIndex), 0x20),
+            (nameof(MoviePlaybackState.mdecOutputRect), 0x24),
+            (nameof(MoviePlaybackState.frameUploadComplete), 0x2C),
         };
 
         foreach ((string name, int expected) in fields)
         {
-            int actual = Marshal.OffsetOf<UnkStruct_8008DC30>(name).ToInt32();
+            int actual = Marshal.OffsetOf<MoviePlaybackState>(name).ToInt32();
             if (actual != expected)
             {
                 error = $"{name} is at 0x{actual:X}, expected 0x{expected:X}";
@@ -457,28 +457,29 @@ internal static class BandaiStrValidation
     private static bool ValidateRuntimeStructure(out string error)
     {
         error = null;
-        if (Marshal.SizeOf<UnkStruct_8009A594>() != 0x30)
+        if (Marshal.SizeOf<MoviePlaybackState>() != 0x30 || Marshal.SizeOf<RECT>() != 0x8)
         {
-            error = $"size is 0x{Marshal.SizeOf<UnkStruct_8009A594>():X}, expected 0x30";
+            error = $"state/RECT sizes are 0x{Marshal.SizeOf<MoviePlaybackState>():X}/" +
+                $"0x{Marshal.SizeOf<RECT>():X}, expected 0x30/0x8";
             return false;
         }
 
         (string Name, int Expected)[] fields =
         {
-            (nameof(UnkStruct_8009A594.field_0x00), 0x00),
-            (nameof(UnkStruct_8009A594.field_0x04), 0x04),
-            (nameof(UnkStruct_8009A594.field_0x08), 0x08),
-            (nameof(UnkStruct_8009A594.field_0x0C), 0x0C),
-            (nameof(UnkStruct_8009A594.field_0x10), 0x10),
-            (nameof(UnkStruct_8009A594.field_0x18), 0x18),
-            (nameof(UnkStruct_8009A594.field_0x20), 0x20),
-            (nameof(UnkStruct_8009A594.field_0x24), 0x24),
-            (nameof(UnkStruct_8009A594.field_0x2C), 0x2C),
+            (nameof(MoviePlaybackState.vlcBuffer0), 0x00),
+            (nameof(MoviePlaybackState.vlcBuffer1), 0x04),
+            (nameof(MoviePlaybackState.vlcBufferIndex), 0x08),
+            (nameof(MoviePlaybackState.mdecOutputBuffer), 0x0C),
+            (nameof(MoviePlaybackState.frameBuffer0Rect), 0x10),
+            (nameof(MoviePlaybackState.frameBuffer1Rect), 0x18),
+            (nameof(MoviePlaybackState.writeBufferIndex), 0x20),
+            (nameof(MoviePlaybackState.mdecOutputRect), 0x24),
+            (nameof(MoviePlaybackState.frameUploadComplete), 0x2C),
         };
 
         foreach ((string name, int expected) in fields)
         {
-            int actual = Marshal.OffsetOf<UnkStruct_8009A594>(name).ToInt32();
+            int actual = Marshal.OffsetOf<MoviePlaybackState>(name).ToInt32();
             if (actual != expected)
             {
                 error = $"{name} is at 0x{actual:X}, expected 0x{expected:X}";
