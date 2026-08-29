@@ -13,3 +13,7 @@
 	path = custom-tools/MGUI
 	url = https://github.com/xcasadio/MGUI.git
 	branch = develop
+[submodule "custom-tools/PsxSdkMonogame"]
+	path = custom-tools/PsxSdkMonogame
+	url = https://github.com/xcasadio/PsxSdkMonogame.git
+	branch = main
