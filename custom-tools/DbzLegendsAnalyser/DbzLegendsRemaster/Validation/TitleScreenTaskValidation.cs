@@ -201,6 +201,42 @@ internal static class TitleScreenTaskValidation
         Check(changed > 0, $"la soumission ecrit dans la VRAM, {changed} cellules changees");
         Console.WriteLine($"  VRAM: {changed} cellules changees par la soumission");
 
+        // --- et que les sprites arrivent OPAQUES ---
+        // Toutes les primitives de l'ecran titre portent le code 0x2E, semi-transparent, mais leurs
+        // CLUT ne disent pas la meme chose: les deux bandes echantillonnent le texel 0xFFFF que la
+        // tache titre televerse elle-meme, bit 15 pose, tandis que les 255 et 146 entrees non nulles
+        // des CLUT du logo et de l'artwork ont toutes le bit 15 a zero. Sur le materiel une
+        // primitive TEXTUREE ne mélange que les texels qui portent ce bit; les autres sont opaques.
+        //
+        // Melanger tout le monde divisait l'image par deux, et c'est invisible sans regarder l'ecran.
+        // L'invariant qui separe les deux cas sans seuil arbitraire: contre un fond noir, aucun mode
+        // de melange ne peut produire un canal a 31. abr=0 rend f/2, abr=3 rend f/4, abr=2 soustrait.
+        // Seul un texel dessine opaque atteint le maximum.
+        int maxChannel = 0;
+        int saturated = 0;
+        for (int y = 0; y < 240; y++)
+        {
+            for (int x = 0; x < 320; x++)
+            {
+                ushort v = LibGpu.Vram[(y * 1024) + x];
+                int r5 = v & 0x1f;
+                int g5 = (v >> 5) & 0x1f;
+                int b5 = (v >> 10) & 0x1f;
+                if (r5 > maxChannel) { maxChannel = r5; }
+                if (g5 > maxChannel) { maxChannel = g5; }
+                if (b5 > maxChannel) { maxChannel = b5; }
+                if (r5 == 31 || g5 == 31 || b5 == 31) { saturated++; }
+            }
+        }
+
+        Check(maxChannel == 31,
+            $"un texel au moins arrive opaque, canal maximum {maxChannel} sur 31");
+
+        // Un seul pixel a 31 pourrait etre un hasard de melange; des milliers ne le peuvent pas.
+        Check(saturated > 1000,
+            $"les texts satures arrivent en nombre, {saturated} pixels a 31");
+        Console.WriteLine($"  canal maximum: {maxChannel} / 31, {saturated} pixels satures");
+
         Console.WriteLine(s_failures == 0
             ? "TITLE-TASK: toutes les verifications passent"
             : $"TITLE-TASK: {s_failures} echec(s)");
