@@ -1,5 +1,6 @@
 using System;
 using System.Buffers.Binary;
+using DbzLegendsRemaster.TITLE_EXE;
 using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
@@ -374,9 +375,15 @@ internal sealed class MOVIE_EXE_exe
 
     // GHIDRA: LoadExec @ 0x80021310
     // PARTIAL: the BIOS A0(0x51) prototype is not closed in Ghidra, so the two stack arguments
-    // keep raw names. No overlay is wired behind this call site yet.
+    // keep raw names. The desktop adapter handles the only path currently proven at this call site.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
+        if (string.Equals(exeFileName, "cdrom:\\TITLE.EXE;1", StringComparison.Ordinal))
+        {
+            PsxSdkBridges.ActivateTitleExe();
+            new TITLE_EXE_exe().Main();
+        }
+
         // JUSTIFICATION: PSX hardware adaptation only
         // RELATION: A0(0x51) replaces the resident executable and transfers control permanently, so
         // it never returns to its caller. Returning here would resume the original's unreachable
