@@ -83,6 +83,7 @@ n'arrivait, sans message.
 | `InitHeap` ajoutait une ligne au lieu de remplacer | apres le ré-armement, la ligne **perimee** gagnait |
 | `CdIntToPos` / `CdPosToInt` stubs | les douze lectures de portraits sur **le meme** secteur |
 | `LoadClut` rendait 0 | la CLUT de 256 entrees sans identifiant |
+| le rasteriseur ignorait le bit STP du texel | **toute l'image a demi-luminosite** |
 
 Le troisieme merite d'etre retenu: `TITLE.EXE` arme son tas a `0x00010000`, **sans
 bit de segment** - ce que fait la console (mesure: `0x00017CB4`). Sur PSX, KUSEG
@@ -91,6 +92,28 @@ resolveur n'essayait que le miroir `0x80000000`.
 
 Deux d'entre eux etaient dans du travail que j'avais deja livre, dont un que
 j'avais **introduit** en corrigeant le premier.
+
+Le dernier n'a ete trouve qu'en **regardant l'ecran**. Tous les bancs passaient,
+la chaine de primitives etait juste, la VRAM recevait ses pixels - et l'image
+sortait a peu pres deux fois trop sombre.  melangeait chaque pixel des
+qu'une primitive portait le bit de semi-transparence, et  ne rendait
+meme pas le bit 15 du texel, donc l'appelant n'aurait pas pu s'en servir.
+
+Ce sont les donnees du jeu qui ont tranche, pas une connaissance generale de la
+console. Les douze primitives de l'ecran titre portent **toutes** le code ,
+et leurs CLUT se contredisent: les deux bandes echantillonnent le texel 
+que la tache titre televerse elle-meme, bit 15 **pose**, avec 
+(soustraction) - c'est ainsi que les barres noires sont faites. Le logo, PRESS
+START et l'artwork echantillonnent des CLUT de 256 entrees dont les 255 et 146
+entrees non nulles ont **toutes** le bit 15 a zero.
+
+Luminosite moyenne mesuree sur la frame rendue: **7,25/31 avant, 11,88/31 apres**.
+
+Le banc qui le garde evite un seuil arbitraire: contre un fond noir, aucun mode
+de melange ne peut porter un canal a 31 -  rend ,  rend ,
+ soustrait. Un canal sature prouve donc qu'un texel est arrive opaque.
+Annuler le correctif fait tomber le maximum a 30 et le compte de pixels satures
+de 11282 a zero.
 
 ## Ce qui n'est pas observe
 
