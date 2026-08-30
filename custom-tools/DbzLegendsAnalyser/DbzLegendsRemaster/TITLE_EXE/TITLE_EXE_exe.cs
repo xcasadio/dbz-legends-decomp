@@ -75,9 +75,9 @@ internal sealed class TITLE_EXE_exe
         TaskSystem.RegisterCallback(FUN_80037388_Address, FUN_80037388);
         TaskSystem.CreateTask(FUN_80037388_Address, 0, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_80037388();
+        PrimitivePools.FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
 
         // BLOCKED: the rest of main is not transliterated yet. It continues with
-        //   FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
         //   DAT_80083544 = 0; FUN_80038228(8, 0); FUN_80058d64();
         //   do { ... FUN_80021dd0(); RunFrameLoop(); FUN_80058a9c(); ... } while (true);
         // None of those four is closed, and RunFrameLoop reaches FUN_80038228, FUN_80056b30 and

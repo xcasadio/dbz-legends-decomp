@@ -69,9 +69,9 @@ internal static class TitleInitValidation
         Check(groupTableOffset == 0x1A4, $"offset de la table de groupes 0x1A4, lu 0x{groupTableOffset:X}");
         Check(loadScriptOffset == 0x008, $"offset du script de chargement 0x8, lu 0x{loadScriptOffset:X}");
 
-        // main enregistre la tache camera puis l'appelle une fois.
-        Check(TaskSystem.g_TaskListCount[0] == 1,
-            $"une tache dans la liste 0, compte={TaskSystem.g_TaskListCount[0]}");
+        // main cree deux taches dans la liste 0: la camera, puis les pools de primitives.
+        Check(TaskSystem.g_TaskListCount[0] == 2,
+            $"deux taches dans la liste 0, compte={TaskSystem.g_TaskListCount[0]}");
         int task = TaskSystem.g_TaskListHead[0];
         Check(task != 0, "la tete de la liste 0 est non nulle");
         if (task != 0)
@@ -94,6 +94,40 @@ internal static class TitleInitValidation
         // FUN_80037388 derive cette valeur de la profondeur projetee, bornee a zero.
         Check(GteScratch.DAT_1f800128 >= 0,
             $"profondeur derivee non negative, lu {GteScratch.DAT_1f800128}");
+
+        // FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0) alloue six pools sur huit.
+        int ctx = PrimitivePools.DAT_800835f8;
+        Check(ctx != 0, "le contexte des pools est enregistre");
+        if (ctx != 0)
+        {
+            int[] wanted = { 0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0 };
+            for (int slot = 0; slot < 8; slot++)
+            {
+                int pool = PsxRam.ReadI32(ctx + (slot * 4));
+                int count = PsxRam.ReadI32(ctx + (slot * 4) + 0x20);
+                if (wanted[slot] == 0)
+                {
+                    Check(pool == 0, $"slot {slot} sans pool, lu 0x{pool:X8}");
+                }
+                else
+                {
+                    Check(pool != 0, $"slot {slot} alloue");
+                    Check(count == wanted[slot],
+                        $"slot {slot} compte {wanted[slot]}, lu {count}");
+                }
+            }
+
+            // Le slot 3 est POLY_GT4: 12 mots, code 0x3C, plus le bit semi-transparent.
+            int gt4 = PsxRam.ReadI32(ctx + (3 * 4));
+            if (gt4 != 0)
+            {
+                byte[] tag = PsxRam.ReadBytes(gt4, 8);
+                Check(tag != null && tag[3] == 12,
+                    $"POLY_GT4 pre-tague a 12 mots, lu {(tag == null ? -1 : tag[3])}");
+                Check(tag != null && tag[7] == 0x3E,
+                    $"POLY_GT4 code 0x3C avec semi-trans, lu 0x{(tag == null ? 0 : tag[7]):X2}");
+            }
+        }
 
         Console.WriteLine(s_failures == 0
             ? "TITLE-INIT: toutes les verifications passent"
