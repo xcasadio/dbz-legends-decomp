@@ -92,6 +92,11 @@ public class Game1 : Game
             Exit();
         }
 
+        // JUSTIFICATION: backend MonoGame only — samples the desktop devices once per host frame,
+        // on the host thread, so PadRead's PAD_dr stand-in never touches MonoGame from the runtime
+        // thread. This is the desktop equivalent of the pad being latched every vertical blank.
+        PadInputBackend.Poll();
+
         base.Update(gameTime);
     }
 
