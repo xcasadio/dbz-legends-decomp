@@ -95,14 +95,14 @@ j'avais **introduit** en corrigeant le premier.
 
 Le dernier n'a ete trouve qu'en **regardant l'ecran**. Tous les bancs passaient,
 la chaine de primitives etait juste, la VRAM recevait ses pixels - et l'image
-sortait a peu pres deux fois trop sombre.  melangeait chaque pixel des
-qu'une primitive portait le bit de semi-transparence, et  ne rendait
+sortait a peu pres deux fois trop sombre. `PlotPixel` melangeait chaque pixel des
+qu'une primitive portait le bit de semi-transparence, et `SampleTexel` ne rendait
 meme pas le bit 15 du texel, donc l'appelant n'aurait pas pu s'en servir.
 
 Ce sont les donnees du jeu qui ont tranche, pas une connaissance generale de la
-console. Les douze primitives de l'ecran titre portent **toutes** le code ,
-et leurs CLUT se contredisent: les deux bandes echantillonnent le texel 
-que la tache titre televerse elle-meme, bit 15 **pose**, avec 
+console. Les douze primitives de l'ecran titre portent **toutes** le code `0x2E`,
+et leurs CLUT se contredisent: les deux bandes echantillonnent le texel `0xFFFF`
+que la tache titre televerse elle-meme, bit 15 **pose**, avec `abr = 2`
 (soustraction) - c'est ainsi que les barres noires sont faites. Le logo, PRESS
 START et l'artwork echantillonnent des CLUT de 256 entrees dont les 255 et 146
 entrees non nulles ont **toutes** le bit 15 a zero.
@@ -110,8 +110,8 @@ entrees non nulles ont **toutes** le bit 15 a zero.
 Luminosite moyenne mesuree sur la frame rendue: **7,25/31 avant, 11,88/31 apres**.
 
 Le banc qui le garde evite un seuil arbitraire: contre un fond noir, aucun mode
-de melange ne peut porter un canal a 31 -  rend ,  rend ,
- soustrait. Un canal sature prouve donc qu'un texel est arrive opaque.
+de melange ne peut porter un canal a 31 - `abr=0` rend `f/2`, `abr=3` rend `f/4`,
+`abr=2` soustrait. Un canal sature prouve donc qu'un texel est arrive opaque.
 Annuler le correctif fait tomber le maximum a 30 et le compte de pixels satures
 de 11282 a zero.
 
