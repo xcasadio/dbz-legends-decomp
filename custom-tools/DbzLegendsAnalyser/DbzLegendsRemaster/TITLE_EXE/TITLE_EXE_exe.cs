@@ -368,6 +368,6 @@ internal sealed class TITLE_EXE_exe
             return (DAT_80110000, address - TitleBBufferAddress);
         }
 
-        return PsxHeap.Resolve(address);
+        return TitleImages.Resolve(address) ?? PsxHeap.Resolve(address);
     }
 }
