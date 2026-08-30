@@ -9,14 +9,18 @@ internal sealed class TITLE_EXE_exe
         //
         // main @ 0x800581DC is entered from start @ 0x80068FF4 (jal at 0x80069090) and never
         // returns: its body ends on do { ... } while (true). Its opening sequence is
-        //   __main, FUN_80070b64 (syscall(0)), ResetCallback, ResetGraph(0), InitGeom,
-        //   SetDispMask(0), FUN_80057508, PadInit(0), CdInit,
-        //   do { CdSearchFile(&DAT_800a8860, "\\SELECT.EXE;1"); } while (result == NULL),
-        //   ReadFile("\\SUB\\TITLE.B;1", &DAT_80110000, 0), InitHeap, srand,
-        //   FUN_80070e44, FntLoad(0x3c0, 0x100), FntOpen(0x10, 0x10, 0x100, 200, 0, 0x200).
+        //   __main, EnterCriticalSection, ResetCallback, ResetGraph(0), InitGeom,
+        //   SetDispMask(0), ClearVram, PadInit(0), CdInit,
+        //   do { CdSearchFile(&CdlFILE_800a8860, "\\SELECT.EXE;1"); } while (result == NULL),
+        //   ReadFile("\\SUB\\TITLE.B;1", &DAT_80110000, 0), InitHeap(0x10000, 0x10000),
+        //   srand(0x10000), ExitCriticalSection, FntLoad(0x3c0, 0x100),
+        //   FntOpen(0x10, 0x10, 0x100, 200, 0, 0x200), SetupGeometry, then CreateTask.
         //
-        // None of the FUN_ callees on that path are closed, so nothing is ported here. Porting a
-        // truncated prefix would enter the CdSearchFile retry loop with no exit and no VSync.
+        // The task system underneath is closed: CreateTask @ 0x80049504, DeleteTask @ 0x80049720
+        // and ExecuteTaskList @ 0x800497FC over the 21 lists anchored at g_TaskListHead,
+        // g_TaskListTail and g_TaskListCount. What is still open is the content: FUN_80037388,
+        // FUN_80056dc0, FUN_80038228 and FUN_80021dd0. The SDK also still lacks InitGeom,
+        // SetFarColor and srand. Nothing is ported here yet.
     }
 
     // JUSTIFICATION: C# language bridge only
