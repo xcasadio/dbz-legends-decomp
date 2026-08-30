@@ -17,14 +17,28 @@ internal static class FrameLoop
     // GHIDRA: DISPENV_800a681c @ 0x800A681C
     private static readonly DISPENV DISPENV_800a681c = new();
 
+    // GHIDRA: DRAWENV_800a67c0 @ 0x800A67C0 — its PSX address, which the original does arithmetic
+    // on to reach the ordering table behind it.
+    private const int Drawenv800a67c0Address = unchecked((int)0x800A67C0);
+
     // GHIDRA: OT_800a6830 @ 0x800A6830
-    // The 0x800-entry ordering table. It sits at DRAWENV_800a67c0 + 0x70, which is how the original
-    // reaches it when submitting: DrawOTag(DAT_800834e0 + 0x70).
-    private static readonly OT_TYPE OT_800a6830 = new();
+    // The 0x800-entry ordering table, real memory rather than an object: the rasterizer walks it by
+    // 24-bit PSX links, so every bucket has to have an address. It sits at
+    // DRAWENV_800a67c0 + 0x70, which is exactly how the original reaches it when submitting.
+    private const int Ot800a6830Address = unchecked((int)0x800A6830);
+    internal static readonly byte[] OT_800a6830 = new byte[0x800 * 4];
 
     // GHIDRA: DAT_800834e0 @ 0x800834E0
-    // Points at the active DRAWENV. Only ever set to DRAWENV_800a67c0 here.
-    private static DRAWENV DAT_800834e0;
+    // Holds the active DRAWENV's address, not the object: the original adds 0x70 to it.
+    private static int DAT_800834e0;
+
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: declares the ordering table's PSX address so AddPrim can write real links into it
+    // and the rasterizer can resolve them back. Idempotent, so calling it every entry is harmless.
+    private static void DeclareOrderingTableAddress()
+    {
+        RamRegion(Ot800a6830Address, OT_800a6830);
+    }
 
     // GHIDRA: DAT_800835b4 @ 0x800835B4
     // Screen state. The loop latches it on entry and runs until it differs, so writing it is how
@@ -46,10 +60,11 @@ internal static class FrameLoop
     // GHIDRA: RunFrameLoop @ 0x800587A8
     internal static void RunFrameLoop()
     {
+        DeclareOrderingTableAddress();
         SetDispMask(1);
         int iVar2 = DAT_800835b4;
         bool bVar1 = false;
-        DAT_800834e0 = DRAWENV_800a67c0;
+        DAT_800834e0 = Drawenv800a67c0Address;
 
         do
         {
@@ -83,7 +98,7 @@ internal static class FrameLoop
             }
 
             TaskSystem.ExecuteTaskList(0x14);
-            ClearOTag(OT_800a6830, 0x800);
+            ClearOTag(OT_800a6830, 0, 0x800);
             iVar5 = VSync(1);
             TaskSystem.ExecuteTaskList(0);
             TaskSystem.ExecuteTaskList(1);
@@ -133,10 +148,9 @@ internal static class FrameLoop
             int iVar3 = VSync(1);
             int iVar4 = VSync(1);
 
-            // The original submits DAT_800834e0 + 0x70, which is exactly OT_800a6830: the ordering
-            // table sits right behind the DRAWENV. C# cannot add 0x70 to an object reference, so
-            // the table is named directly.
-            DrawOTag(OT_800a6830);
+            // The original submits DAT_800834e0 + 0x70, which lands exactly on OT_800a6830: the
+            // ordering table sits right behind the DRAWENV. Kept as the same arithmetic.
+            DrawOTag(DAT_800834e0 + 0x70);
             DrawSync(0);
             DAT_80083474 = VSync(1);
             DAT_800835a0 = (iVar3 - iVar5) + (DAT_80083474 - iVar4);

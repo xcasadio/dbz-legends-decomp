@@ -15,6 +15,10 @@ else if (args.Length == 1 && args[0] == "--validate-title-init")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TitleInitValidation.Run();
 }
+else if (args.Length == 1 && args[0] == "--validate-render")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.RenderPipelineValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-title-images")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TitleImagesValidation.Run();
