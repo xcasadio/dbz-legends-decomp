@@ -1,3 +1,5 @@
+using PsxSdkMonogame;
+
 namespace DbzLegendsRemaster.TITLE_EXE;
 
 internal sealed class TITLE_EXE_exe
@@ -24,11 +26,12 @@ internal sealed class TITLE_EXE_exe
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: no TITLE.EXE global is transliterated yet, so no PSX address range resolves to a
-    // managed buffer. The bridge still switches to this resolver so the MOVIE.EXE ranges it
-    // overlaps stop answering, matching what LoadExec does to resident RAM.
+    // RELATION: resolves the PSX ranges this overlay models. Today that is the heap armed by
+    // InitHeap @ 0x80059160, which is where every task block allocated by CreateTask lives.
+    // Switching to this resolver also makes the overlapping MOVIE.EXE ranges stop answering,
+    // matching what LoadExec does to resident RAM.
     internal static (byte[] Buffer, int Offset)? ResolveAddress(int address)
     {
-        return null;
+        return PsxHeap.Resolve(address);
     }
 }
