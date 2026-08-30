@@ -67,7 +67,7 @@ internal static class OverlayExit
     // before PadStop rather than after.
     internal static void FUN_8003472c(string param_1)
     {
-        FUN_80021d34();
+        MemoryCard.FUN_80021d34();
         VSync(0);
         StopRCnt(unchecked((long)0xf2000000));
         StopRCnt(unchecked((long)0xf2000001));
@@ -79,15 +79,6 @@ internal static class OverlayExit
         StopCallback();
         _96_init();
         LoadExec(param_1, DAT_801fff00, 0);
-    }
-
-    // GHIDRA: FUN_80021d34 @ 0x80021D34
-    private static void FUN_80021d34()
-    {
-        // BLOCKED: the memory-card teardown — DisableEvent, CloseEvent twice, StopCARD, then
-        // StartPAD again. It is the mirror of FUN_80021ce4 @ 0x80021CE4, which is BLOCKED in
-        // SELECT_EXE_exe.cs only because that module is not transliterated yet - the kernel event
-        // handshake it needs is real now. Nothing was started, so nothing is torn down here.
     }
 
     // GHIDRA: LoadExec @ 0x8004ED74

@@ -25,7 +25,8 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //
 // SCOPE OF THIS FILE: start and main. The boot chain around them is in SelectScreen.cs
 // (the graphics/CD bring-up, the USAGI.B load, ClearVram, the GsSPRITE initialiser),
-// Decompressor.cs and OverlayExit.cs; the frame step is in FrameStep.cs and the CD-DA service it
+// Decompressor.cs, MemoryCard.cs (the card bring-up, probe and boot-time save load main calls on
+// its pre-loop path) and OverlayExit.cs; the frame step is in FrameStep.cs and the CD-DA service it
 // ends with is in CdAudio.cs. Every screen body and the menu driver are a later slice and are
 // BLOCKED stubs here, each naming its address.
 internal sealed class SELECT_EXE_exe
@@ -78,8 +79,10 @@ internal sealed class SELECT_EXE_exe
 
     // GHIDRA: DAT_80055b50 @ 0x80055B50
     // .sbss, SIXTEEN BITS (Ghidra types it undefined2 and main's second store is
-    // `(undefined2)iVar2`). main writes 0xFFFF before the memory-card browser and then writes the
-    // menu state into it once per outer iteration.
+    // `(undefined2)iVar2`). main writes 0xFFFF before the memory-card save load and then writes the
+    // menu state into it once per outer iteration. MemoryCard.FUN_80021618 reads that 0xFFFF as a
+    // SIGNED short — its state 7 tests `DAT_80055b50 == -1`, which is what makes "no save file on
+    // the card" return 0 to main instead of putting a message screen up.
     internal static ushort DAT_80055b50;
 
     // GHIDRA: DAT_80055b6c @ 0x80055B6C
@@ -214,13 +217,13 @@ internal sealed class SELECT_EXE_exe
 
         SelectScreen.FUN_80030698();
         OverlayExit.FUN_80034380();
-        FUN_80021ce4();
-        SharedHighRam.DAT_801ff068 = FUN_80021e34(0);
+        MemoryCard.FUN_80021ce4();
+        SharedHighRam.DAT_801ff068 = MemoryCard.FUN_80021e34(0);
         bVar1 = false;
         if (SharedHighRam.DAT_801ff068 == 0)
         {
             DAT_80055b50 = 0xffff;
-            iVar2 = FUN_80021618();
+            iVar2 = MemoryCard.FUN_80021618();
             if (iVar2 == 0)
             {
                 SharedHighRam.DAT_801ff068 = 2;
@@ -236,7 +239,7 @@ internal sealed class SELECT_EXE_exe
                 DAT_80055b80 = 0;
                 SelectScreen.FUN_80030848(GsSPRITE_ARRAY_800654ec, 0, 100);
                 SelectScreen.FUN_80030908();
-                FUN_8002ea8c();
+                MenuIntro.FUN_8002ea8c();
 
                 // 0x80065AB0 = GsSPRITE_ARRAY_800654ec + 36 * 41, i.e. element 41 of the same
                 // array, twelve entries.
@@ -244,7 +247,7 @@ internal sealed class SELECT_EXE_exe
                 DAT_80055b80 = DAT_80055b80 & unchecked((int)0xfffffffb);
             }
 
-            iVar2 = FUN_80030a6c();
+            iVar2 = ModeBranches.FUN_80030a6c();
 
             // Bit 1 of the options word gates menu item 2. When it is clear, item 2 is redirected
             // to state 3 instead. The same gate appears inside FUN_80030a6c, where it swaps two
@@ -253,9 +256,11 @@ internal sealed class SELECT_EXE_exe
             // SELECT_EXE_exe.ResolveAddress answers for by chaining SharedHighRam — so it needs
             // PsxSdkBridges.ActivateSelectExe to have installed this overlay's resolver, exactly
             // as every other raw-address read in the ported overlays does.
-            // PARTIAL: what the bit means is NOT ESTABLISHED. It is written by the memory-card
-            // load path (FUN_80021618 copies a 0x80-byte record over 0x801FF018) and by
-            // FUN_80031c8c; neither is in this slice.
+            // PARTIAL: what the bit means is NOT ESTABLISHED. Its two writers are the memory-card
+            // load path — MemoryCard.FUN_80021618, which is ported now and copies SIXTY-FOUR bytes
+            // of the 0x80-byte card record over 0x801FF018..0x801FF057 — and FUN_80031c8c, which is
+            // not in this slice. On this port's boot path no card record is read (there is no save
+            // file to find), so the bit is the 0 start's .bss clear leaves and item 2 is redirected.
             if (((PsxRam.ReadI32(DAT_801ff018_Address) & 2) == 0) && (iVar2 == 2))
             {
                 iVar2 = 3;
@@ -266,13 +271,13 @@ internal sealed class SELECT_EXE_exe
             switch (iVar2)
             {
                 case 0:
-                    FUN_80030af8();
+                    ModeBranches.FUN_80030af8();
                     break;
                 case 1:
-                    FUN_80030ef8();
+                    ModeBranches.FUN_80030ef8();
                     break;
                 case 2:
-                    FUN_800310a8();
+                    ModeBranches.FUN_800310a8();
                     break;
                 case 3:
                     FUN_800315c0();
@@ -290,100 +295,13 @@ internal sealed class SELECT_EXE_exe
         exit(0);
     }
 
-    // GHIDRA: FUN_80021ce4 @ 0x80021CE4
-    private static void FUN_80021ce4()
-    {
-        // BLOCKED: the memory-card bring-up. Body is InitCARD(1); StartCARD(); _bu_init();
-        // FUN_80022348(); _card_auto(0); ChangeClearPAD(0); FUN_800213a8() — the same seven calls
-        // in the same order as TITLE.EXE's InitializeMemoryCard @ 0x80022630, which is BLOCKED in
-        // TITLE_EXE/TitleScreenTask.cs for the same reason.
-        // FUN_80022348 @ 0x80022348 opens eight kernel events (0xF4000001 and 0xF0000011, specs
-        // 0x0004/0x8000/0x0100/0x2000) and the module then spins in FUN_800221d0 @ 0x800221D0
-        // until one of four TestEvent calls returns 1.
-        //
-        // THAT IS NO LONGER WHAT BLOCKS IT. LibApi now carries a real kernel event table:
-        // TestEvent returns 1 when a matching DeliverEvent has landed on an open descriptor, and
-        // _card_info, _card_clear and _card_load deliver synchronously - so the poll terminates.
-        // What is missing is only the transliteration itself: this module is a later slice.
-        // Nothing is started here, which is why FUN_80021d34's teardown in OverlayExit tears
-        // nothing down.
-    }
+    // FUN_8002ea8c @ 0x8002EA8C stood here as a BLOCKED stub. It is now transliterated in
+    // MenuIntro.cs — the mode menu's build and entry animation, 6608 bytes.
 
-    // GHIDRA: FUN_80021e34 @ 0x80021E34
-    private static int FUN_80021e34(int param_1)
-    {
-        // BLOCKED: the memory-card probe — FUN_800222b8 (four TestEvent), _card_info(chan),
-        // FUN_800221d0, then optionally _card_clear and a _card_load pass. Same TestEvent blocker
-        // as FUN_80021ce4 above. Its result is the card status code main stores at 0x801FF068.
-        // Returning 0 here is NOT a chosen "no card" answer — it is C#'s default for an
-        // untransliterated body, and main's `if (result == 0)` arm then runs FUN_80021618, which
-        // is BLOCKED too. Stated so the value is not read as evidence.
-        _ = param_1;
-        return default;
-    }
-
-    // GHIDRA: FUN_80021618 @ 0x80021618
-    private static int FUN_80021618()
-    {
-        // BLOCKED: the card save-slot browser, 700 bytes. It drives the frame step FUN_800344a4
-        // and VSync directly and ends by copying the 0x80-byte record FUN_80022810 read off the
-        // card into 0x801FF018. Same memory-card module, same TestEvent blocker.
-        return default;
-    }
-
-    // GHIDRA: FUN_8002ea8c @ 0x8002EA8C
-    private static void FUN_8002ea8c()
-    {
-        // BLOCKED: the select-screen intro animation, 6608 bytes / 916 lines, ending at
-        // 0x8003045B immediately before main. It calls the frame step FUN_800344a4 fourteen times
-        // inline and uses libgcc softfloat (__floatsidf / __subdf3 / __fixdfsi) for its easing.
-        // A later slice owns it.
-    }
-
-    // GHIDRA: FUN_80030a6c @ 0x80030A6C
-    private static int FUN_80030a6c()
-    {
-        // BLOCKED: 140 bytes. It patches GsSPRITE_ARRAY_800654ec[0x17].v, [0x18].attribute,
-        // [0x1b].u and [0x1b].cy according to bit 1 of 0x801FF018, then tail-calls the menu driver
-        // FUN_800283a0 @ 0x800283A0 (1944 bytes) and returns DAT_80055a0c @ 0x80055A0C.
-        // FUN_800283a0 is the mode menu, which this slice is told not to port; it also needs
-        // bit-exact libgcc softfloat for its easing curves, which is an open decision.
-        // Returning 0 is C#'s default for an untransliterated body, not a chosen menu state.
-        //
-        // CONSEQUENCE, NOW THAT THE FRAME STEP IS REAL: main's do/while presents a frame per pass
-        // (FrameStep.FUN_800344a4 ends with DrawSync/VSync/GsSwapDispBuff/GsDrawOt), then takes
-        // case 0 every time, whose body FUN_80030af8 is still BLOCKED. So the loop no longer spins
-        // free — it runs at the VSync rate — but it still has no exit, because the three real exits
-        // are the LoadExec calls inside the BLOCKED screen bodies.
-        return default;
-    }
-
-    // GHIDRA: FUN_80030af8 @ 0x80030AF8
-    private static void FUN_80030af8()
-    {
-        // BLOCKED: state 0, the DEMO screen body, 1024 bytes. Reads the three 8-byte save records
-        // at 0x801FF200/208/210, drives a 3-slot chooser through FUN_80033d34 @ 0x80033D34, writes
-        // the launch parameters to 0x801FF000..0x801FF006 and exits through
-        // OverlayExit.FUN_8003472c("cdrom:\\DEMO.EXE;1").
-    }
-
-    // GHIDRA: FUN_80030ef8 @ 0x80030EF8
-    private static void FUN_80030ef8()
-    {
-        // BLOCKED: state 1, the VS screen body, 432 bytes. Drives FUN_80031e98 @ 0x80031E98 (the
-        // 48x48 4bpp character grid — explicitly out of scope for this slice), writes the seven
-        // u16 VS roster at 0x801FF100..0x801FF10D and exits through
-        // OverlayExit.FUN_8003472c("cdrom:\\VS.EXE;1").
-    }
-
-    // GHIDRA: FUN_800310a8 @ 0x800310A8
-    private static void FUN_800310a8()
-    {
-        // BLOCKED: state 2, the SP screen body, 1304 bytes. Same shape as FUN_80030af8 against the
-        // three 16-byte records at 0x801FF218/228/238, uses MoveImage twice, writes the launch
-        // parameters to 0x801FF008..0x801FF017 and exits through
-        // OverlayExit.FUN_8003472c("cdrom:\\SP.EXE;1").
-    }
+    // FUN_80030a6c @ 0x80030A6C, FUN_80030af8 @ 0x80030AF8, FUN_80030ef8 @ 0x80030EF8 and
+    // FUN_800310a8 @ 0x800310A8 stood here as BLOCKED stubs. All four are now transliterated in
+    // ModeBranches.cs, with the menu driver FUN_800283a0 @ 0x800283A0 in ModeMenu.cs and the shared
+    // list cursor FUN_80033d34 @ 0x80033D34 in ListCursor.cs. main's switch calls them above.
 
     // GHIDRA: FUN_800315c0 @ 0x800315C0
     private static void FUN_800315c0()

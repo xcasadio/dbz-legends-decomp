@@ -1,4 +1,5 @@
-﻿using PsxSdkMonogame;
+﻿using System;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
@@ -191,6 +192,12 @@ internal static class FrameLoop
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
         WaitDiscLoad(exeFileName);
+
+        if (string.Equals(exeFileName, "cdrom:\\SELECT.EXE;1", StringComparison.Ordinal))
+        {
+            PsxSdkBridges.ActivateSelectExe();
+            new SELECT_EXE.SELECT_EXE_exe().start();
+        }
 
         // JUSTIFICATION: PSX hardware adaptation only
         // RELATION: A0(0x51) replaces the resident executable and transfers control permanently, so

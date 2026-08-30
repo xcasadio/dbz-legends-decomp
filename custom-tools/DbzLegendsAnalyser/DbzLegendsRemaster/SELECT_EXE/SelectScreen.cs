@@ -228,22 +228,10 @@ internal static class SelectScreen
         GsLINE_ARRAY_80065484[1].attribute = 0x80000000;                // DAT_80065494
         GsLINE_ARRAY_80065484[0].attribute = 0x80000000;                // DAT_80065484
 
-        FUN_800261a4();
-    }
-
-    // GHIDRA: FUN_800261a4 @ 0x800261A4
-    private static void FUN_800261a4()
-    {
-        // BLOCKED: the pad bring-up, 64 bytes, and the whole of it is
-        //     InitPAD(&DAT_80055d6c, 0x22, &DAT_80055d8e, 0x22); StartPAD(); ChangeClearPAD(0);
-        // SELECT.EXE does NOT use libetc's PadRead — PadRead has zero callers in the whole
-        // overlay. It installs the BIOS pad driver over two 0x22-byte buffers at 0x80055D6C and
-        // 0x80055D8E and reads them directly (FUN_800261e4 @ 0x800261E4 and FUN_80026208
-        // @ 0x80026208, the edge/repeat reader). LibApi's InitPAD / StartPAD / ChangeClearPAD are
-        // all no-ops today, so a faithful transliteration would install a driver that never fills
-        // those buffers and no button would ever be seen.
-        // Not in this slice: the buffers and their reader belong with the screen bodies that
-        // consume them. Nothing on the boot path reads a button.
+        // FUN_800261a4 @ 0x800261A4 — the pad bring-up. It used to stand here as a BLOCKED stub;
+        // it is now transliterated in PadInput.cs, which is the module it belongs to (0x800261A4,
+        // 0x800261E4 and 0x80026208 are one emission block).
+        PadInput.FUN_800261a4();
     }
 
     // GHIDRA: FUN_80030848 @ 0x80030848
@@ -304,12 +292,11 @@ internal static class SelectScreen
     //     overload is a stub and must not be used.
     //   CdReadSync(1) — returns 0, and the loop is `while (r != 0)`. The desktop read is already
     //     synchronous, so there is nothing to wait for.
-    // PARTIAL, and it is a deployment gap rather than a code one: LibDs resolves the file through
-    // PsxSdkBridges' DiscFileResolver, which looks under <output>/data. DbzLegendsRemaster.csproj
-    // copies MOVIE/BANDAI.STR, MOVIE/DBZ_OP.STR, SUB/TITLE.B and the three overlays, but NOT
-    // SUB/USAGI.B. Until that Content item exists CdSearchFile returns null and FUN_80030698's
-    // `do { ... } while (p == NULL)` above will not terminate. The csproj is not this slice's to
-    // edit; the file itself is present at data/SUB/USAGI.B, 301056 bytes.
+    // THE DEPLOYMENT GAP THIS NOTE USED TO RECORD IS CLOSED. LibDs resolves the file through
+    // PsxSdkBridges' DiscFileResolver, which looks under <output>/data, and
+    // DbzLegendsRemaster.csproj now carries `<Content Include="..\..\..\data\SUB\USAGI.B">` with
+    // CopyToOutputDirectory=PreserveNewest. So CdSearchFile finds it and FUN_80030698's
+    // `do { ... } while (p == NULL)` terminates. The file is data/SUB/USAGI.B, 301056 bytes.
     internal static void FUN_80030908()
     {
         byte[] local_28 = new byte[8];
@@ -389,7 +376,7 @@ internal static class SelectScreen
         // then picks CD mix volumes from bit 0x801FF01E (the stereo/mono option) through CdMix
         // plus the libsnd wrappers SsSetMVol / SsSetSerialAttr / SsSetSerialVol and
         // SsSetStereo/SsSetMono.
-        // LibCd.CdGetToc is a stub returning 0 and PsxSdkMonogame's LibSnd is entirely
+        // LibCd.CdGetToc is transliterated now, but the drive's response FIFO is not modelled, so it yields an all-zero table and PsxSdkMonogame's LibSnd is entirely
         // unimplemented, so the TOC would come back empty. Not in this slice.
     }
 
