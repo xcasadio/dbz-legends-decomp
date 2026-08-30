@@ -17,6 +17,39 @@ internal sealed class TITLE_EXE_exe
     // Its own PSX address, kept so a task block holds exactly what the console holds.
     private const int FUN_80037388_Address = unchecked((int)0x80037388);
 
+    // GHIDRA: BYTE_ARRAY_801d2000 @ 0x801D2000
+    // Its PSX address. The buffer is LoadingScreen.BYTE_ARRAY_801d2000; FUN_80058a9c hands this raw
+    // address to ReadFile and reaches two offsets inside it through FUN_80057b08.
+    private const int ByteArray801d2000Address = unchecked((int)0x801D2000);
+
+    // GHIDRA: LAB_80027f5c @ 0x80027F5C
+    // The callback of FUN_80058a9c's second CreateTask, stored and never called here.
+    //
+    // BLOCKED: Ghidra has no function boundary at this address, so there is no closed size. Two
+    // probes bound the body to [0x10A4, 0x1B90] bytes: a decompiler request at 0x80029000 resolves
+    // back to the same undefined function at 0x80027F5C, and the next DEFINED function is
+    // FUN_80029aec @ 0x80029AEC. Not registered with TaskSystem.
+    private const int LAB_80027f5c_Address = unchecked((int)0x80027F5C);
+
+    // GHIDRA: LAB_800532a4 @ 0x800532A4
+    // The callback of FUN_80058a9c's third CreateTask, stored and never called here.
+    //
+    // BLOCKED, and it must stay blocked: the body is 96 bytes (0x800532A4..0x80053303) that read
+    // the task context+0x10E as a short and dispatch 0 -> FUN_80053304 @ 0x80053304 and
+    // 1 -> FUN_80053B20 @ 0x80053B20. FUN_80053304 is the libsnd/libspu path, and the C# SDK
+    // declares the whole Ss* surface with every body empty while the SpuSt* streaming calls are
+    // stubs. Not registered with TaskSystem.
+    private const int LAB_800532a4_Address = unchecked((int)0x800532A4);
+
+    // GHIDRA: LAB_8004c010 @ 0x8004C010
+    // The callback of FUN_80058a9c's fourth CreateTask, stored and never called here.
+    //
+    // BLOCKED: the body is 164 bytes (0x8004C010..0x8004C0B3) and is a four-way dispatcher on
+    // **(context + 8) read as a ushort — 0 -> FUN_8004C0B4, 1 -> FUN_8004C168, 2 -> FUN_8004DA4C,
+    // 3 -> FUN_8004DBAC. The dispatcher itself would be trivial; none of its four arms is
+    // transliterated, so registering it would dispatch into nothing. Not registered with TaskSystem.
+    private const int LAB_8004c010_Address = unchecked((int)0x8004C010);
+
     // GHIDRA: DAT_80110000 @ 0x80110000
     // Destination of ReadFile("\\SUB\\TITLE.B;1", ...). The file is 0x25000 bytes, the size
     // docs/TITLE_B_FILE_FORMAT_ANALYSIS.md measured independently.
@@ -39,6 +72,12 @@ internal sealed class TITLE_EXE_exe
 
     // GHIDRA: DAT_80083544 @ 0x80083544
     internal static int DAT_80083544;
+
+    // GHIDRA: DAT_800833f0 @ 0x800833F0
+    // Sixteen bits: the store at 0x80058C40 is `sh v0,0x23C(gp)`, not a `sw`, and Ghidra types the
+    // label undefined2. It holds the CLUT id LoadClut returns. find-cross-references reports exactly
+    // ONE reference in the whole overlay, that write — nothing in TITLE.EXE reads it back.
+    internal static ushort DAT_800833f0;
 
     // GHIDRA: DAT_80083454 @ 0x80083454
     // State word of the display/fade machine FUN_80038228 @ 0x80038228, still open. Read here
@@ -106,17 +145,156 @@ internal sealed class TITLE_EXE_exe
     }
 
     // GHIDRA: FUN_80058a9c @ 0x80058A9C
+    // The title-to-select handover, and the only reference to it in the whole overlay is the call
+    // at 0x800583BC inside main. It frees the six live primitive pools, destroys the first twenty
+    // task lists, re-arms the heap from scratch, re-arms the geometry for the select screen
+    // (h = 0x200 against the title's 0x1000), rebuilds the task set, loads two CD files plus a
+    // synthetic CLUT, and latches DAT_80083544 so the second and later passes skip one task.
+    //
+    // THE ORDER OF THE FIRST THREE STEPS IS LOAD-BEARING: six FUN_80057030 frees, then twenty
+    // FUN_80049a14 list destructions, then InitHeap. Reversing any pair changes what the heap holds.
+    //
+    // THE FOUR CreateTask SITES ARE TRANSLITERATED IN FULL — same callback addresses, ids, list
+    // indices, context sizes and insert points as the console. TaskSystem stores the raw PSX
+    // address in the block and skips a callback address that was never registered, so the blocks,
+    // the ids, the list membership and the context sizes are all correct even though three of the
+    // four bodies are not transliterated. Each unregistered address carries its own BLOCKED note at
+    // its constant above. Only FUN_80037388 is registered, and main already did that.
+    //
+    // PARTIAL, four items, none of them fixable from inside this file:
+    //  1. LoadClut @ 0x80074E50 is `return 0;` in LibGpu, so DAT_800833f0 receives 0 instead of a
+    //     CLUT id. Nothing in TITLE.EXE reads DAT_800833f0 back, so nothing here observes it.
+    //  2. FUN_800376c0 @ 0x800376C0 is not called: see the BLOCKED note at its place below.
+    //  3. LoadFACE_B @ 0x80052D68 is not called: see the BLOCKED note at its place below.
+    //  4. A SECOND InitHeap leaks a registry row in the SDK. PsxHeap.InitHeap allocates a NEW
+    //     byte[] and hands it to LibGpu.RamRegion, which matches on ReferenceEquals and therefore
+    //     ADDS a row rather than updating the old one. RamResolve then sees two rows with the same
+    //     base 0x00010000 and its tie-break `base[i] > base[best]` is strict, so the FIRST, stale
+    //     row wins: AddPrim would splice links into the abandoned buffer while PsxRam reads the new
+    //     one. main calls this function once per outer iteration, so a row leaks per pass and the
+    //     fixed 64-row registry stops accepting registrations after about sixty. That is SDK
+    //     territory (PsxSdkMonogame/PsxHeap.cs and LibGpu.cs), reported rather than worked around.
     private static void FUN_80058a9c()
     {
-        // BLOCKED: this is not part of the title screen. It tears the title down and builds the
-        // character-select screen: it frees the six primitive pools, destroys all twenty task
-        // lists through FUN_80049a14, re-arms the heap and the geometry, then reloads
-        // CHR_DATA/EFF_AUTO.B and CH_EF_P0.B and reaches FUN_800583fc, LAB_80027f5c, LAB_800532a4,
-        // FUN_800376c0, LAB_8004c010, LoadFACE_B, FUN_80035700, FUN_8004737c and FUN_80027354 —
-        // none of them closed.
-        //
-        // Leaving it empty is an accepted, stated deviation: the title screen itself runs
-        // faithfully, but the game will not build the select screen when it ends.
+        int pvVar1;
+        int puVar2;
+        uint uVar3;
+        uint uVar4;
+        int iVar5;
+        int uVar6;
+
+        // local_210 and local_20e[255] are one contiguous 0x200-byte block on the original's stack
+        // frame (sp+0x28 .. sp+0x227), which is what LoadClut is handed the address of. Modelled as
+        // the bytes it is, so the halfword stores below land exactly where the `sh` puts them.
+        byte[] local_210 = new byte[0x200];
+
+        uVar4 = 0;
+        ClearOTag(FrameLoop.DAT_800834e0 + 0x70, 0x800);
+        do
+        {
+            uVar3 = uVar4 & 0xffff;
+            uVar4 = uVar4 + 1;
+
+            // DAT_800835f8 is re-loaded from memory on every iteration in the original
+            // (lui/lw at 0x80058AC0), not hoisted: FUN_80057030 can change it.
+            PrimitivePools.FUN_80057030(PrimitivePools.DAT_800835f8, uVar3);
+        } while ((int)uVar4 < 6);
+
+        uVar4 = 0;
+        do
+        {
+            TaskSystem.FUN_80049a14(uVar4 & 0xffff);
+            uVar4 = uVar4 + 1;
+        } while ((int)uVar4 < 0x14);
+
+        // Lists 0..0x13 only. Index 0x14 is deliberately NOT destroyed, which is why the audio task
+        // created below survives and why DAT_80083544 only has to gate its creation.
+        InitHeap(HeapBaseAddress, 0x10000);
+        SetupGeometry(0xa0, 0xef, 0x200, 0, 0, 0, 0x400, 0, 0, 0);
+        DisplayMachine.FUN_80038228(8, 0);
+
+        // Site 1. main creates the SAME callback in the SAME list with id 0; here the id is 0x58.
+        // The ids differ in the original, and 0x58 is reproduced.
+        TaskSystem.CreateTask(FUN_80037388_Address, 0x58, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
+        FUN_80037388();
+        PrimitivePools.FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
+        LoadingScreen.FUN_800583fc();
+
+        // Site 2. Note the asymmetry with site 3 below: this one is handed g_TaskListHead[0x13]
+        // (lw v0,-0x6760 at 0x80058BB4, and 0x800798A0 - 0x80079854 = 19 * 4), while site 3 is
+        // handed g_TaskListTail[0x14]. It is real, not a transcription slip.
+        TaskSystem.CreateTask(LAB_80027f5c_Address, 0x55, 0x13, 0, 0, TaskSystem.g_TaskListHead[0x13]);
+
+        // `ori s0,zero,1` sits in the DELAY SLOT of the branch that skips the audio task
+        // (0x80058BD4), so it runs on BOTH paths and must stay outside the `if`.
+        iVar5 = 1;
+        if (DAT_80083544 == 0)
+        {
+            // Site 3, the audio task, created on the first pass only.
+            TaskSystem.CreateTask(
+                LAB_800532a4_Address, 0x57, 0x14, 0x194, 0, TaskSystem.g_TaskListTail[0x14]);
+        }
+
+        // Entry 0 stays 0x0000 and entries 1..255 become 0x8000: 255 stores, s0 running 1..0xFF.
+        MipsMemory.WriteU16(local_210, 0, 0);
+        puVar2 = 2;
+        do
+        {
+            MipsMemory.WriteU16(local_210, puVar2, 0x8000);
+            iVar5 = iVar5 + 1;
+            puVar2 = puVar2 + 2;
+        } while (iVar5 < 0x100);
+
+        DAT_800833f0 = LoadClut(ToWordBuffer(local_210, 0x200), 0, 500);
+        ReadFile("\\CHR_DATA\\EFF_AUTO.B;1".ToCharArray(), ByteArray801d2000Address, 0);
+
+        // The two blocks EFF_AUTO.B carries at +0xA0 and +0x355C, each decoding to a 0x40 x 0x100
+        // texture. 0x801D20A0 and 0x801D555C are raw addresses inside BYTE_ARRAY_801d2000, which
+        // ResolveAddress now answers for.
+        TitleImages.FUN_80057b08(unchecked((int)0x801d20a0), 0x280, 0, 0x40, 0x100, '\0');
+        TitleImages.FUN_80057b08(unchecked((int)0x801d555c), 0x280, 0x100, 0x40, 0x100, '\0');
+        DisplayMachine.LoadImageInVram(
+            ToWordBuffer(LoadingScreen.BYTE_ARRAY_801d2000, 0x50 * 1 * 2), 0, 0x1e0, 0x50, 1, '\x01');
+        ReadFile("\\CHR_DATA\\CH_EF_P0.B;1".ToCharArray(), ByteArray801d2000Address, 0);
+        DisplayMachine.LoadImageInVram(
+            ToWordBuffer(LoadingScreen.BYTE_ARRAY_801d2000, 0x130 * 1 * 2), 0, 0x1e3, 0x130, 1,
+            '\x01');
+
+        // BLOCKED: FUN_800376c0((uint)(ushort)GteScratch.DAT_1f80012c) @ 0x800376C0.
+        // The stage backdrop. Its body is closed — it creates LAB_80037bf0 and LAB_800378d8 in list
+        // 1, reads STGxMD_FileNames[DAT_1f80012c] (\STG\STG1TX.B;1 .. \STG\STG8TX.B;1 at
+        // 0x800788B8) into 0x801D2000, runs the load-script interpreter over that buffer, copies
+        // three ints out of INT_ARRAY_80078948 into DAT_80083450/DAT_8008344c/DAT_80083448, calls
+        // FUN_80037104, and fills a 23 x 23 grid of POLY_FT4 at 0x800ACDA0 — but it cannot be
+        // written from here. FUN_80057c80 @ 0x80057C80, the interpreter it needs, is hard-wired in
+        // TitleImages.cs to `byte[] file = TITLE_EXE_exe.DAT_80110000` and takes only offsets, while
+        // this call site walks BYTE_ARRAY_801d2000. Making the buffer a parameter is an edit to
+        // TitleImages.cs, which this pass does not own, so it is reported rather than forced.
+        // The stage backdrop and its three tasks are therefore absent.
+
+        // Site 4, the only one whose return value is used.
+        pvVar1 = TaskSystem.CreateTask(
+            LAB_8004c010_Address, 0x51, 9, 0x3034, 0, TaskSystem.g_TaskListTail[9]);
+
+        // `lw s0,8(v0)` at 0x80058D24 is NOT guarded. On the console a CreateTask that returned 0
+        // would fault here; PsxRam.ReadI32 on an unresolvable address returns 0 instead. The missing
+        // guard is the original's and is kept — rule 12.
+        uVar6 = PsxRam.ReadI32(pvVar1 + 8);
+
+        // BLOCKED: LoadFACE_B() @ 0x80052D68.
+        // The character portraits. Every game-side callee it needs is already ported
+        // (WaitSearchFile, ReadCDData, FUN_80035778, LoadImageInVram) and its data is closed, but
+        // its whole first half is a seek loop: it converts \CHR_DATA\FACE.B;1's start position with
+        // CdPosToInt and converts `base + (n-1)*2` back with CdIntToPos for each of twelve portrait
+        // slots. LibCd.cs has both routines as `{ /* Do nothing */ return default; }`, so every one
+        // of the twelve reads would land on the same sector and the portraits would be wrong rather
+        // than missing. Closing the two MSF conversions is SDK work — rule 13 forbids open-coding
+        // them here — and it also unblocks FUN_800583fc's own lost seek.
+
+        SelectScreenSetup.FUN_80035700();
+        SelectScreenSetup.FUN_8004737c(uVar6);
+        SelectScreenSetup.FUN_80027354();
+        DAT_80083544 = 1;
     }
 
     // GHIDRA: ClearVram @ 0x80057508
@@ -400,8 +578,45 @@ internal sealed class TITLE_EXE_exe
             return (DAT_80110000, address - TitleBBufferAddress);
         }
 
+        // BYTE_ARRAY_801d2000 @ 0x801D2000, the CD staging buffer LoadingScreen declares. Four of
+        // FUN_80058a9c's calls address it raw — ReadFile twice and FUN_80057b08 at +0xA0 and
+        // +0x355C — and ReadCDData hands its PSX address straight to CdRead, which writes through
+        // PsxRam. Without this row those reads and decodes silently go nowhere.
+        if (address >= ByteArray801d2000Address
+            && address < ByteArray801d2000Address + LoadingScreen.BYTE_ARRAY_801d2000.Length)
+        {
+            return (LoadingScreen.BYTE_ARRAY_801d2000, address - ByteArray801d2000Address);
+        }
+
         return TitleImages.Resolve(address)
+               ?? SelectScreenSetup.Resolve(address)
                ?? SharedHighRam.Resolve(address)
                ?? PsxHeap.Resolve(address);
+    }
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: LoadClut @ 0x80074E50 and LoadImageInVram @ 0x80057BB4 take the u_long * form, so
+    // the source bytes are packed into PSX words for them. Same bridge as the private ones in
+    // TitleImages and LoadingScreen.
+    private static ulong[] ToWordBuffer(byte[] source, int byteCount)
+    {
+        if (byteCount <= 0 || byteCount > source.Length)
+        {
+            byteCount = source.Length;
+        }
+
+        int words = (byteCount + 3) / 4;
+        ulong[] result = new ulong[words];
+        for (int i = 0; i < words; i++)
+        {
+            int o = i * 4;
+            uint word = source[o];
+            if (o + 1 < byteCount) word |= (uint)source[o + 1] << 8;
+            if (o + 2 < byteCount) word |= (uint)source[o + 2] << 16;
+            if (o + 3 < byteCount) word |= (uint)source[o + 3] << 24;
+            result[i] = word;
+        }
+
+        return result;
     }
 }
