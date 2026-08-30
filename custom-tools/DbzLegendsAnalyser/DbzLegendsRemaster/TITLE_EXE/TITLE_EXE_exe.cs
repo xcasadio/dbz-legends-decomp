@@ -161,19 +161,19 @@ internal sealed class TITLE_EXE_exe
     // four bodies are not transliterated. Each unregistered address carries its own BLOCKED note at
     // its constant above. Only FUN_80037388 is registered, and main already did that.
     //
-    // PARTIAL, four items, none of them fixable from inside this file:
-    //  1. LoadClut @ 0x80074E50 is `return 0;` in LibGpu, so DAT_800833f0 receives 0 instead of a
-    //     CLUT id. Nothing in TITLE.EXE reads DAT_800833f0 back, so nothing here observes it.
-    //  2. FUN_800376c0 @ 0x800376C0 is not called: see the BLOCKED note at its place below.
-    //  3. LoadFACE_B @ 0x80052D68 is not called: see the BLOCKED note at its place below.
-    //  4. A SECOND InitHeap leaks a registry row in the SDK. PsxHeap.InitHeap allocates a NEW
-    //     byte[] and hands it to LibGpu.RamRegion, which matches on ReferenceEquals and therefore
-    //     ADDS a row rather than updating the old one. RamResolve then sees two rows with the same
-    //     base 0x00010000 and its tie-break `base[i] > base[best]` is strict, so the FIRST, stale
-    //     row wins: AddPrim would splice links into the abandoned buffer while PsxRam reads the new
-    //     one. main calls this function once per outer iteration, so a row leaks per pass and the
-    //     fixed 64-row registry stops accepting registrations after about sixty. That is SDK
-    //     territory (PsxSdkMonogame/PsxHeap.cs and LibGpu.cs), reported rather than worked around.
+    // Two items that USED to be PARTIAL here are now closed, and are recorded because the reasoning
+    // is worth keeping:
+    //  1. LoadClut @ 0x80074E50 was `return 0;` in LibGpu, so DAT_800833f0 received 0 instead of a
+    //     CLUT id. It is transliterated from the image now: a 0x100 x 1 halfword LoadImage followed
+    //     by GetClut(x, y). DAT_800833f0 receives GetClut(0, 500), and the 256-entry CLUT this
+    //     function builds on its own frame reaches VRAM at y = 500.
+    //  2. A SECOND InitHeap used to leak a registry row in the SDK, and that mattered exactly here:
+    //     this function re-arms the heap once per pass through main's loop. PsxHeap.InitHeap handed
+    //     LibGpu.RamRegion a NEW byte[], which matches on ReferenceEquals and so ADDED a row rather
+    //     than updating; RamResolve's tie-break is a strict `base[i] > base[best]`, so with two
+    //     rows on base 0x00010000 the FIRST, stale row won for ever and everything allocated after
+    //     the re-arm was unreachable to the rasterizer. PsxHeap now keeps its array when the size is
+    //     unchanged, which is both of TITLE.EXE's calls, and releases the region when it is not.
     private static void FUN_80058a9c()
     {
         int pvVar1;
@@ -260,17 +260,9 @@ internal sealed class TITLE_EXE_exe
             ToWordBuffer(LoadingScreen.BYTE_ARRAY_801d2000, 0x130 * 1 * 2), 0, 0x1e3, 0x130, 1,
             '\x01');
 
-        // BLOCKED: FUN_800376c0((uint)(ushort)GteScratch.DAT_1f80012c) @ 0x800376C0.
-        // The stage backdrop. Its body is closed — it creates LAB_80037bf0 and LAB_800378d8 in list
-        // 1, reads STGxMD_FileNames[DAT_1f80012c] (\STG\STG1TX.B;1 .. \STG\STG8TX.B;1 at
-        // 0x800788B8) into 0x801D2000, runs the load-script interpreter over that buffer, copies
-        // three ints out of INT_ARRAY_80078948 into DAT_80083450/DAT_8008344c/DAT_80083448, calls
-        // FUN_80037104, and fills a 23 x 23 grid of POLY_FT4 at 0x800ACDA0 — but it cannot be
-        // written from here. FUN_80057c80 @ 0x80057C80, the interpreter it needs, is hard-wired in
-        // TitleImages.cs to `byte[] file = TITLE_EXE_exe.DAT_80110000` and takes only offsets, while
-        // this call site walks BYTE_ARRAY_801d2000. Making the buffer a parameter is an edit to
-        // TitleImages.cs, which this pass does not own, so it is reported rather than forced.
-        // The stage backdrop and its three tasks are therefore absent.
+        // The stage backdrop. `lhu a0,0x12C(0x1F800000)` at 0x80058CF0 reads DAT_1f80012c as an
+        // UNSIGNED HALFWORD and zero-extends it, which is what Ghidra's `(uint)(ushort)` spells.
+        StageBackdrop.FUN_800376c0((uint)(ushort)GteScratch.DAT_1f80012c);
 
         // Site 4, the only one whose return value is used.
         pvVar1 = TaskSystem.CreateTask(
@@ -281,15 +273,10 @@ internal sealed class TITLE_EXE_exe
         // guard is the original's and is kept — rule 12.
         uVar6 = PsxRam.ReadI32(pvVar1 + 8);
 
-        // BLOCKED: LoadFACE_B() @ 0x80052D68.
-        // The character portraits. Every game-side callee it needs is already ported
-        // (WaitSearchFile, ReadCDData, FUN_80035778, LoadImageInVram) and its data is closed, but
-        // its whole first half is a seek loop: it converts \CHR_DATA\FACE.B;1's start position with
-        // CdPosToInt and converts `base + (n-1)*2` back with CdIntToPos for each of twelve portrait
-        // slots. LibCd.cs has both routines as `{ /* Do nothing */ return default; }`, so every one
-        // of the twelve reads would land on the same sector and the portraits would be wrong rather
-        // than missing. Closing the two MSF conversions is SDK work — rule 13 forbids open-coding
-        // them here — and it also unblocks FUN_800583fc's own lost seek.
+        // The character portraits. The seek loop this needs is live again: CdPosToInt @ 0x80069938
+        // and CdIntToPos @ 0x80069834 were do-nothing stubs in LibCd and are real transliterations
+        // as of 2026-08-30, so the twelve portrait slots land on twelve different sectors.
+        FaceImages.LoadFACE_B();
 
         SelectScreenSetup.FUN_80035700();
         SelectScreenSetup.FUN_8004737c(uVar6);
@@ -497,7 +484,10 @@ internal sealed class TITLE_EXE_exe
     }
 
     // GHIDRA: ReadFile @ 0x80057DF4
-    private static void ReadFile(char[] fileName, int buffer, ushort mode)
+    // Internal rather than private because it is a shared overlay routine, not a private helper of
+    // main: FUN_800376c0 @ 0x800376C0 (StageBackdrop.cs) calls it for the stage archive, exactly as
+    // this file does for TITLE.B and for the two CHR_DATA files.
+    internal static void ReadFile(char[] fileName, int buffer, ushort mode)
     {
         var cdlFile = new CdlFILE();
         WaitSearchFile(fileName, cdlFile);
@@ -505,7 +495,10 @@ internal sealed class TITLE_EXE_exe
     }
 
     // GHIDRA: WaitSearchFile @ 0x80057F80
-    private static void WaitSearchFile(char[] fileName, CdlFILE cdlFile)
+    // Internal for the same reason as ReadFile above: LoadFACE_B @ 0x80052D68 (FaceImages.cs) calls
+    // it directly, twice, instead of going through ReadFile — it needs the CdlFILE back so it can
+    // convert the position with CdPosToInt.
+    internal static void WaitSearchFile(char[] fileName, CdlFILE cdlFile)
     {
         CdlFILE result;
         do
@@ -515,7 +508,9 @@ internal sealed class TITLE_EXE_exe
     }
 
     // GHIDRA: ReadCDData @ 0x80057E40
-    private static uint ReadCDData(CdlFILE cdlFile, int buffer, short mode)
+    // Internal for the same reason as the two above: LoadFACE_B @ 0x80052D68 (FaceImages.cs) drives
+    // it directly with a CdlFILE whose position CdIntToPos wrote and whose size it set by hand.
+    internal static uint ReadCDData(CdlFILE cdlFile, int buffer, short mode)
     {
         uint sectors = (uint)(cdlFile.size + 0x7ff) >> 0xb;
         byte[] result = new byte[8];
@@ -590,6 +585,13 @@ internal sealed class TITLE_EXE_exe
 
         return TitleImages.Resolve(address)
                ?? SelectScreenSetup.Resolve(address)
+               // astruct_1_800acda0 @ 0x800ACDA0, the 23 x 23 backdrop grid: FUN_800376c0 writes
+               // its twelve SVECTOR halfwords per element by raw PSX address. The same array is
+               // also registered with LibGpu.RamRegion, so both maps hand back one buffer.
+               ?? StageBackdrop.Resolve(address)
+               // DAT_8007a220 @ 0x8007A220 and DAT_80079b34 @ 0x80079B34, the two .data spans
+               // LoadFACE_B reads by raw address.
+               ?? FaceImages.Resolve(address)
                ?? SharedHighRam.Resolve(address)
                ?? PsxHeap.Resolve(address);
     }

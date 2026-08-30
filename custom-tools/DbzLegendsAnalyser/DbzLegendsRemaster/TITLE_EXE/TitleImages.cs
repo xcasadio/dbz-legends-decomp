@@ -9,11 +9,22 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 internal static class TitleImages
 {
     // GHIDRA: DAT_80096664 @ 0x80096664
-    // Staging buffer every decompression lands in before being uploaded. Sized generously: the
-    // largest single use is the 0x4000-byte 256x128 4bpp image TITLE.B carries, and LoadFACE_B
-    // addresses this same buffer as far out as +0x4600.
+    // Staging buffer every decompression lands in before being uploaded.
+    //
+    // The 0x8000 below is not generous, it is EXACT, and two independent readings say so. The load
+    // scripts of \STG\STG1TX.B;1, \STG\STG2TX.B;1 and \STG\STG3TX.B;1 — the three archives
+    // FUN_800376c0 @ 0x800376C0 can reach — each contain an entry of 0x40 halfwords by 0x100 rows,
+    // that is 0x8000 bytes decoded in one call, and none of their entries is larger. Independently,
+    // LoadFACE_B @ 0x80052D68 uploads six blocks out of this buffer whose absolute addresses tile
+    // +0x000 .. +0x7400 without a gap.
     private const int Dat80096664Address = unchecked((int)0x80096664);
     internal static readonly byte[] DAT_80096664 = new byte[0x8000];
+
+    // GHIDRA: DAT_80110000 @ 0x80110000
+    // Its PSX address. The buffer is TITLE_EXE_exe.DAT_80110000, the TITLE.B staging area.
+    // FUN_80021dd0 hands FUN_80057c80 two pointers INTO it, so the address is what is needed here,
+    // not the array.
+    private const int Dat80110000Address = unchecked((int)0x80110000);
 
     // GHIDRA: FUN_80021e28 @ 0x80021E28
     // The title screen task. The block carries its address; TitleScreenTask holds the body.
@@ -26,44 +37,73 @@ internal static class TitleImages
     internal static void FUN_80021dd0()
     {
         // DAT_80110004 is TITLE.B's second word, the load-script offset, which
-        // TITLE_B_FILE_FORMAT_ANALYSIS.md measured as 0x008.
+        // TITLE_B_FILE_FORMAT_ANALYSIS.md measured as 0x008. The original spells the call
+        // `FUN_80057c80((astruct_3 *)((int)&DAT_80110000 + DAT_80110004), (astruct_3 *)&DAT_80110000)`
+        // — the script pointer is the buffer plus that offset, and the base is the buffer itself.
         int scriptOffset = PsxRam.ReadI32(unchecked((int)0x80110004));
-        FUN_80057c80(scriptOffset, 0);
+        FUN_80057c80(Dat80110000Address + scriptOffset, Dat80110000Address);
         TaskSystem.RegisterCallback(FUN_80021e28, () => TitleScreenTask.FUN_80021e28());
         TaskSystem.CreateTask(FUN_80021e28, 0, 6, 0x70, 0, TaskSystem.g_TaskListTail[6]);
     }
 
     // GHIDRA: FUN_80057c80 @ 0x80057C80
-    // The load-script interpreter. Both arguments are offsets into TITLE.B: the first points at the
-    // script, the second at the file base that every entry's dataOffset is relative to.
+    // The load-script interpreter. Ghidra's prototype is
+    //     void FUN_80057c80(astruct_3 *param_1, astruct_3 *param_2)
+    // — two POINTERS, not two offsets, and not into one fixed buffer. param_1 points at the script
+    // (a u32 count followed by the entries) and param_2 at the base every entry's dataOffset is
+    // measured from. All three call sites in the overlay are needed to see why both matter:
+    //     FUN_80021dd0 @ 0x80021DD0 (&DAT_80110000 + DAT_80110004, &DAT_80110000)
+    //     FUN_80029aec @ 0x80029AEC  the same pair
+    //     FUN_800376c0 @ 0x800376C0 (BYTE_ARRAY_801d2000, BYTE_ARRAY_801d2000)
+    // so the buffer is NOT always TITLE.B and the two arguments are NOT always equal. This port
+    // therefore takes the two PSX addresses the original takes.
     //
-    // Entry layout, seven dwords, confirmed against the pointer arithmetic:
+    // Entry layout, seven dwords on a 0x1C stride, confirmed against the decompiler's own cursor
+    // arithmetic (puVar9 = param_1 + 4 is the kind, puVar8 = param_1 + 0x1C is the last field, and
+    // both advance by seven words per turn):
     //   +0x00 kind (0 = LZSS, 1 = raw)   +0x04 dataOffset   +0x08 vramX   +0x0C vramY
     //   +0x10 widthWords                 +0x14 height       +0x18 isClut
-    internal static void FUN_80057c80(int scriptOffset, int baseOffset)
+    internal static void FUN_80057c80(int param_1, int param_2)
     {
-        byte[] file = TITLE_EXE_exe.DAT_80110000;
-        uint uVar7 = ReadU32(file, scriptOffset);
+        uint uVar7 = (uint)PsxRam.ReadI32(param_1);
         uint uVar11 = 0;
         if (uVar7 == 0)
         {
             return;
         }
 
-        int entry = scriptOffset + 4;
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: the original passes `(int)&param_2->field0_0x0 + dataOffset` straight to
+        // FUN_80035778 as a `uchar *` and to LoadImage as a `u_long *`. Both ported callees take a
+        // (byte[], offset) pair, so param_2 is turned back into one here — once, because the base
+        // is a single buffer at every call site. The script itself is still read through raw
+        // addresses, so param_1 needs no buffer at all.
+        var resolved = PsxRam.AddressResolver?.Invoke(param_2);
+        if (resolved == null)
+        {
+            // PARTIAL: bailing out is not the original's behaviour — the original would simply
+            // dereference. Both live call sites resolve today (0x80110000 through
+            // TITLE_EXE_exe.DAT_80110000 and 0x801D2000 through LoadingScreen.BYTE_ARRAY_801d2000),
+            // so this arm means the overlay's resolver lost a range, not that the disc is missing.
+            return;
+        }
+
+        (byte[] baseBuffer, int baseOffset) = resolved.Value;
+
+        int entry = param_1 + 4;
         do
         {
-            uint kind = ReadU32(file, entry);
-            uint dataOffset = ReadU32(file, entry + 4);
-            uint vramX = ReadU32(file, entry + 8);
-            uint vramY = ReadU32(file, entry + 0x0c);
-            uint widthWords = ReadU32(file, entry + 0x10);
-            uint height = ReadU32(file, entry + 0x14);
-            uint isClut = ReadU32(file, entry + 0x18);
+            uint kind = (uint)PsxRam.ReadI32(entry);
+            uint dataOffset = (uint)PsxRam.ReadI32(entry + 4);
+            uint vramX = (uint)PsxRam.ReadI32(entry + 8);
+            uint vramY = (uint)PsxRam.ReadI32(entry + 0x0c);
+            uint widthWords = (uint)PsxRam.ReadI32(entry + 0x10);
+            uint height = (uint)PsxRam.ReadI32(entry + 0x14);
+            uint isClut = (uint)PsxRam.ReadI32(entry + 0x18);
 
             if (kind == 0)
             {
-                FUN_80035778(file, baseOffset + (int)dataOffset, DAT_80096664, 0);
+                FUN_80035778(baseBuffer, baseOffset + (int)dataOffset, DAT_80096664, 0);
                 DisplayMachine.LoadImageInVram(
                     ToWordBuffer(DAT_80096664, (int)widthWords * (int)height * 2),
                     (ushort)vramX, (ushort)vramY, (short)widthWords, (short)height, (char)isClut);
@@ -75,7 +115,7 @@ internal static class TitleImages
                 RECT_80083550.y = (short)vramY;
                 RECT_80083550.w = (short)widthWords;
                 RECT_80083550.h = (short)height;
-                LoadImage(RECT_80083550, file, baseOffset + (int)dataOffset);
+                LoadImage(RECT_80083550, baseBuffer, baseOffset + (int)dataOffset);
             }
 
             uVar11 = uVar11 + 1;
@@ -114,11 +154,11 @@ internal static class TitleImages
         // FUN_80035778 takes a (byte[], offset) pair, so the raw PSX address is turned back into
         // one through the overlay's resolver, the same pattern PrimitivePools.FUN_80057094 uses.
         //
-        // PARTIAL: none of the three call sites is transliterated yet, and the addresses they pass
-        // (0x801D20A0, 0x801D555C, 0x80077A50) are not in TITLE_EXE_exe.ResolveAddress today, so
-        // this resolve would fail if it were reached. Bailing out is not the original's behaviour —
-        // the original would simply dereference — but there is nothing to decompress from until
-        // those ranges are modelled.
+        // PARTIAL: bailing out is not the original's behaviour — the original would simply
+        // dereference. Three of the four call sites are transliterated now and all three resolve:
+        // 0x801D20A0 and 0x801D555C fall inside LoadingScreen.BYTE_ARRAY_801d2000, which
+        // TITLE_EXE_exe.ResolveAddress answers for, and 0x80077A50 is SelectScreenSetup's own
+        // baked .data block. FUN_8003dce4 @ 0x8003DCE4, the fourth, is not ported.
         var resolved = PsxRam.AddressResolver?.Invoke(param_1);
         if (resolved == null)
         {
@@ -225,10 +265,6 @@ internal static class TitleImages
 
         return result;
     }
-
-    private static uint ReadU32(byte[] buffer, int offset) =>
-        (uint)(buffer[offset] | (buffer[offset + 1] << 8)
-               | (buffer[offset + 2] << 16) | (buffer[offset + 3] << 24));
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: lets the address resolver map the staging buffer, since LoadFACE_B and others

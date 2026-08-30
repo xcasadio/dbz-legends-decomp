@@ -91,14 +91,12 @@ internal static class LoadingScreen
         CStack_38.size = 10;
         iVar2 = CdPosToInt(CStack_38.pos);
 
-        // PARTIAL: CdPosToInt @ 0x80069938 and CdIntToPos @ 0x80069834 are do-nothing stubs in the
-        // SDK, so this seek is lost: CdIntToPos never writes back into CStack_38.pos and the read
-        // below always starts at the file's first sector. The original skips
-        // DAT_1f80012c * 10 sectors, that is 10 sectors per chunk, and DAT_1f80012c is the 0..2
-        // counter main @ 0x800581DC keeps in SHORT_ARRAY_801ff000[0x87] — so on the console this
-        // picks one of three loading pictures. Closing it means implementing the two MSF routines
-        // in LibCd, which is not this file's territory; open-coding the arithmetic here would be
-        // transliterating the SDK into the game runtime.
+        // This seek used to be lost: CdPosToInt @ 0x80069938 and CdIntToPos @ 0x80069834 were
+        // do-nothing stubs in the SDK, so CdIntToPos never wrote back into CStack_38.pos and the
+        // read below always started at the file's first sector. Both are transliterated from the
+        // image now, so the skip lands. It is DAT_1f80012c * 10 sectors, ten per chunk, and
+        // DAT_1f80012c is the 0..2 counter main @ 0x800581DC keeps in SHORT_ARRAY_801ff000[0x87] —
+        // so this picks one of three loading pictures, as it does on the console.
         CdIntToPos(iVar2 + (int)(GteScratch.DAT_1f80012c * 10), CStack_38.pos);
 
         // The original passes `(u_char *)&CStack_38`, and CdlFILE begins with its CdlLOC, so the

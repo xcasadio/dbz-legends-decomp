@@ -3,14 +3,14 @@ using static PsxSdkMonogame.Kernel;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The direct callees of FUN_80058a9c @ 0x80058A9C that this pass could close, plus the RAM they
-// address. Grouped by their caller, not by a claimed role: every function below keeps its raw
-// FUN_ name and nothing here is named for what it might mean.
+// Direct callees of FUN_80058a9c @ 0x80058A9C, plus the RAM they address. Grouped by their caller,
+// not by a claimed role: every function below keeps its raw FUN_ name and nothing here is named for
+// what it might mean.
 //
-// FUN_80058a9c's two remaining direct callees are NOT here and are recorded at their call site in
-// TITLE_EXE_exe.FUN_80058a9c: LoadFACE_B @ 0x80052D68 (needs CdIntToPos/CdPosToInt, both
-// do-nothing stubs in LibCd) and FUN_800376c0 @ 0x800376C0 (needs FUN_80057c80 to take its file
-// buffer as a parameter, which is a change inside TitleImages.cs).
+// Two more of FUN_80058a9c's direct callees live in files of their own, because each brought its
+// own data and its own helpers: FUN_800376c0 @ 0x800376C0 in StageBackdrop.cs and
+// LoadFACE_B @ 0x80052D68 in FaceImages.cs. Every direct callee of FUN_80058a9c is transliterated
+// now; what remains open there is LoadClut @ 0x80074E50, still a stub in LibGpu.
 internal static class SelectScreenSetup
 {
     // GHIDRA: UnkStruct_Array_800836d4 @ 0x800836D4
