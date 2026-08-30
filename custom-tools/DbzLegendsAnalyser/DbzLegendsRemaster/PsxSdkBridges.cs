@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.IO;
 using DbzLegendsRemaster.MOVIE_EXE;
+using DbzLegendsRemaster.SELECT_EXE;
 using DbzLegendsRemaster.SLPS_003_55;
 using DbzLegendsRemaster.TITLE_EXE;
 using PsxSdkMonogame;
@@ -57,6 +58,37 @@ internal static class PsxSdkBridges
     {
         PsxRam.AddressResolver = TITLE_EXE_exe.ResolveAddress;
         TraceOverlay("TITLE.EXE");
+    }
+
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: LoadExec replaces the resident executable and its overlapping RAM ranges.
+    //
+    // The ranges SELECT.EXE's resolver answers for, and how each extent was closed:
+    //   0x80080000  40320 B  g_UsagiChunk18DecodedTiles — Ghidra types the symbol ushort[20160],
+    //                        which is 35 tiles of 12 x 48 words; the span also stops well below
+    //                        the next used address, 0x80090000;
+    //   0x80090000  0x20000  the decode scratch — the largest chunk it holds is 160 x 240 VRAM
+    //                        halfwords = 76800 B, and the upper bound is the buffer below;
+    //   0x800B0000  0x50000  the raw USAGI.B buffer — the live read is 147 sectors = 301056 B, and
+    //                        the upper bound is 0x80100000, the next address any SELECT.EXE code
+    //                        uses (the BGM.B VAB body, menu state 3);
+    //   0x80058E08  112 B    the flat store behind FUN_80030698's triangular table — 28 words, the
+    //                        loop's own count, and it ends exactly on libgs's DAT_80058e78;
+    //   0x800593B8  84 B     that table's 7 records of 12 bytes, both from the loop's own bounds;
+    //   0x801FF000  0x248    the cross-overlay block, through the existing SharedHighRam. SELECT
+    //                        touches 0x801FF000..0x801FF247 and nothing else inside it — the same
+    //                        extent SharedHighRam already models, including the button-remap
+    //                        tables at index 0x10 / 0x1E and the memory-card result word at
+    //                        0x801FF068. It is REUSED, not extended. The one SELECT address that
+    //                        falls outside it, 0x801FFF00, is the LoadExec header scratch, whose
+    //                        address is passed but whose contents are never read;
+    //   the SNMAIN heap       0x0078E75C bytes at 0x800692A0, armed by start and never used.
+    // The heap span covers every buffer above it, exactly as it does on the console, so
+    // PsxHeap.Resolve is chained LAST in SELECT_EXE_exe.ResolveAddress.
+    internal static void ActivateSelectExe()
+    {
+        PsxRam.AddressResolver = SELECT_EXE_exe.ResolveAddress;
+        TraceOverlay("SELECT.EXE");
     }
 
     // JUSTIFICATION: backend MonoGame only
