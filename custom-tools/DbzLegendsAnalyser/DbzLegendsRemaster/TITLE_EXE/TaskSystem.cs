@@ -34,11 +34,11 @@ internal static class TaskSystem
     // GHIDRA: PTR_80083224 @ 0x80083224
     // The object ExecuteTaskList is currently standing on. Ghidra types it TitleAudioBlock *, which
     // is wrong and inherited from an earlier analysis; it is a task block.
-    private static int PTR_80083224;
+    internal static int PTR_80083224;
 
     // GHIDRA: PTR_ARRAY_80083228 @ 0x80083228
     // Only its first halfword is used, and only to carry the list index being walked.
-    private static short PTR_ARRAY_80083228;
+    internal static short PTR_ARRAY_80083228;
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: the original stores a raw function pointer at +0x04 and calls it indirectly through

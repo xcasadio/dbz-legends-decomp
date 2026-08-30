@@ -1,0 +1,172 @@
+﻿using System;
+using DbzLegendsRemaster.TITLE_EXE;
+using PsxSdkMonogame;
+
+namespace DbzLegendsRemaster.Validation;
+
+// JUSTIFICATION: backend MonoGame only
+// RELATION: bench for the title task FUN_80021e28 @ 0x80021E28.
+//
+// It is checked against the console rather than against itself. PCSX-Redux was stopped at the task
+// context's first AddPrim (0x80022524) on the real title screen, and the 112 bytes at 0x80017CB4
+// were read out. Those bytes are the expectations below: two textured quads and the scratch slot,
+// exactly as the hardware had them on the frame state 0 handed over to state 1.
+//
+// One byte of the capture is deliberately not compared. p[1].x3 is stored in the delay slot of the
+// jal at 0x80022528, so the console dump was taken one instruction before that write landed and
+// reads 0 where the code plainly stores 0x280. The port is checked against the code there.
+internal static class TitleScreenTaskValidation
+{
+    private static int s_failures;
+
+    internal static int Run()
+    {
+        s_failures = 0;
+
+        PsxSdkBridges.Install();
+        PsxSdkBridges.ActivateTitleExe();
+
+        FrameBaton.ResetHeadless(1);
+        try
+        {
+            new TITLE_EXE_exe().Main();
+        }
+        catch (GameShutdownException)
+        {
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"  ECHEC: main a leve {exception.GetType().Name}: {exception.Message}");
+            Console.WriteLine("TITLE-TASK: echec");
+            return 1;
+        }
+
+        int task = TaskSystem.g_TaskListHead[6];
+        Check(task != 0, $"une tache existe en liste 6, lu 0x{task:X}");
+        if (task == 0)
+        {
+            Console.WriteLine("TITLE-TASK: echec");
+            return 1;
+        }
+
+        int contextAddress = PsxRam.ReadI32(task + 8);
+        Check(LibGpu.RamResolve(contextAddress, out byte[] buffer, out int offset),
+            $"le contexte 0x{contextAddress:X} se resout en memoire");
+        if (buffer == null)
+        {
+            Console.WriteLine("TITLE-TASK: echec");
+            return 1;
+        }
+
+        var p = new POLY_FT4Ref(buffer, offset);
+        var p1 = p[1];
+        var p2 = p[2];
+
+        // Drive the task until state 0 has handed over. main's single headless frame may or may not
+        // have swept list 6 already, so the bench makes the point deterministic.
+        for (int guard = 0; guard < 4 && p2.ReadHalf(0) == 0; guard++)
+        {
+            TaskSystem.ExecuteTaskList(6);
+        }
+
+        Check(p2.ReadHalf(0) == 1, $"l'etat passe a 1 apres l'initialisation, lu {p2.ReadHalf(0)}");
+
+        // --- l'etat de travail, contre la capture console 80 02 80 02 40 01 ---
+        Check(p2.ReadHalf(4) == 0x0280, $"r0|g0 = 0x0280, lu 0x{(ushort)p2.ReadHalf(4):X4}");
+        Check(p2.ReadHalf(6) == 0x0280, $"b0|code = 0x0280, lu 0x{(ushort)p2.ReadHalf(6):X4}");
+        Check(p2.x0 == 0x140, $"x0 = 0x140, lu 0x{p2.x0:X}");
+        Check(p2.u2 == 0, $"le fondu part de 0, lu 0x{p2.u2:X}");
+        Check(p2.ReadHalf(2) == 0, $"le compteur de frames part de 0, lu {p2.ReadHalf(2)}");
+
+        // --- les deux bandes, contre la capture ---
+        CheckQuad(p, "p[0]", 9, 0x2e, 0x46);
+        CheckQuad(p1, "p[1]", 9, 0x2e, 0x46);
+
+        Check(p.clut == p1.clut, $"les deux bandes partagent la CLUT, lu 0x{p.clut:X4} / 0x{p1.clut:X4}");
+        Console.WriteLine($"  CLUT de GetClut(0x180, 0xfe): 0x{p.clut:X4}");
+
+        // Geometry: x0 = -p[2].x0, x1 = 0x140 - p[2].x0, bande haute y 0 a 0x58.
+        Check(p.x0 == -0x140, $"p[0].x0 = -320, lu {p.x0}");
+        Check(p.y0 == 0, $"p[0].y0 = 0, lu {p.y0}");
+        Check(p.x1 == 0, $"p[0].x1 = 0, lu {p.x1}");
+        Check(p.x2 == -0x140, $"p[0].x2 = -320, lu {p.x2}");
+        Check(p.y2 == 0x58, $"p[0].y2 = 0x58, lu 0x{p.y2:X}");
+        Check(p.x3 == 0, $"p[0].x3 = 0, lu {p.x3}");
+        Check(p.y3 == 0x58, $"p[0].y3 = 0x58, lu 0x{p.y3:X}");
+
+        // Bande basse, y 0xbc a 0xf0, decalee dans l'autre sens.
+        Check(p1.x0 == 0x140, $"p[1].x0 = 320, lu {p1.x0}");
+        Check(p1.y0 == 0xbc, $"p[1].y0 = 0xbc, lu 0x{p1.y0:X}");
+        Check(p1.x1 == 0x280, $"p[1].x1 = 640, lu {p1.x1}");
+        Check(p1.x2 == 0x140, $"p[1].x2 = 320, lu {p1.x2}");
+        Check(p1.y2 == 0xf0, $"p[1].y2 = 0xf0, lu 0x{p1.y2:X}");
+        Check(p1.x3 == 0x280, $"p[1].x3 = 640, lu {p1.x3}");
+        Check(p1.y3 == 0xf0, $"p[1].y3 = 0xf0, lu 0x{p1.y3:X}");
+
+        // --- la soumission ---
+        // FUN_80048f88 is not ported and returns 0, so both bands land in bucket 0, which is where
+        // the console put them on the captured frame: a0 was 0x800A6830 exactly.
+        uint bucket0 = ReadWord(FrameLoop.OT_800a6830, 0);
+        int contextLow = contextAddress & 0x00ffffff;
+        Check((bucket0 & 0x00ffffff) != 0x00ffffff && bucket0 != 0,
+            $"la case 0 porte une primitive, lu 0x{bucket0:X8}");
+
+        // The second AddPrim leaves p[1] at the head, and p[1] links to p[0].
+        Check((bucket0 & 0x00ffffff) == ((contextLow + POLY_FT4Ref.Size) & 0x00ffffff),
+            $"la case 0 pointe sur p[1], attendu 0x{(contextLow + POLY_FT4Ref.Size) & 0xffffff:X6}, lu 0x{bucket0 & 0x00ffffff:X6}");
+        Check((p1.tag & 0x00ffffff) == (uint)contextLow,
+            $"p[1] chaine vers p[0], attendu 0x{contextLow:X6}, lu 0x{p1.tag & 0x00ffffff:X6}");
+        Check((p.tag >> 24) == 9 && (p1.tag >> 24) == 9,
+            $"les deux gardent leur longueur 9, lu {p.tag >> 24} / {p1.tag >> 24}");
+
+        Console.WriteLine($"  case 0 -> 0x{bucket0 & 0x00ffffff:X6} -> 0x{p1.tag & 0x00ffffff:X6}");
+
+        // --- la machine a etats, etat 1: le fondu monte de 8 par frame jusqu'a 0x80 ---
+        int frames = 0;
+        while (p2.ReadHalf(0) == 1 && frames < 32)
+        {
+            TaskSystem.ExecuteTaskList(6);
+            frames++;
+        }
+
+        Check(frames == 16, $"le fondu prend 16 frames pour atteindre 0x80, compte {frames}");
+        Check(p2.u2 == 0x80, $"le fondu culmine a 0x80, lu 0x{p2.u2:X}");
+        Check(p2.ReadHalf(0) == 2, $"l'etat passe a 2, lu {p2.ReadHalf(0)}");
+
+        // --- etat 2: la bande glisse de 0x50 par frame et l'offset descend de 0xa0 ---
+        short xBefore = p2.x0;
+        TaskSystem.ExecuteTaskList(6);
+        Check(p2.x0 == (short)(xBefore - 0x50),
+            $"x0 recule de 0x50 par frame, {xBefore} -> {p2.x0}");
+        Check(p.x0 == (short)-p2.x0, $"p[0].x0 suit -x0, lu {p.x0} pour x0 {p2.x0}");
+
+        Console.WriteLine(s_failures == 0
+            ? "TITLE-TASK: toutes les verifications passent"
+            : $"TITLE-TASK: {s_failures} echec(s)");
+        return s_failures == 0 ? 0 : 1;
+    }
+
+    private static void CheckQuad(POLY_FT4Ref q, string label, uint length, byte code, ushort tpage)
+    {
+        Check((q.tag >> 24) == length, $"{label}: longueur {length}, lu {q.tag >> 24}");
+        Check(q.code == code, $"{label}: code 0x{code:X2}, lu 0x{q.code:X2}");
+        Check(q.tpage == tpage, $"{label}: tpage 0x{tpage:X2}, lu 0x{q.tpage:X2}");
+        Check(q.r0 == 0x60 && q.g0 == 0x60 && q.b0 == 0x60,
+            $"{label}: gris 0x60, lu {q.r0:X2}/{q.g0:X2}/{q.b0:X2}");
+        Check(q.u0 == 0 && q.u1 == 0 && q.u2 == 0 && q.u3 == 0, $"{label}: tous les u a 0");
+        Check(q.v0 == 0xff && q.v1 == 0xff && q.v2 == 0xff && q.v3 == 0xff,
+            $"{label}: tous les v a 0xff");
+    }
+
+    private static void Check(bool condition, string label)
+    {
+        if (!condition)
+        {
+            s_failures++;
+            Console.WriteLine($"  ECHEC: {label}");
+        }
+    }
+
+    private static uint ReadWord(byte[] b, int o) =>
+        (uint)(b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24));
+}

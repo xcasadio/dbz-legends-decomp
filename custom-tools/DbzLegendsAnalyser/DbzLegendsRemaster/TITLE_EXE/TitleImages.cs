@@ -16,7 +16,7 @@ internal static class TitleImages
     internal static readonly byte[] DAT_80096664 = new byte[0x8000];
 
     // GHIDRA: FUN_80021e28 @ 0x80021E28
-    // The title screen task. Not transliterated; its address is what the block carries.
+    // The title screen task. The block carries its address; TitleScreenTask holds the body.
     private const int FUN_80021e28 = unchecked((int)0x80021E28);
 
     // GHIDRA: RECT_80083550 @ 0x80083550
@@ -29,6 +29,7 @@ internal static class TitleImages
         // TITLE_B_FILE_FORMAT_ANALYSIS.md measured as 0x008.
         int scriptOffset = PsxRam.ReadI32(unchecked((int)0x80110004));
         FUN_80057c80(scriptOffset, 0);
+        TaskSystem.RegisterCallback(FUN_80021e28, () => TitleScreenTask.FUN_80021e28());
         TaskSystem.CreateTask(FUN_80021e28, 0, 6, 0x70, 0, TaskSystem.g_TaskListTail[6]);
     }
 

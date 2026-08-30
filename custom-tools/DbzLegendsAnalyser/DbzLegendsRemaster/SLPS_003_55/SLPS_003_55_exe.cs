@@ -59,7 +59,8 @@ internal sealed class SLPS_003_55_exe
     // Held in SharedHighRam rather than here: 0x801FF000 is high RAM that no overlay segment
     // covers, so it survives LoadExec, and TITLE.EXE reads back the button-remap tables that
     // FUN_8002165c writes into it. See SharedHighRam for the addressing that proves it.
-    private static readonly short[] SHORT_ARRAY_801ff000 = SharedHighRam.SHORT_ARRAY_801ff000;
+    private static readonly SharedHighRam.ShortWindow SHORT_ARRAY_801ff000 =
+        SharedHighRam.SHORT_ARRAY_801ff000;
 
     // GHIDRA: DAT_801fff00 @ 0x801FFF00
     // PARTIAL: only the address of this global reaches LoadExec; its contents are never read here.

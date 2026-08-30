@@ -30,7 +30,7 @@ internal static class FrameLoop
 
     // GHIDRA: DAT_800834e0 @ 0x800834E0
     // Holds the active DRAWENV's address, not the object: the original adds 0x70 to it.
-    private static int DAT_800834e0;
+    internal static int DAT_800834e0;
 
     // JUSTIFICATION: PSX hardware adaptation only
     // RELATION: declares the ordering table's PSX address so AddPrim can write real links into it
@@ -160,7 +160,7 @@ internal static class FrameLoop
     // GHIDRA: ShutdownAndLoadExecutable @ 0x80058158
     // Same role as its counterparts in the two other overlays, with two real differences: ResetGraph
     // runs before PadStop, the reverse of theirs, and CdFlush is not called at all.
-    private static void ShutdownAndLoadExecutable(string exeFileName)
+    internal static void ShutdownAndLoadExecutable(string exeFileName)
     {
         StopRCnt(unchecked((long)0xf2000000));
         StopRCnt(unchecked((long)0xf2000001));

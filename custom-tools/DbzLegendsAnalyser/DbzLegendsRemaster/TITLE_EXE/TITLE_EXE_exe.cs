@@ -23,7 +23,7 @@ internal sealed class TITLE_EXE_exe
     internal static readonly byte[] DAT_80110000 = new byte[0x25000];
 
     // GHIDRA: CdlFILE_800a8860 @ 0x800A8860
-    private static readonly CdlFILE CdlFILE_800a8860 = new();
+    internal static readonly CdlFILE CdlFILE_800a8860 = new();
 
     // GHIDRA: DAT_80083498 @ 0x80083498
     private static int DAT_80083498;
@@ -255,19 +255,21 @@ internal sealed class TITLE_EXE_exe
         PopMatrix();
         if (1 < DAT_80083454)
         {
-            // BLOCKED: AddPrim(DAT_800834e0 + 0x206C, &POLY_GT4_800b9518). Neither the ordering
-            // table root DAT_800834e0 nor the primitive POLY_GT4_800b9518 is transliterated, and
-            // DAT_80083454 only exceeds 1 once FUN_80038228 has run, which is still open. The
-            // guard is reproduced so the branch surfaces the day those are closed.
+            // 0x206c reaches ordering-table bucket 0x7ff: DAT_800834e0 + 0x70 is the table's first
+            // entry, so (0x206c - 0x70) / 4 = 0x7ff, the last bucket. Forward-linked, that bucket
+            // draws last, which is what puts the fade quad over everything else.
+            AddPrim(FrameLoop.DAT_800834e0 + 0x206c, DisplayMachine.POLY_GT4_800b9518);
         }
     }
 
     // GHIDRA: POLY_FT4_ARRAY_800a8894 @ 0x800A8894
-    // Five consecutive POLY_FT4, 0x28 bytes apart on the console, filled by FUN_80058d64.
-    internal static readonly LibGpu.POLY_FT4[] POLY_FT4_ARRAY_800a8894 =
-    {
-        new(), new(), new(), new(), new(),
-    };
+    // Five consecutive POLY_FT4, 0x28 bytes apart on the console, filled by FUN_80058d64. Real
+    // memory rather than objects, so the five packets are contiguous exactly as the original walks
+    // them and each carries an address a bucket can point at.
+    private const int PolyFt4Array800a8894Address = unchecked((int)0x800A8894);
+
+    internal static readonly POLY_FT4Ref POLY_FT4_ARRAY_800a8894 =
+        new(RamRegion(PolyFt4Array800a8894Address, POLY_FT4Ref.Size * 5), 0);
 
     // GHIDRA: DAT_800a897a @ 0x800A897A
     // Cleared by FUN_80058d64. FUN_80038228 @ 0x80038228 returns 1 immediately when its bit 0 is
@@ -287,7 +289,7 @@ internal sealed class TITLE_EXE_exe
         DAT_800a897a = 0;
         do
         {
-            LibGpu.POLY_FT4 p = POLY_FT4_ARRAY_800a8894[iVar2];
+            POLY_FT4Ref p = POLY_FT4_ARRAY_800a8894[iVar2];
             SetPolyFT4(p);
             SetShadeTex(p, 0);
             SetSemiTrans(p, 0);
@@ -398,6 +400,8 @@ internal sealed class TITLE_EXE_exe
             return (DAT_80110000, address - TitleBBufferAddress);
         }
 
-        return TitleImages.Resolve(address) ?? PsxHeap.Resolve(address);
+        return TitleImages.Resolve(address)
+               ?? SharedHighRam.Resolve(address)
+               ?? PsxHeap.Resolve(address);
     }
 }
