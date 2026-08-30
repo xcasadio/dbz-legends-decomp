@@ -102,9 +102,26 @@ n'appelle pas `SpuInit`.
 0x80021318: addiu $t1, $zero, 0x51
 ```
 
-`LoadExec` recoit donc **trois arguments**. Son prototype n'est pas ferme dans
-Ghidra (`undefined LoadExec(void)`), donc les deux arguments de pile gardent des
-noms bruts `param_2` et `param_3` cote C#.
+`LoadExec` recoit donc **trois arguments**.
+
+### Synchronisation Ghidra
+
+Le prototype etait `undefined LoadExec(void)` dans les deux programmes alors que
+les trois arguments sont observables dans l'ASM des appelants (`a0`, `a1`, `a2`).
+Il a ete ferme a l'identique des deux cotes:
+
+| Programme | Adresse | Ancien prototype | Nouveau prototype |
+|---|---|---|---|
+| `/SLPS_003.55` | `0x800218BC` | `undefined LoadExec(void)` | `void LoadExec(char *exeFileName, u_long param_2, u_long param_3)` |
+| `/MOVIE.EXE` | `0x80021310` | `undefined LoadExec(void)` | `void LoadExec(char *exeFileName, u_long param_2, u_long param_3)` |
+
+Les deux `ShutdownAndLoadExecutable` se decompilent desormais en
+`LoadExec(exeFileName, 0x801fff00, 0)`.
+
+Seul le nom du premier argument est ferme. La semantique des deux arguments de
+pile ne l'est pas: ils gardent des noms bruts `param_2` et `param_3` dans Ghidra
+comme en C#. Aucun autre symbole n'a ete renomme, et le retour arriere consiste
+a reposer `undefined LoadExec(void)` aux deux adresses ci-dessus.
 
 ## Ecarts corriges dans le port
 
@@ -208,8 +225,10 @@ inchange.
   appeles `FUN_` du chemin d'ouverture de `main` n'est ferme. Porter un prefixe
   tronque entrerait dans la boucle de reessai `CdSearchFile` sans sortie ni
   `VSync`.
-- `PARTIAL`: le prototype BIOS `A0(0x51)` n'est pas ferme dans Ghidra; les deux
-  arguments de pile gardent des noms bruts des deux cotes.
+- `PARTIAL`: la semantique des deux arguments de pile de `A0(0x51)` n'est pas
+  fermee; ils gardent des noms bruts des deux cotes, meme si le prototype est
+  desormais pose dans Ghidra.
 - `PARTIAL`: `FUN_8002c84c` et `FUN_8002c8f0` du SLPS ferment toujours des
   callbacks audio non installes, l'initialisation du sequenceur restant bloquee.
-- Aucune ecriture n'a ete faite dans le projet Ghidra pour ce lot.
+- La seule ecriture faite dans le projet Ghidra pour ce lot est la pose du
+  prototype de `LoadExec` decrite plus haut.

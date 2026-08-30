@@ -374,8 +374,9 @@ internal sealed class MOVIE_EXE_exe
     }
 
     // GHIDRA: LoadExec @ 0x80021310
-    // PARTIAL: the BIOS A0(0x51) prototype is not closed in Ghidra, so the two stack arguments
-    // keep raw names. The desktop adapter handles the only path currently proven at this call site.
+    // PARTIAL: the Ghidra prototype is void LoadExec(char *, u_long, u_long). The semantics of the
+    // two stack arguments are not closed, so they keep raw names. The desktop adapter handles the
+    // only path currently proven at this call site.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
         if (string.Equals(exeFileName, "cdrom:\\TITLE.EXE;1", StringComparison.Ordinal))
