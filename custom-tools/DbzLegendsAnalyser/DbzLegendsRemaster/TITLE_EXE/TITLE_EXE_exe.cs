@@ -83,10 +83,40 @@ internal sealed class TITLE_EXE_exe
         DisplayMachine.FUN_80038228(8, 0);
         FUN_80058d64();
 
-        // BLOCKED: the main loop is not transliterated yet. It continues with
-        //   do { ... FUN_80021dd0(); RunFrameLoop(); FUN_80058a9c(); ... } while (true);
-        // FUN_80021dd0, FUN_80058a9c and FUN_80038684 are still open, and RunFrameLoop also
-        // reaches FUN_80056b30 and FUN_80056d00.
+        do
+        {
+            if (2 < SharedHighRam.SHORT_ARRAY_801ff000[0x87])
+            {
+                SharedHighRam.SHORT_ARRAY_801ff000[0x87] = 0;
+            }
+
+            GteScratch.DAT_1f80012c = (uint)SharedHighRam.SHORT_ARRAY_801ff000[0x87];
+            SharedHighRam.SHORT_ARRAY_801ff000[0x80] = 2;
+            SharedHighRam.SHORT_ARRAY_801ff000[0x87] =
+                (short)(SharedHighRam.SHORT_ARRAY_801ff000[0x87] + 1);
+            DisplayMachine.FUN_80038228(8, 0);
+            FrameLoop.DAT_800835b4 = 1;
+            TitleImages.FUN_80021dd0();
+            FrameLoop.RunFrameLoop();
+            FUN_80058a9c();
+            DisplayMachine.FUN_80038228(2, 4);
+            FrameLoop.DAT_80083504 = 0;
+            FrameLoop.RunFrameLoop();
+        } while (true);
+    }
+
+    // GHIDRA: FUN_80058a9c @ 0x80058A9C
+    private static void FUN_80058a9c()
+    {
+        // BLOCKED: this is not part of the title screen. It tears the title down and builds the
+        // character-select screen: it frees the six primitive pools, destroys all twenty task
+        // lists through FUN_80049a14, re-arms the heap and the geometry, then reloads
+        // CHR_DATA/EFF_AUTO.B and CH_EF_P0.B and reaches FUN_800583fc, LAB_80027f5c, LAB_800532a4,
+        // FUN_800376c0, LAB_8004c010, LoadFACE_B, FUN_80035700, FUN_8004737c and FUN_80027354 —
+        // none of them closed.
+        //
+        // Leaving it empty is an accepted, stated deviation: the title screen itself runs
+        // faithfully, but the game will not build the select screen when it ends.
     }
 
     // GHIDRA: ClearVram @ 0x80057508

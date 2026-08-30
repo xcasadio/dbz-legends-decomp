@@ -21,9 +21,15 @@ internal static class TitleInitValidation
         PsxSdkBridges.Install();
         PsxSdkBridges.ActivateTitleExe();
 
+        // main ne rend jamais la main: sa boucle de frame tourne jusqu'au mode attract. Le banc
+        // s'arrete au premier balayage de RunFrameLoop, donc apres toute l'initialisation.
+        FrameBaton.ResetHeadless(1);
         try
         {
             new TITLE_EXE_exe().Main();
+        }
+        catch (GameShutdownException)
+        {
         }
         catch (Exception exception)
         {

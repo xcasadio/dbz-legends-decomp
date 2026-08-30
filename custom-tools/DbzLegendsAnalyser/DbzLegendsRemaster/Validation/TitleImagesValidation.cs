@@ -25,9 +25,15 @@ internal static class TitleImagesValidation
         PsxSdkBridges.Install();
         PsxSdkBridges.ActivateTitleExe();
 
+        // main ne rend jamais la main: sa boucle de frame tourne jusqu'au mode attract. Le banc
+        // s'arrete au premier balayage de RunFrameLoop, donc apres toute l'initialisation.
+        FrameBaton.ResetHeadless(1);
         try
         {
             new TITLE_EXE_exe().Main();
+        }
+        catch (GameShutdownException)
+        {
         }
         catch (Exception exception)
         {
@@ -118,8 +124,10 @@ internal static class TitleImagesValidation
             $"la VRAM porte {nonZero} cellules non nulles apres l'upload");
         Console.WriteLine($"  VRAM: {nonZero} cellules non nulles");
 
-        Check(TaskSystem.g_TaskListCount[6] == 1,
-            $"la tache du titre est creee en liste 6, compte {TaskSystem.g_TaskListCount[6]}");
+        // main a deja appele FUN_80021dd0 une fois, et le banc vient de le rappeler pour mesurer
+        // l'upload, d'ou deux taches en liste 6.
+        Check(TaskSystem.g_TaskListCount[6] == 2,
+            $"deux taches en liste 6 apres le second appel, compte {TaskSystem.g_TaskListCount[6]}");
 
         Console.WriteLine(s_failures == 0
             ? "TITLE-IMAGES: toutes les verifications passent"
