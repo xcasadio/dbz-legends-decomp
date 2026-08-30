@@ -83,6 +83,56 @@ internal static class TitleImages
         } while (uVar11 < uVar7);
     }
 
+    // GHIDRA: FUN_80057b08 @ 0x80057B08
+    // Decompresses one LZSS block into the staging buffer and uploads it in a single step.
+    //
+    // Parameters, closed from the prologue: a0 is the PSX address of the compressed block; a1/a2/a3
+    // are sign-extended to 16 bits (`sll 16` then `sra 16`, 0x80057B50..0x80057B64) and become
+    // x, y, w; the fifth argument is loaded from 0x48(sp) (`lw s0` at 0x80057B10), sign-extended the
+    // same way (0x80057B68/0x80057B6C) and stored to 0x10(sp) as h; the sixth is read from 0x4C(sp)
+    // with `lbu` (0x80057B3C) and stored to 0x14(sp) as mode.
+    //
+    // The staging buffer is DAT_80096664, the SAME one FUN_80057c80 decodes into, not a second
+    // buffer: 0x80057B30 holds `lui s2,0x8009` and 0x80057B34 `addiu s2,s2,0x6664`, and that one
+    // register is both the second argument of FUN_80035778 (`addu a1,s2,zero` at 0x80057B48) and
+    // the first of LoadImageInVram (`addu a0,s2,zero` at 0x80057B4C).
+    //
+    // Call order is closed from the jal sequence and is FUN_80035778 (0x80057B44), then
+    // LoadImageInVram (0x80057B74), then DrawSync (0x80057B80) — the DrawSync comes AFTER the
+    // upload here, the reverse of the order FUN_80057c80 uses. The upload's result is captured in
+    // the DrawSync delay slot (`addu s0,v0,zero` at 0x80057B84), so DrawSync's own return value is
+    // discarded, and the function returns the low 16 bits (`andi v0,s0,0xffff` at 0x80057B88).
+    //
+    // All three call sites pass mode 0 and discard the result: FUN_80058a9c @ 0x80058A9C twice
+    // (0x801d20a0 and &DAT_801d555c, both 0x40 x 0x100), FUN_80035700 @ 0x80035700 once
+    // (&DAT_80077a50, 0x10 x 0x40), and FUN_8003dce4 @ 0x8003DCE4 once with a pointer field and a
+    // width already shifted right by 2.
+    internal static uint FUN_80057b08(int param_1, ushort x, ushort y, short w, short h, char mode)
+    {
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: the original passes a1 straight to FUN_80035778 as a `uchar *`. The ported
+        // FUN_80035778 takes a (byte[], offset) pair, so the raw PSX address is turned back into
+        // one through the overlay's resolver, the same pattern PrimitivePools.FUN_80057094 uses.
+        //
+        // PARTIAL: none of the three call sites is transliterated yet, and the addresses they pass
+        // (0x801D20A0, 0x801D555C, 0x80077A50) are not in TITLE_EXE_exe.ResolveAddress today, so
+        // this resolve would fail if it were reached. Bailing out is not the original's behaviour —
+        // the original would simply dereference — but there is nothing to decompress from until
+        // those ranges are modelled.
+        var resolved = PsxRam.AddressResolver?.Invoke(param_1);
+        if (resolved == null)
+        {
+            return 0;
+        }
+
+        (byte[] buffer, int offset) = resolved.Value;
+        FUN_80035778(buffer, offset, DAT_80096664, 0);
+        uint result = DisplayMachine.LoadImageInVram(
+            ToWordBuffer(DAT_80096664, w * h * 2), x, y, w, h, mode);
+        DrawSync(0);
+        return result & 0xffff;
+    }
+
     // GHIDRA: FUN_80035778 @ 0x80035778
     // LZSS. A 16-bit header gives the command count; every eighth command is preceded by a flag
     // byte whose top bit selects literal or back-reference, walked through the sign bit of a word

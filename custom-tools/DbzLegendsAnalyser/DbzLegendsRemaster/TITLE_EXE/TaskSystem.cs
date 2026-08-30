@@ -327,4 +327,66 @@ internal static class TaskSystem
 
         return 0;
     }
+
+    // GHIDRA: FUN_80049a14 @ 0x80049A14
+    // Destroys every task held in one list index: it repeatedly takes the head of the list,
+    // unlinks it from g_TaskListHead / g_TaskListTail, walks PTR_80083224 back to the removed
+    // node's predecessor if ExecuteTaskList was standing on it, frees it, and decrements the count.
+    //
+    // Callers are FUN_80058a9c @ 0x80058A9C and FUN_80029aec @ 0x80029AEC; both spell it as
+    // `FUN_80049a14(uVar & 0xffff)` inside a loop over list indices. Neither is transliterated yet,
+    // so nothing reaches this function today.
+    //
+    // The unlink body is deliberately written out again instead of calling DeleteTask
+    // @ 0x80049720, which performs the same six branches: rule 3 forbids merging two original
+    // functions into one shared C# helper. The two read alike on purpose.
+    //
+    // LITERAL DETAIL WORTH KEEPING: the loop condition re-reads g_TaskListCount, but the count is
+    // only decremented inside the guarded branch. A head node whose flag bit 0x2 is set is
+    // therefore never unlinked and never counted down, and the original spins here forever. The
+    // same holds if the count is non-zero while the head pointer is 0. Reproduced as-is: rule 12
+    // forbids repairing a bug of the original.
+    internal static void FUN_80049a14(uint param_1)
+    {
+        if (g_TaskListCount[param_1 & 0xffff] == 0)
+        {
+            return;
+        }
+
+        do
+        {
+            int pTVar3 = g_TaskListHead[param_1 & 0xffff];
+            if (pTVar3 != 0 && (PsxRam.ReadU16(pTVar3 + TaskFlags) & 2) == 0)
+            {
+                if (pTVar3 == PTR_80083224)
+                {
+                    PTR_80083224 = PsxRam.ReadI32(pTVar3 + TaskPrev);
+                }
+
+                int iVar2 = PsxRam.ReadI32(pTVar3 + TaskPrev);
+                int iVar1 = PsxRam.ReadI32(pTVar3 + TaskNext);
+                if (iVar2 == 0)
+                {
+                    g_TaskListHead[param_1 & 0xffff] = iVar1;
+                }
+                else
+                {
+                    PsxRam.WriteI32(iVar2 + TaskNext, iVar1);
+                }
+
+                if (iVar1 == 0)
+                {
+                    g_TaskListTail[param_1 & 0xffff] = iVar2;
+                }
+                else
+                {
+                    PsxRam.WriteI32(iVar1 + TaskPrev, iVar2);
+                }
+
+                LibApi.free(pTVar3);
+                g_TaskListCount[param_1 & 0xffff] =
+                    (short)(g_TaskListCount[param_1 & 0xffff] - 1);
+            }
+        } while (g_TaskListCount[param_1 & 0xffff] != 0);
+    }
 }
