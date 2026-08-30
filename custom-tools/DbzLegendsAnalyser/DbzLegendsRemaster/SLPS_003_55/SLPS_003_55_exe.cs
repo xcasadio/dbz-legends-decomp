@@ -58,6 +58,10 @@ internal sealed class SLPS_003_55_exe
     // GHIDRA: SHORT_ARRAY_801ff000 @ 0x801FF000
     private static readonly short[] SHORT_ARRAY_801ff000 = new short[0x124];
 
+    // GHIDRA: DAT_801fff00 @ 0x801FFF00
+    // PARTIAL: only the address of this global reaches LoadExec; its contents are never read here.
+    private const int DAT_801fff00 = unchecked((int)0x801FFF00);
+
     // GHIDRA: main @ 0x80020D10
     public void Main()
     {
@@ -77,9 +81,10 @@ internal sealed class SLPS_003_55_exe
         SetDumpFnt(fontId);
         g_MovieEndCountdown = 0x1e;
         FUN_8002165c();
-
-        PlayBandaiMovie();
-        ShutdownAndLoadExecutable("cdrom:\\MOVIE.EXE;1");
+        do
+        {
+            PlayBandaiMovie();
+        } while (true);
     }
 
     // GHIDRA: PlayBandaiMovie @ 0x80020DE8
@@ -151,6 +156,7 @@ internal sealed class SLPS_003_55_exe
         } while ((pad & 0x800) == 0);
 
         SetDispMask(0);
+        ShutdownAndLoadExecutable("cdrom:\\MOVIE.EXE;1");
     }
 
     // GHIDRA: ShutdownAndLoadExecutable @ 0x800215C0
@@ -167,7 +173,7 @@ internal sealed class SLPS_003_55_exe
         CdFlush();
         StopCallback();
         _96_init();
-        LoadExec(exeFileName);
+        LoadExec(exeFileName, DAT_801fff00, 0);
     }
 
     // GHIDRA: FUN_8002c84c @ 0x8002C84C
@@ -192,14 +198,21 @@ internal sealed class SLPS_003_55_exe
     }
 
     // GHIDRA: LoadExec @ 0x800218BC
-    private static void LoadExec(string exeFileName)
+    // PARTIAL: the BIOS A0(0x51) prototype is not closed in Ghidra, so the two stack arguments
+    // keep raw names. The desktop adapter handles the only path currently proven at this call site.
+    private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
-        // PARTIAL: the desktop adapter handles the only path currently proven at this call site.
         if (string.Equals(exeFileName, "cdrom:\\MOVIE.EXE;1", StringComparison.Ordinal))
         {
             PsxSdkBridges.ActivateMovieExe();
             new MOVIE_EXE_exe().Main();
         }
+
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: A0(0x51) replaces the resident executable and transfers control permanently, so
+        // it never returns to its caller. Returning here would resume the original's unreachable
+        // code and re-enter the caller's do/while(true) loop.
+        throw new LoadExecTransferException();
     }
 
     // GHIDRA: InitializeMoviePlaybackState @ 0x800210A4

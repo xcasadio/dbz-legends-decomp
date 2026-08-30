@@ -67,6 +67,10 @@ public class Game1 : Game
             _slps_003_55_exe.Main();
             FrameBaton.CompleteRuntime();
         }
+        catch (LoadExecTransferException)
+        {
+            FrameBaton.CompleteRuntime();
+        }
         catch (GameShutdownException)
         {
         }

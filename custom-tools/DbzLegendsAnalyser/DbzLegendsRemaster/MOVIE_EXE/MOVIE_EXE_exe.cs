@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Binary;
 using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
+using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
 using static PsxSdkMonogame.LibGpu;
@@ -52,6 +53,10 @@ internal sealed class MOVIE_EXE_exe
     // GHIDRA: g_StCdInterruptPending @ 0x800A45F4
     private static int g_StCdInterruptPending;
 
+    // GHIDRA: DAT_801fff00 @ 0x801FFF00
+    // PARTIAL: only the address of this global reaches LoadExec; its contents are never read here.
+    private const int DAT_801fff00 = unchecked((int)0x801FFF00);
+
     // GHIDRA: main @ 0x800209FC
     public void Main()
     {
@@ -65,10 +70,10 @@ internal sealed class MOVIE_EXE_exe
         int fontId = FntOpen(0x20, 0x20, 0x140, 200, 0, 0x200);
         SetDumpFnt(fontId);
         g_MovieEndCountdown = 0x1e;
-
-        PlayDbzOpeningMovie();
-
-        // BLOCKED: the original ShutdownAndLoadExecutable @ 0x80021274 loads TITLE.EXE and does not return.
+        do
+        {
+            PlayDbzOpeningMovie();
+        } while (true);
     }
 
     // GHIDRA: PlayDbzOpeningMovie @ 0x80020A90
@@ -143,7 +148,7 @@ internal sealed class MOVIE_EXE_exe
         }
 
         SetDispMask(0);
-        // BLOCKED: ShutdownAndLoadExecutable @ 0x80021274 belongs to the next overlay slice.
+        ShutdownAndLoadExecutable("cdrom:\\TITLE.EXE;1");
     }
 
     // GHIDRA: InitializeMoviePlaybackState @ 0x80020D58
@@ -344,6 +349,39 @@ internal sealed class MOVIE_EXE_exe
         while (CdRead2(0x1c0) == 0)
         {
         }
+    }
+
+    // GHIDRA: ShutdownAndLoadExecutable @ 0x80021274
+    private static void ShutdownAndLoadExecutable(string exeFileName)
+    {
+        StopRCnt(unchecked((long)0xf2000000));
+        StopRCnt(unchecked((long)0xf2000001));
+        StopRCnt(unchecked((long)0xf2000002));
+        StopRCnt(unchecked((long)0xf2000003));
+        PadStop();
+        ResetGraph(0);
+        CdFlush();
+        StopCallback();
+        _96_init();
+        LoadExec(exeFileName, DAT_801fff00, 0);
+    }
+
+    // GHIDRA: _96_init @ 0x80021300
+    private static void _96_init()
+    {
+        // PARTIAL: compiler overlay runtime initialization is provided by the CLR.
+    }
+
+    // GHIDRA: LoadExec @ 0x80021310
+    // PARTIAL: the BIOS A0(0x51) prototype is not closed in Ghidra, so the two stack arguments
+    // keep raw names. No overlay is wired behind this call site yet.
+    private static void LoadExec(string exeFileName, int param_2, int param_3)
+    {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: A0(0x51) replaces the resident executable and transfers control permanently, so
+        // it never returns to its caller. Returning here would resume the original's unreachable
+        // code and re-enter the caller's do/while(true) loop.
+        throw new LoadExecTransferException();
     }
 
     // GHIDRA: __main @ 0x8002B9FC
