@@ -29,13 +29,13 @@ internal sealed class TITLE_EXE_exe
     private static int DAT_80083498;
 
     // GHIDRA: DAT_8008344c @ 0x8008344C
-    private static int DAT_8008344c;
+    internal static int DAT_8008344c;
 
     // GHIDRA: DAT_80083450 @ 0x80083450
-    private static int DAT_80083450;
+    internal static int DAT_80083450;
 
     // GHIDRA: DAT_80083448 @ 0x80083448
-    private static int DAT_80083448;
+    internal static int DAT_80083448;
 
     // GHIDRA: DAT_80083544 @ 0x80083544
     internal static int DAT_80083544;
