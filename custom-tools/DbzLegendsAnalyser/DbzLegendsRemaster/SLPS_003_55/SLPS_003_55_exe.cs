@@ -203,6 +203,12 @@ internal sealed class SLPS_003_55_exe
     // only path currently proven at this call site.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: the drive spends real time fetching the overlay; see LibCd.WaitDiscLoad for
+        // the measurements this reproduces. Without it the next overlay starts polling the pad
+        // 66 ms after this one stopped, and one Start press skips both startup movies.
+        WaitDiscLoad(exeFileName);
+
         if (string.Equals(exeFileName, "cdrom:\\MOVIE.EXE;1", StringComparison.Ordinal))
         {
             PsxSdkBridges.ActivateMovieExe();

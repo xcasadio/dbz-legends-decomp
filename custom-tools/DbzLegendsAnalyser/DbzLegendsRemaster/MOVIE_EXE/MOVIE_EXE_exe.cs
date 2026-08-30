@@ -379,6 +379,11 @@ internal sealed class MOVIE_EXE_exe
     // only path currently proven at this call site.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: see LibCd.WaitDiscLoad. TITLE.EXE is 942 080 bytes, measured at 3636 ms on
+        // the console, which is what keeps a Start press from carrying into the title screen.
+        WaitDiscLoad(exeFileName);
+
         if (string.Equals(exeFileName, "cdrom:\\TITLE.EXE;1", StringComparison.Ordinal))
         {
             PsxSdkBridges.ActivateTitleExe();
