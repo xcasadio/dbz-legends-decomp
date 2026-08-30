@@ -227,6 +227,60 @@ internal sealed class TITLE_EXE_exe
         }
     }
 
+    // GHIDRA: POLY_FT4_ARRAY_800a8894 @ 0x800A8894
+    // Five consecutive POLY_FT4, 0x28 bytes apart on the console, filled by FUN_80058d64.
+    internal static readonly LibGpu.POLY_FT4[] POLY_FT4_ARRAY_800a8894 =
+    {
+        new(), new(), new(), new(), new(),
+    };
+
+    // GHIDRA: DAT_800a897a @ 0x800A897A
+    // Cleared by FUN_80058d64. FUN_80038228 @ 0x80038228 returns 1 immediately when its bit 0 is
+    // set, so it gates the whole display machine.
+    internal static byte DAT_800a897a;
+
+    // GHIDRA: FUN_80058d64 @ 0x80058D64
+    // Lays out five identical textured quads: corners (0x50,0x50) to (0x5A,0x5A), UVs (0,0x58) to
+    // (0x27,0x67), clut 0x7985, tpage 0x19, flat white. Field order follows the original, which
+    // writes them out of sequence through a single roaming byte pointer.
+    //
+    // NOT called from main yet: it comes after FUN_80038228(8, 0), which is still open, and
+    // reordering the two would not be faithful.
+    internal static void FUN_80058d64()
+    {
+        int iVar2 = 0;
+        DAT_800a897a = 0;
+        do
+        {
+            LibGpu.POLY_FT4 p = POLY_FT4_ARRAY_800a8894[iVar2];
+            SetPolyFT4(p);
+            SetShadeTex(p, 0);
+            SetSemiTrans(p, 0);
+            p.clut = 0x7985;
+            p.tpage = 0x19;
+            p.u3 = 0x27;
+            p.u1 = 0x27;
+            p.v1 = 0x58;
+            p.v0 = 0x58;
+            p.r0 = 0x80;
+            p.g0 = 0x80;
+            p.b0 = 0x80;
+            p.x2 = 0x50;
+            p.x0 = 0x50;
+            p.x3 = 0x5a;
+            p.x1 = 0x5a;
+            p.y1 = 0x50;
+            p.y0 = 0x50;
+            p.y3 = 0x5a;
+            p.y2 = 0x5a;
+            p.u2 = 0;
+            p.u0 = 0;
+            p.v3 = 0x67;
+            p.v2 = 0x67;
+            iVar2 = iVar2 + 1;
+        } while (iVar2 < 5);
+    }
+
     // GHIDRA: ReadFile @ 0x80057DF4
     private static void ReadFile(char[] fileName, int buffer, ushort mode)
     {
