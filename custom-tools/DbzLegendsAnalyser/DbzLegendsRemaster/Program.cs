@@ -11,6 +11,10 @@ else if (args.Length == 3 && args[0] == "--validate-xa-transition")
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.BandaiStrValidation.RunXaTransition(
 		args[1], args[2]);
 }
+else if (args.Length == 1 && args[0] == "--validate-title-init")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TitleInitValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-tasks")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TaskSystemValidation.Run();
