@@ -59,6 +59,8 @@ internal static class TaskSystem
     // JUSTIFICATION: C# language bridge only
     // RELATION: the indirect call itself. An address with no ported method yet is skipped rather
     // than crashing, so a partially transliterated overlay still runs its known tasks.
+    internal static void InvokeCallbackByAddress(int psxAddress) => InvokeCallback(psxAddress);
+
     private static void InvokeCallback(int psxAddress)
     {
         if (s_callbackDispatch.TryGetValue(psxAddress, out Action ported))

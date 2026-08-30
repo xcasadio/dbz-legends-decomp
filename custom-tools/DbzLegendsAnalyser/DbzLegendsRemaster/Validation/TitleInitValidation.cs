@@ -129,6 +129,32 @@ internal static class TitleInitValidation
             }
         }
 
+        // FUN_80038228(8, 0) configure le quad plein ecran du fondu puis remet l'etat a zero.
+        var fade = DisplayMachine.POLY_GT4_800b9518;
+        Check(fade.x0 == -2 && fade.y0 == -2, $"coin haut gauche (-2,-2), lu ({fade.x0},{fade.y0})");
+        Check(fade.x1 == 0x142 && fade.x3 == 0x142, $"bord droit 0x142, lu 0x{fade.x1:X}");
+        Check(fade.y2 == 0xf2 && fade.y3 == 0xf2, $"bord bas 0xf2, lu 0x{fade.y2:X}");
+        Check(fade.tpage == 0x10, $"tpage 0x10, lu 0x{fade.tpage:X}");
+        Check(fade.clut == 0x7f80, $"clut 0x7f80, lu 0x{fade.clut:X}");
+        Check(fade.r0 == 0x80 && fade.g3 == 0x80, "couleurs a 0x80");
+        Check(fade.v0 == 0xff && fade.v3 == 0xff, "v0 et v3 a 0xff");
+        Check(fade.u1 == 1 && fade.u3 == 1, "u1 et u3 a 1");
+        Check(TITLE_EXE_exe.DAT_80083454 == 0,
+            $"etat du fondu remis a 0, lu {TITLE_EXE_exe.DAT_80083454}");
+
+        // Et surtout: la texture 2x1 a bien ete televersee en VRAM a (0, 0x1FE).
+        Check(LibGpu.Vram[(0x1fe * 1024) + 0] == 0xffff,
+            $"VRAM (0,0x1FE) = 0xFFFF, lu 0x{LibGpu.Vram[(0x1fe * 1024) + 0]:X4}");
+        Check(LibGpu.Vram[(0x1fe * 1024) + 1] == 0x1111,
+            $"VRAM (1,0x1FE) = 0x1111, lu 0x{LibGpu.Vram[(0x1fe * 1024) + 1]:X4}");
+
+        // FUN_80058d64 a pose les cinq quads du titre.
+        var quad = TITLE_EXE_exe.POLY_FT4_ARRAY_800a8894[4];
+        Check(quad.clut == 0x7985 && quad.tpage == 0x19,
+            $"cinquieme quad: clut 0x7985 tpage 0x19, lu 0x{quad.clut:X} 0x{quad.tpage:X}");
+        Check(quad.x0 == 0x50 && quad.x1 == 0x5a && quad.y3 == 0x5a, "cinquieme quad positionne");
+        Check(TITLE_EXE_exe.DAT_800a897a == 0, "le verrou d'affichage est libere");
+
         Console.WriteLine(s_failures == 0
             ? "TITLE-INIT: toutes les verifications passent"
             : $"TITLE-INIT: {s_failures} echec(s)");

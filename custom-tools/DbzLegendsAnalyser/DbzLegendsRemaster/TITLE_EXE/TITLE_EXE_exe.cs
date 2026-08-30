@@ -37,6 +37,9 @@ internal sealed class TITLE_EXE_exe
     // GHIDRA: DAT_80083448 @ 0x80083448
     private static int DAT_80083448;
 
+    // GHIDRA: DAT_80083544 @ 0x80083544
+    internal static int DAT_80083544;
+
     // GHIDRA: DAT_80083454 @ 0x80083454
     // State word of the display/fade machine FUN_80038228 @ 0x80038228, still open. Read here
     // because FUN_80037388 gates its AddPrim on it.
@@ -76,12 +79,14 @@ internal sealed class TITLE_EXE_exe
         TaskSystem.CreateTask(FUN_80037388_Address, 0, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_80037388();
         PrimitivePools.FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
+        DAT_80083544 = 0;
+        DisplayMachine.FUN_80038228(8, 0);
+        FUN_80058d64();
 
-        // BLOCKED: the rest of main is not transliterated yet. It continues with
-        //   DAT_80083544 = 0; FUN_80038228(8, 0); FUN_80058d64();
+        // BLOCKED: the main loop is not transliterated yet. It continues with
         //   do { ... FUN_80021dd0(); RunFrameLoop(); FUN_80058a9c(); ... } while (true);
-        // None of those four is closed, and RunFrameLoop reaches FUN_80038228, FUN_80056b30 and
-        // FUN_80056d00 as well. Porting the frame loop now would mean inventing their bodies.
+        // FUN_80021dd0, FUN_80058a9c and FUN_80038684 are still open, and RunFrameLoop also
+        // reaches FUN_80056b30 and FUN_80056d00.
     }
 
     // GHIDRA: ClearVram @ 0x80057508
