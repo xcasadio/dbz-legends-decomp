@@ -69,6 +69,32 @@ internal static class TitleInitValidation
         Check(groupTableOffset == 0x1A4, $"offset de la table de groupes 0x1A4, lu 0x{groupTableOffset:X}");
         Check(loadScriptOffset == 0x008, $"offset du script de chargement 0x8, lu 0x{loadScriptOffset:X}");
 
+        // main enregistre la tache camera puis l'appelle une fois.
+        Check(TaskSystem.g_TaskListCount[0] == 1,
+            $"une tache dans la liste 0, compte={TaskSystem.g_TaskListCount[0]}");
+        int task = TaskSystem.g_TaskListHead[0];
+        Check(task != 0, "la tete de la liste 0 est non nulle");
+        if (task != 0)
+        {
+            int callback = PsxRam.ReadI32(task + 0x04);
+            Check(callback == unchecked((int)0x80037388),
+                $"le bloc porte l'adresse PSX d'origine du callback, lu 0x{callback:X8}");
+        }
+
+        // SetupGeometry(0xa8, 0x80, 0x1000, 0,0,0, 0x1000, 0,0,0) remplit le scratchpad.
+        Check(GteScratch.DAT_1f800114 == 0xa8, $"offset X 0xa8, lu 0x{GteScratch.DAT_1f800114:X}");
+        Check(GteScratch.DAT_1f800110 == 0x80, $"offset Y 0x80, lu 0x{GteScratch.DAT_1f800110:X}");
+        Check(GteScratch._DAT_1f8000c0 == 0x1000,
+            $"distance 0x1000, lu 0x{GteScratch._DAT_1f8000c0:X}");
+        Check(GteScratch.MATRIX_1f8000e4.m[0] == 0x1000
+              && GteScratch.MATRIX_1f8000e4.m[3] == 0x1000
+              && GteScratch.MATRIX_1f8000e4.m[6] == 0x1000,
+            "matrice couleur chargee a 0x1000 sur ses trois positions");
+
+        // FUN_80037388 derive cette valeur de la profondeur projetee, bornee a zero.
+        Check(GteScratch.DAT_1f800128 >= 0,
+            $"profondeur derivee non negative, lu {GteScratch.DAT_1f800128}");
+
         Console.WriteLine(s_failures == 0
             ? "TITLE-INIT: toutes les verifications passent"
             : $"TITLE-INIT: {s_failures} echec(s)");

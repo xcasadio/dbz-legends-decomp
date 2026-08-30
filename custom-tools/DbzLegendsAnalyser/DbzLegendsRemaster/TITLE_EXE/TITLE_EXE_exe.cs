@@ -13,6 +13,10 @@ internal sealed class TITLE_EXE_exe
     private const int TitleBBufferAddress = unchecked((int)0x80110000);
     private const int HeapBaseAddress = 0x00010000;
 
+    // GHIDRA: FUN_80037388 @ 0x80037388
+    // Its own PSX address, kept so a task block holds exactly what the console holds.
+    private const int FUN_80037388_Address = unchecked((int)0x80037388);
+
     // GHIDRA: DAT_80110000 @ 0x80110000
     // Destination of ReadFile("\\SUB\\TITLE.B;1", ...). The file is 0x25000 bytes, the size
     // docs/TITLE_B_FILE_FORMAT_ANALYSIS.md measured independently.
@@ -32,6 +36,11 @@ internal sealed class TITLE_EXE_exe
 
     // GHIDRA: DAT_80083448 @ 0x80083448
     private static int DAT_80083448;
+
+    // GHIDRA: DAT_80083454 @ 0x80083454
+    // State word of the display/fade machine FUN_80038228 @ 0x80038228, still open. Read here
+    // because FUN_80037388 gates its AddPrim on it.
+    internal static int DAT_80083454;
 
     // GHIDRA: main @ 0x800581DC
     public void Main()
@@ -63,15 +72,16 @@ internal sealed class TITLE_EXE_exe
         DAT_80083450 = 0;
         DAT_80083448 = 0;
         SetupGeometry(0xa8, 0x80, 0x1000, 0, 0, 0, 0x1000, 0, 0, 0);
+        TaskSystem.RegisterCallback(FUN_80037388_Address, FUN_80037388);
+        TaskSystem.CreateTask(FUN_80037388_Address, 0, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
+        FUN_80037388();
 
         // BLOCKED: the rest of main is not transliterated yet. It continues with
-        //   CreateTask(FUN_80037388, 0, 0, 0, 0, g_TaskListHead[0]); FUN_80037388();
         //   FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
         //   DAT_80083544 = 0; FUN_80038228(8, 0); FUN_80058d64();
         //   do { ... FUN_80021dd0(); RunFrameLoop(); FUN_80058a9c(); ... } while (true);
-        // The task system underneath is ported and benched (see TaskSystem), but none of those
-        // FUN_ callees is closed, and RunFrameLoop itself calls FUN_80038228, FUN_80056b30 and
-        // FUN_80056d00. Porting the frame loop before them would mean inventing their bodies.
+        // None of those four is closed, and RunFrameLoop reaches FUN_80038228, FUN_80056b30 and
+        // FUN_80056d00 as well. Porting the frame loop now would mean inventing their bodies.
     }
 
     // GHIDRA: ClearVram @ 0x80057508
@@ -96,12 +106,125 @@ internal sealed class TITLE_EXE_exe
         SetGeomScreen(h);
         SetFarColor(0x80, 0x80, 0x80);
         SetBackColor(0x80, 0x80, 0x80);
+        GteScratch.MATRIX_1f8000e4.m[6] = 0x1000;
+        GteScratch.MATRIX_1f8000e4.m[3] = 0x1000;
+        GteScratch.MATRIX_1f8000e4.m[0] = 0x1000;
+        GteScratch.MATRIX_1f8000e4.m[8] = 0;
+        GteScratch.MATRIX_1f8000e4.m[7] = 0;
+        GteScratch.MATRIX_1f8000e4.m[5] = 0;
+        GteScratch.MATRIX_1f8000e4.m[4] = 0;
+        GteScratch.MATRIX_1f8000e4.m[2] = 0;
+        GteScratch.MATRIX_1f8000e4.m[1] = 0;
+        SetColorMatrix(GteScratch.MATRIX_1f8000e4);
+        GteScratch.SVECTOR_1f800104.vx = 0;
+        GteScratch.SVECTOR_1f800104.vy = 0;
+        GteScratch.SVECTOR_1f800104.vz = 0;
+        RotMatrix(GteScratch.SVECTOR_1f800104, GteScratch.MATRIX_1f800000);
+        SetLightMatrix(GteScratch.MATRIX_1f800000);
+        GteScratch.SVECTOR_1f80007c.vx = rx;
+        GteScratch.SVECTOR_1f80007c.vy = ry;
+        GteScratch.SVECTOR_1f80007c.vz = rz;
+        GteScratch.DAT_1f800084 = rx;
+        GteScratch.DAT_1f800086 = ry;
+        GteScratch.DAT_1f800088 = rz;
+        RotMatrix(GteScratch.SVECTOR_1f80007c, GteScratch.MATRIX_1f800000);
+        SetRotMatrix(GteScratch.MATRIX_1f800000);
+        GteScratch._DAT_1f8000b4 = param_4;
+        GteScratch.DAT_1f8000b8 = param_5;
+        GteScratch._DAT_1f8000bc = param_6;
+        GteScratch.DAT_1f8000c4 = param_4;
+        GteScratch.DAT_1f8000c8 = param_5;
+        GteScratch.DAT_1f8000cc = param_6;
+        GteScratch.DAT_1f8000d4 = param_4;
+        GteScratch.DAT_1f8000d8 = param_5;
+        GteScratch.DAT_1f8000dc = param_6;
+        GteScratch.DAT_1f800114 = ofx;
+        GteScratch.DAT_1f800124 = ofx;
+        GteScratch.DAT_1f80011c = ofx;
+        GteScratch.DAT_1f800110 = ofy;
+        GteScratch.DAT_1f800120 = ofy;
+        GteScratch.DAT_1f800118 = ofy;
+        GteScratch.DAT_1f8000d0 = param_7;
+        GteScratch._DAT_1f8000c0 = param_7;
+        GteScratch.DAT_1f8000e0 = param_7;
+    }
 
-        // PARTIAL: the original then writes the colour matrix, the light matrix and the rotation
-        // matrix straight into COP2 scratch at 0x1F8000E4..0x1F800124 before handing them to
-        // SetColorMatrix / SetLightMatrix / SetRotMatrix. Those scratch addresses are not modelled
-        // by this port, and no closed call site reads them back, so only the four calls above are
-        // reproduced. The remaining arguments are carried but unused, exactly as their names say.
+    // GHIDRA: FUN_80037388 @ 0x80037388
+    // Registered as a task by main and then called directly, so it runs once per frame. It swaps
+    // the live camera triplets with their pending counterparts, rebuilds the rotation and
+    // translation matrices, and derives DAT_1f800128 from the projected depth.
+    internal static void FUN_80037388()
+    {
+        var local_38 = new LibGte.SVECTOR();
+        int[] alStack_30 = new int[2];
+
+        GteScratch.DAT_1f80008c = GteScratch.SVECTOR_1f80007c.vx;
+        GteScratch.DAT_1f80008e = GteScratch.SVECTOR_1f80007c.vy;
+        GteScratch.DAT_1f800090 = GteScratch.SVECTOR_1f80007c.vz;
+        GteScratch.SVECTOR_1f80007c.vx = GteScratch.DAT_1f800084;
+        GteScratch.SVECTOR_1f80007c.vy = GteScratch.DAT_1f800086;
+        GteScratch.SVECTOR_1f80007c.vz = GteScratch.DAT_1f800088;
+        GteScratch.DAT_1f8000d4 = GteScratch._DAT_1f8000b4;
+        GteScratch.DAT_1f8000d8 = GteScratch.DAT_1f8000b8;
+        GteScratch.DAT_1f8000dc = GteScratch._DAT_1f8000bc;
+        GteScratch.DAT_1f8000e0 = GteScratch._DAT_1f8000c0;
+        GteScratch._DAT_1f8000b4 = GteScratch.DAT_1f8000c4;
+        GteScratch.DAT_1f8000b8 = GteScratch.DAT_1f8000c8;
+        GteScratch._DAT_1f8000bc = GteScratch.DAT_1f8000cc;
+        GteScratch._DAT_1f8000c0 = GteScratch.DAT_1f8000d0;
+        GteScratch.DAT_1f80011c = GteScratch.DAT_1f800114;
+        GteScratch.DAT_1f800118 = GteScratch.DAT_1f800110;
+        GteScratch.DAT_1f800114 = GteScratch.DAT_1f800124;
+        GteScratch.DAT_1f800110 = GteScratch.DAT_1f800120;
+        RotMatrix(GteScratch.SVECTOR_1f80007c, GteScratch.MATRIX_1f800000);
+        GteScratch.MATRIX_1f800000.t[2] = 0;
+        GteScratch.MATRIX_1f800000.t[1] = 0;
+        GteScratch.MATRIX_1f800000.t[0] = 0;
+        SetRotMatrix(GteScratch.MATRIX_1f800000);
+        SetTransMatrix(GteScratch.MATRIX_1f800000);
+        local_38.vx = 0;
+        local_38.vz = 0;
+        local_38.vy = (short)GteScratch.DAT_1f8000b8;
+        RotTrans(local_38, GteScratch.VECTOR_1f800094, alStack_30);
+        GteScratch.VECTOR_1f800094.vz = GteScratch.VECTOR_1f800094.vz + GteScratch._DAT_1f8000c0;
+        SetGeomOffset(GteScratch.DAT_1f800114, GteScratch.DAT_1f800110);
+        TransMatrix(GteScratch.MATRIX_1f800000, GteScratch.VECTOR_1f800094);
+        SetTransMatrix(GteScratch.MATRIX_1f800000);
+        SetRotMatrix(GteScratch.MATRIX_1f800000);
+        PushMatrix();
+        GteScratch.SVECTOR_1f800020.vy = 0;
+        GteScratch.SVECTOR_1f800020.vz = 0;
+        GteScratch.SVECTOR_1f800020.vx = GteScratch.SVECTOR_1f80007c.vx;
+        RotMatrix(GteScratch.SVECTOR_1f800020, GteScratch.MATRIX_1f800000);
+        GteScratch.MATRIX_1f800000.t[2] = 0;
+        GteScratch.MATRIX_1f800000.t[1] = 0;
+        GteScratch.MATRIX_1f800000.t[0] = 0;
+        SetTransMatrix(GteScratch.MATRIX_1f800000);
+        SetRotMatrix(GteScratch.MATRIX_1f800000);
+        GteScratch.SVECTOR_1f800020.vx = 0;
+        GteScratch.SVECTOR_1f800020.vy = 0;
+        GteScratch.SVECTOR_1f800020.vz = (short)(GteScratch._DAT_1f8000c0 + 0x9d8);
+        RotTrans(GteScratch.SVECTOR_1f800020, GteScratch.VECTOR_1f800048, GteScratch.DAT_1f800078);
+        int lVar1 = GteScratch.VECTOR_1f800048.vz;
+        if (GteScratch.VECTOR_1f800048.vz < 0)
+        {
+            lVar1 = GteScratch.VECTOR_1f800048.vz + 3;
+        }
+
+        GteScratch.DAT_1f800128 = 0x800 - (lVar1 >> 2);
+        if (GteScratch.DAT_1f800128 < 0)
+        {
+            GteScratch.DAT_1f800128 = 0;
+        }
+
+        PopMatrix();
+        if (1 < DAT_80083454)
+        {
+            // BLOCKED: AddPrim(DAT_800834e0 + 0x206C, &POLY_GT4_800b9518). Neither the ordering
+            // table root DAT_800834e0 nor the primitive POLY_GT4_800b9518 is transliterated, and
+            // DAT_80083454 only exceeds 1 once FUN_80038228 has run, which is still open. The
+            // guard is reproduced so the branch surfaces the day those are closed.
+        }
     }
 
     // GHIDRA: ReadFile @ 0x80057DF4
