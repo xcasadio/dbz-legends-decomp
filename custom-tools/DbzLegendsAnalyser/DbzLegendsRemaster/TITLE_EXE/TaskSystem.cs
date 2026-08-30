@@ -31,14 +31,14 @@ internal static class TaskSystem
     // GHIDRA: g_TaskListCount @ 0x800798FC
     internal static readonly short[] g_TaskListCount = new short[21];
 
-    // GHIDRA: PTR_80083224 @ 0x80083224
+    // GHIDRA: g_CurrentTask @ 0x80083224
     // The object ExecuteTaskList is currently standing on. Ghidra types it TitleAudioBlock *, which
     // is wrong and inherited from an earlier analysis; it is a task block.
-    internal static int PTR_80083224;
+    internal static int g_CurrentTask;
 
-    // GHIDRA: PTR_ARRAY_80083228 @ 0x80083228
+    // GHIDRA: g_CurrentTaskListIndex @ 0x80083228
     // Only its first halfword is used, and only to carry the list index being walked.
-    internal static short PTR_ARRAY_80083228;
+    internal static short g_CurrentTaskListIndex;
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: the original stores a raw function pointer at +0x04 and calls it indirectly through
@@ -175,9 +175,9 @@ internal static class TaskSystem
             uVar1 = 2;
             if ((PsxRam.ReadU16(task + TaskFlags) & 2) == 0)
             {
-                if (task == PTR_80083224)
+                if (task == g_CurrentTask)
                 {
-                    PTR_80083224 = PsxRam.ReadI32(task + TaskPrev);
+                    g_CurrentTask = PsxRam.ReadI32(task + TaskPrev);
                 }
 
                 int iVar3 = PsxRam.ReadI32(task + TaskPrev);
@@ -218,33 +218,33 @@ internal static class TaskSystem
             return 0;
         }
 
-        PTR_80083224 = g_TaskListHead[listIndex];
-        PTR_ARRAY_80083228 = (short)listIndex;
-        if (PTR_80083224 == 0)
+        g_CurrentTask = g_TaskListHead[listIndex];
+        g_CurrentTaskListIndex = (short)listIndex;
+        if (g_CurrentTask == 0)
         {
             return 0;
         }
 
         do
         {
-            int pTVar3 = PTR_80083224;
-            int iVar4 = PsxRam.ReadI32(PTR_80083224 + TaskCounter);
+            int pTVar3 = g_CurrentTask;
+            int iVar4 = PsxRam.ReadI32(g_CurrentTask + TaskCounter);
             if (iVar4 < 1)
             {
                 if (iVar4 + 1 == 0)
                 {
-                    if (PTR_80083224 != 0 && (PsxRam.ReadU16(PTR_80083224 + TaskFlags) & 2) == 0)
+                    if (g_CurrentTask != 0 && (PsxRam.ReadU16(g_CurrentTask + TaskFlags) & 2) == 0)
                     {
-                        int iVar7 = PsxRam.ReadI32(PTR_80083224 + TaskPrev);
-                        iVar4 = PsxRam.ReadI32(PTR_80083224 + TaskNext);
+                        int iVar7 = PsxRam.ReadI32(g_CurrentTask + TaskPrev);
+                        iVar4 = PsxRam.ReadI32(g_CurrentTask + TaskNext);
                         if (iVar7 == 0)
                         {
-                            PTR_80083224 = PsxRam.ReadI32(PTR_80083224 + TaskPrev);
+                            g_CurrentTask = PsxRam.ReadI32(g_CurrentTask + TaskPrev);
                             g_TaskListHead[listIndex] = iVar4;
                         }
                         else
                         {
-                            PTR_80083224 = PsxRam.ReadI32(PTR_80083224 + TaskPrev);
+                            g_CurrentTask = PsxRam.ReadI32(g_CurrentTask + TaskPrev);
                             PsxRam.WriteI32(iVar7 + TaskNext, iVar4);
                         }
 
@@ -263,23 +263,23 @@ internal static class TaskSystem
                 }
                 else
                 {
-                    ushort uVar1 = PsxRam.ReadU16(PTR_80083224 + TaskFlags);
-                    int pbVar2 = PTR_80083224;
+                    ushort uVar1 = PsxRam.ReadU16(g_CurrentTask + TaskFlags);
+                    int pbVar2 = g_CurrentTask;
                     if ((uVar1 & 3) == 0)
                     {
                         if (iVar4 < 0)
                         {
-                            PsxRam.WriteI32(PTR_80083224 + TaskCounter, iVar4 + 1);
+                            PsxRam.WriteI32(g_CurrentTask + TaskCounter, iVar4 + 1);
                         }
 
                         InvokeCallback(PsxRam.ReadI32(pbVar2 + TaskCallback));
                     }
                     else if ((uVar1 & 3) == 1)
                     {
-                        PsxRam.WriteU16(PTR_80083224 + TaskFlags, (ushort)(uVar1 & 0xfffd));
+                        PsxRam.WriteU16(g_CurrentTask + TaskFlags, (ushort)(uVar1 & 0xfffd));
                         if (pTVar3 != 0)
                         {
-                            PTR_80083224 = PsxRam.ReadI32(pTVar3 + TaskPrev);
+                            g_CurrentTask = PsxRam.ReadI32(pTVar3 + TaskPrev);
                             int iVar7 = PsxRam.ReadI32(pTVar3 + TaskPrev);
                             iVar4 = PsxRam.ReadI32(pTVar3 + TaskNext);
                             if (iVar7 == 0)
@@ -306,35 +306,35 @@ internal static class TaskSystem
                     }
                     else
                     {
-                        PsxRam.WriteU16(PTR_80083224 + TaskFlags, (ushort)((uVar1 & 0xfffd) | 1));
+                        PsxRam.WriteU16(g_CurrentTask + TaskFlags, (ushort)((uVar1 & 0xfffd) | 1));
                     }
                 }
             }
             else
             {
-                PsxRam.WriteI32(PTR_80083224 + TaskCounter, iVar4 - 1);
+                PsxRam.WriteI32(g_CurrentTask + TaskCounter, iVar4 - 1);
             }
 
-            if (PTR_80083224 == 0)
+            if (g_CurrentTask == 0)
             {
-                PTR_80083224 = g_TaskListHead[listIndex];
+                g_CurrentTask = g_TaskListHead[listIndex];
             }
             else
             {
-                PTR_80083224 = PsxRam.ReadI32(PTR_80083224 + TaskNext);
+                g_CurrentTask = PsxRam.ReadI32(g_CurrentTask + TaskNext);
             }
-        } while (PTR_80083224 != 0);
+        } while (g_CurrentTask != 0);
 
         return 0;
     }
 
-    // GHIDRA: FUN_80049a14 @ 0x80049A14
+    // GHIDRA: DeleteTaskList @ 0x80049A14
     // Destroys every task held in one list index: it repeatedly takes the head of the list,
-    // unlinks it from g_TaskListHead / g_TaskListTail, walks PTR_80083224 back to the removed
+    // unlinks it from g_TaskListHead / g_TaskListTail, walks g_CurrentTask back to the removed
     // node's predecessor if ExecuteTaskList was standing on it, frees it, and decrements the count.
     //
     // Callers are FUN_80058a9c @ 0x80058A9C and FUN_80029aec @ 0x80029AEC; both spell it as
-    // `FUN_80049a14(uVar & 0xffff)` inside a loop over list indices. Neither is transliterated yet,
+    // `DeleteTaskList(uVar & 0xffff)` inside a loop over list indices. Neither is transliterated yet,
     // so nothing reaches this function today.
     //
     // The unlink body is deliberately written out again instead of calling DeleteTask
@@ -346,7 +346,7 @@ internal static class TaskSystem
     // therefore never unlinked and never counted down, and the original spins here forever. The
     // same holds if the count is non-zero while the head pointer is 0. Reproduced as-is: rule 12
     // forbids repairing a bug of the original.
-    internal static void FUN_80049a14(uint param_1)
+    internal static void DeleteTaskList(uint param_1)
     {
         if (g_TaskListCount[param_1 & 0xffff] == 0)
         {
@@ -358,9 +358,9 @@ internal static class TaskSystem
             int pTVar3 = g_TaskListHead[param_1 & 0xffff];
             if (pTVar3 != 0 && (PsxRam.ReadU16(pTVar3 + TaskFlags) & 2) == 0)
             {
-                if (pTVar3 == PTR_80083224)
+                if (pTVar3 == g_CurrentTask)
                 {
-                    PTR_80083224 = PsxRam.ReadI32(pTVar3 + TaskPrev);
+                    g_CurrentTask = PsxRam.ReadI32(pTVar3 + TaskPrev);
                 }
 
                 int iVar2 = PsxRam.ReadI32(pTVar3 + TaskPrev);

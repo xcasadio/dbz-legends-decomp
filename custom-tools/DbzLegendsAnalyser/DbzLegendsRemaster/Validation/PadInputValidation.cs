@@ -50,7 +50,7 @@ internal static class PadInputValidation
         // Premiere frame: le bouton vient d'apparaitre, donc front montant.
         PadInput.ProcessPadInput(0);
         Check((PadInput.DAT_800835dc[0] & Start) != 0, "l'etat courant porte Start");
-        Check((PadInput.DAT_800834fc[0] & Start) != 0, "front montant sur la premiere frame");
+        Check((PadInput.g_PadNewlyPressed[0] & Start) != 0, "front montant sur la premiere frame");
         Check((PadInput.DAT_800835f0[0] & Start) != 0, "la sortie porte le front");
         Check((PadInput.DAT_80083478 & Start) != 0,
             $"Start remappe vers lui-meme, lu 0x{PadInput.DAT_80083478:X}");
@@ -59,7 +59,7 @@ internal static class PadInputValidation
         // Deuxieme frame: le bouton est maintenu, il n'y a plus de front.
         PadInputBackend.Poll();
         PadInput.ProcessPadInput(0);
-        Check((PadInput.DAT_800834fc[0] & Start) == 0,
+        Check((PadInput.g_PadNewlyPressed[0] & Start) == 0,
             "plus de front tant que le bouton reste enfonce");
         Check((PadInput.DAT_800835f0[0] & Start) == 0,
             "la sortie reste vide pendant l'attente de repetition");
@@ -71,8 +71,8 @@ internal static class PadInputValidation
             PadInput.ProcessPadInput(0);
         }
 
-        Check(PadInput.DAT_80083394[0] >= 7,
-            $"compteur de repetition a 7 ou plus, lu {PadInput.DAT_80083394[0]}");
+        Check(PadInput.g_PadHoldFrames[0] >= 7,
+            $"compteur de repetition a 7 ou plus, lu {PadInput.g_PadHoldFrames[0]}");
         Check((PadInput.DAT_800835f0[0] & Start) != 0,
             "la repetition automatique remet Start dans la sortie");
 

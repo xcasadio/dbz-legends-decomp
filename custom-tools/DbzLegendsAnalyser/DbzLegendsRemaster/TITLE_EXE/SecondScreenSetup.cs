@@ -11,7 +11,7 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 // own data and its own helpers: FUN_800376c0 @ 0x800376C0 in StageBackdrop.cs and
 // LoadFACE_B @ 0x80052D68 in FaceImages.cs. Every direct callee of FUN_80058a9c is transliterated
 // now; what remains open there is LoadClut @ 0x80074E50, still a stub in LibGpu.
-internal static class SelectScreenSetup
+internal static class SecondScreenSetup
 {
     // GHIDRA: UnkStruct_Array_800836d4 @ 0x800836D4
     // Uninitialised RAM. Two disjoint stretches, and the extent below is their sum, closed by three
@@ -32,10 +32,10 @@ internal static class SelectScreenSetup
 
     // GHIDRA: DAT_80077a50 @ 0x80077A50
     // Initialised .data (0x80074FB4..0x800831B3), lifted out of the overlay image with read-memory.
-    // One LZSS block in FUN_80035778's format: command count 0x0095 = 149 in the first halfword.
+    // One LZSS block in DecompressLzss's format: command count 0x0095 = 149 in the first halfword.
     //
     // The extent is CLOSED, not assumed. Two independent facts agree: the next label in the image
-    // is PTR_DAT_80077b38 at +0xE8 = 232 bytes, and running FUN_80035778's own decode over these
+    // is PTR_DAT_80077b38 at +0xE8 = 232 bytes, and running DecompressLzss's own decode over these
     // 232 bytes consumes exactly 232 source bytes and produces exactly 0x800 output bytes — which
     // is exactly the 0x10 halfwords by 0x40 rows that FUN_80035700's upload asks for.
     private const int Dat80077a50Address = unchecked((int)0x80077A50);
@@ -136,7 +136,7 @@ internal static class SelectScreenSetup
     // GHIDRA: FUN_80027174 @ 0x80027174
     // Walks the thirty records. For each ACTIVE one it decrements a countdown; when that goes
     // negative it clamps it to 0, clears the record, and decrements a byte at +0x227 of the owner
-    // the record points at. Otherwise it renders the record through FUN_80048f88.
+    // the record points at. Otherwise it renders the record through DrawSpriteGroup.
     //
     // Record layout, 0x24 bytes, read off the synchronized disassembly (s1 is the record base and
     // s0 = s1 + 0x10, so every N(s0) in the listing is record + 0x10 + N):
@@ -186,8 +186,8 @@ internal static class SelectScreenSetup
                     // The casts below are forced by C# and none of them is observable: the
                     // original's `(int)(x * 0x10000) >> 0x10` is a sign-extension of the low 16
                     // bits, param_11 receives a value with bit 15 set, and param_5 is loaded with a
-                    // signed lh but every use inside FUN_80048f88 is a mask.
-                    SpriteRenderer.FUN_80048f88(
+                    // signed lh but every use inside DrawSpriteGroup is a mask.
+                    SpriteRenderer.DrawSpriteGroup(
                         PsxRam.ReadI32(puVar2),
                         unchecked((short)((uint)PsxRam.ReadU16(puVar2 + -8)
                                           - (uint)(ushort)GteScratch._DAT_1f8000b4)),
@@ -279,7 +279,7 @@ internal static class SelectScreenSetup
     internal static void FUN_80035700()
     {
         memset(UnkStruct_Array_800836d4, 0x438, '\0', 0xb610);
-        TitleImages.FUN_80057b08(Dat80077a50Address, 0x380, 0x180, 0x10, 0x40, '\0');
+        TitleImages.LoadCompressedImageInVram(Dat80077a50Address, 0x380, 0x180, 0x10, 0x40, '\0');
         DisplayMachine.LoadImageInVram(
             ToWordBuffer(PTR_DAT_80077b38, 0xa0 * 1 * 2), 0, 0x1ea, 0xa0, 1, '\0');
     }

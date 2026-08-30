@@ -28,9 +28,9 @@ internal static class FrameLoop
     private const int Ot800a6830Address = unchecked((int)0x800A6830);
     internal static readonly byte[] OT_800a6830 = new byte[0x800 * 4];
 
-    // GHIDRA: DAT_800834e0 @ 0x800834E0
+    // GHIDRA: g_ActiveDrawEnvAddress @ 0x800834E0
     // Holds the active DRAWENV's address, not the object: the original adds 0x70 to it.
-    internal static int DAT_800834e0;
+    internal static int g_ActiveDrawEnvAddress;
 
     // JUSTIFICATION: PSX hardware adaptation only
     // RELATION: declares the ordering table's PSX address so AddPrim can write real links into it
@@ -45,10 +45,10 @@ internal static class FrameLoop
     // the title screen asks to leave.
     internal static int DAT_800835b4;
 
-    // GHIDRA: DAT_80083504 @ 0x80083504
+    // GHIDRA: g_FrameCounter @ 0x80083504
     // Frames elapsed on this screen. Past 0x960, that is 2400 frames or about 40 seconds, the
     // attract mode fires.
-    internal static int DAT_80083504;
+    internal static int g_FrameCounter;
 
     // GHIDRA: DAT_80083474 @ 0x80083474
     private static int DAT_80083474;
@@ -64,7 +64,7 @@ internal static class FrameLoop
         SetDispMask(1);
         int iVar2 = DAT_800835b4;
         bool bVar1 = false;
-        DAT_800834e0 = Drawenv800a67c0Address;
+        g_ActiveDrawEnvAddress = Drawenv800a67c0Address;
 
         do
         {
@@ -85,16 +85,16 @@ internal static class FrameLoop
             SetDefDispEnv(DISPENV_800a681c, 0, iVar5, 0x140, 0xf0);
             DRAWENV_800a67c0.dtd = 0;
             DRAWENV_800a67c0.isbg = 1;
-            DRAWENV_800a67c0.r0 = (byte)TITLE_EXE_exe.DAT_80083450;
-            DRAWENV_800a67c0.g0 = (byte)TITLE_EXE_exe.DAT_8008344c;
-            DRAWENV_800a67c0.b0 = (byte)TITLE_EXE_exe.DAT_80083448;
+            DRAWENV_800a67c0.r0 = (byte)TITLE_EXE_exe.g_BackgroundColorR;
+            DRAWENV_800a67c0.g0 = (byte)TITLE_EXE_exe.g_BackgroundColorG;
+            DRAWENV_800a67c0.b0 = (byte)TITLE_EXE_exe.g_BackgroundColorB;
             PutDispEnv(DISPENV_800a681c);
             PutDrawEnv(DRAWENV_800a67c0);
             PadInput.ProcessPadInput(0);
 
-            if ((PadInput.DAT_800834fc[0] & 0x800) != 0 && DAT_800835b4 == 2)
+            if ((PadInput.g_PadNewlyPressed[0] & 0x800) != 0 && DAT_800835b4 == 2)
             {
-                DAT_80083504 = 0x12c1;
+                g_FrameCounter = 0x12c1;
             }
 
             TaskSystem.ExecuteTaskList(0x14);
@@ -120,18 +120,18 @@ internal static class FrameLoop
             TaskSystem.ExecuteTaskList(0x11);
             TaskSystem.ExecuteTaskList(0x12);
             TaskSystem.ExecuteTaskList(0x13);
-            DAT_80083504 = DAT_80083504 + 1;
+            g_FrameCounter = g_FrameCounter + 1;
 
-            if (0x960 < DAT_80083504)
+            if (0x960 < g_FrameCounter)
             {
-                DisplayMachine.FUN_80038228(3, 0x10);
-                int iVar3b = DisplayMachine.FUN_80038228(9, 0);
+                DisplayMachine.ControlScreenFade(3, 0x10);
+                int iVar3b = DisplayMachine.ControlScreenFade(9, 0);
                 if (iVar3b == 0)
                 {
                     FUN_80056b30();
                     FUN_80056d00();
                     string exeFileName;
-                    if (DAT_80083504 < 0x12c1)
+                    if (g_FrameCounter < 0x12c1)
                     {
                         exeFileName = "cdrom:\\MOVIE.EXE;1";
                     }
@@ -148,9 +148,9 @@ internal static class FrameLoop
             int iVar3 = VSync(1);
             int iVar4 = VSync(1);
 
-            // The original submits DAT_800834e0 + 0x70, which lands exactly on OT_800a6830: the
+            // The original submits g_ActiveDrawEnvAddress + 0x70, which lands exactly on OT_800a6830: the
             // ordering table sits right behind the DRAWENV. Kept as the same arithmetic.
-            DrawOTag(DAT_800834e0 + 0x70);
+            DrawOTag(g_ActiveDrawEnvAddress + 0x70);
             DrawSync(0);
             DAT_80083474 = VSync(1);
             DAT_800835a0 = (iVar3 - iVar5) + (DAT_80083474 - iVar4);

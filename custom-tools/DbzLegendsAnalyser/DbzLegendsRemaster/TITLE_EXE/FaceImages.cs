@@ -3,8 +3,8 @@ using static PsxSdkMonogame.LibCd;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The character portraits. LoadFACE_B @ 0x80052D68 is the seventh step of the select-screen
-// build-up FUN_80058a9c @ 0x80058A9C performs, and find-cross-references reports exactly ONE
+// The character portraits. LoadFACE_B @ 0x80052D68 is the seventh step of the build-up
+// FUN_80058a9c @ 0x80058A9C performs, and find-cross-references reports exactly ONE
 // reference to it in the whole overlay: the call at 0x80058D28.
 //
 // It searches \CHR_DATA\FACE.B;1 once, turns the file's start position into a sector number with
@@ -12,7 +12,7 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 // entry n reads the two sectors at base + (n - 1) * 2 into BYTE_ARRAY_801d2000 and pushes four
 // blocks out of them into VRAM — three 0xC x 0x30 tiles at +0x20, +0x4A0 and +0x920, whose VRAM
 // coordinates come out of the six-column table at 0x8007A220, and one 0x10 x 1 CLUT strip from the
-// head of the buffer. It then reads \CHR_DATA\OV_CHR_A.B;1, LZSS-decodes it into DAT_80096664 and
+// head of the buffer. It then reads \CHR_DATA\OV_CHR_A.B;1, LZSS-decodes it into g_ImageDecodeBuffer and
 // uploads six more blocks out of that.
 //
 // THE PER-PORTRAIT SEEK IS LIVE. It depends on CdIntToPos @ 0x80069834 and CdPosToInt @ 0x80069938,
@@ -27,7 +27,7 @@ internal static class FaceImages
     // +0x20, +0x4A0 and +0x920.
     private const int ByteArray801d2000Address = unchecked((int)0x801D2000);
 
-    // GHIDRA: DAT_8007a220 @ 0x8007A220
+    // GHIDRA: g_FaceVramCoordTable @ 0x8007A220
     // Initialised .data (0x80074FB4..0x800831B3), lifted out of the overlay image with read-memory.
     // Twelve rows of six ushorts — three (x, y) VRAM pairs per portrait slot, on a 12-byte stride.
     //
@@ -38,7 +38,7 @@ internal static class FaceImages
     // The x values are 0x180..0x1B0 and 0x240..0x270, the y values 0x000..0x1C0 — VRAM columns of a
     // 0xC-halfword tile and rows of a 0x30-line tile. Nothing read here says which of the three
     // pairs is which portrait part, so nothing below names them.
-    private const int Dat8007a220Address = unchecked((int)0x8007A220);
+    private const int g_FaceVramCoordTableAddress = unchecked((int)0x8007A220);
 
     // GHIDRA: DAT_8007a222 @ 0x8007A222 — column 1 of the same table.
     private const int Dat8007a222Address = unchecked((int)0x8007A222);
@@ -58,7 +58,7 @@ internal static class FaceImages
     // cursors, the middle four are read as label + a byte offset that advances by 0xC.
     private const int Dat8007a22aAddress = unchecked((int)0x8007A22A);
 
-    internal static readonly byte[] DAT_8007a220 =
+    internal static readonly byte[] g_FaceVramCoordTable =
     {
         0x80, 0x01, 0x00, 0x00, 0x90, 0x01, 0x00, 0x00, 0xA0, 0x01, 0x00, 0x00,
         0xB0, 0x01, 0x00, 0x00, 0x80, 0x01, 0x40, 0x00, 0x90, 0x01, 0x40, 0x00,
@@ -196,10 +196,10 @@ internal static class FaceImages
 
     // GHIDRA: LoadFACE_B @ 0x80052D68
     // 696 bytes. Every game-side callee is already ported — WaitSearchFile @ 0x80057F80,
-    // ReadCDData @ 0x80057E40, FUN_80035778 @ 0x80035778 and LoadImageInVram @ 0x80057BB4 — and the
+    // ReadCDData @ 0x80057E40, DecompressLzss @ 0x80035778 and LoadImageInVram @ 0x80057BB4 — and the
     // two SDK ones, CdPosToInt and CdIntToPos, are real in LibCd as of 2026-08-30.
     //
-    // THE SECOND HALF TILES DAT_80096664 EXACTLY, which is the self-check that its six absolute
+    // THE SECOND HALF TILES g_ImageDecodeBuffer EXACTLY, which is the self-check that its six absolute
     // addresses were read correctly. Relative to 0x80096664 they are +0x000 (0x80 x 1), +0x100
     // (0x100 x 1), +0x300 (0x20 x 0x80), +0x2300 (0x28 x 0x70), +0x4600 (0x28 x 0x60) and +0x6400
     // (0x40 x 0x20); each block ends precisely where the next begins, and the last ends at +0x7400,
@@ -228,7 +228,7 @@ internal static class FaceImages
 
         i = 0;
         iVar6 = 0xa00000;
-        puVar4 = Dat8007a220Address;
+        puVar4 = g_FaceVramCoordTableAddress;
         puVar5 = Dat8007a22aAddress;
         puVar2 = PTR_DAT_8007a554[GteScratch.DAT_1f80012c];
         offset = 0;
@@ -280,29 +280,29 @@ internal static class FaceImages
         // head is wanted.
         cdlFile.size = 0x3800;
         TITLE_EXE_exe.ReadCDData(cdlFile, ByteArray801d2000Address, 0);
-        TitleImages.FUN_80035778(
-            LoadingScreen.BYTE_ARRAY_801d2000, 0, TitleImages.DAT_80096664, 0);
+        TitleImages.DecompressLzss(
+            LoadingScreen.BYTE_ARRAY_801d2000, 0, TitleImages.g_ImageDecodeBuffer, 0);
 
         // GHIDRA: DAT_80096964 @ 0x80096964, DAT_80098964 @ 0x80098964, DAT_8009ac64 @ 0x8009AC64,
-        // DAT_8009ca64 @ 0x8009CA64, DAT_80096664 @ 0x80096664, DAT_80096764 @ 0x80096764 — six
+        // DAT_8009ca64 @ 0x8009CA64, g_ImageDecodeBuffer @ 0x80096664, DAT_80096764 @ 0x80096764 — six
         // labels Ghidra places inside the one staging buffer TitleImages declares. They are that
         // buffer plus 0x300, 0x2300, 0x4600, 0x6400, 0x000 and 0x100.
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0x300, 0x20 * 0x80 * 2),
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0x300, 0x20 * 0x80 * 2),
             0x240, 0x100, 0x20, 0x80, '\0');
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0x2300, 0x28 * 0x70 * 2),
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0x2300, 0x28 * 0x70 * 2),
             0x158, 0x180, 0x28, 0x70, '\0');
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0x4600, 0x28 * 0x60 * 2),
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0x4600, 0x28 * 0x60 * 2),
             0x398, 0x180, 0x28, 0x60, '\0');
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0x6400, 0x40 * 0x20 * 2),
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0x6400, 0x40 * 0x20 * 2),
             0x380, 0x1e0, 0x40, 0x20, '\0');
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0, 0x80 * 1 * 2), 0, 0x1e6, 0x80, 1, '\x01');
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0, 0x80 * 1 * 2), 0, 0x1e6, 0x80, 1, '\x01');
         DisplayMachine.LoadImageInVram(
-            ToWordBuffer(TitleImages.DAT_80096664, 0x100, 0x100 * 1 * 2), 0, 0x1ec, 0x100, 1,
+            ToWordBuffer(TitleImages.g_ImageDecodeBuffer, 0x100, 0x100 * 1 * 2), 0, 0x1ec, 0x100, 1,
             '\x01');
     }
 
@@ -310,7 +310,7 @@ internal static class FaceImages
     // RELATION: LoadImageInVram @ 0x80057BB4 takes the u_long * form, and every source here is a
     // label INSIDE a larger buffer, so this bridge takes the start offset the label stands for as
     // well as the byte count. Same bridge as the private ones in TitleImages, LoadingScreen and
-    // SelectScreenSetup, which only ever start at zero.
+    // SecondScreenSetup, which only ever start at zero.
     private static ulong[] ToWordBuffer(byte[] source, int offset, int byteCount)
     {
         if (offset < 0 || offset >= source.Length)
@@ -345,10 +345,10 @@ internal static class FaceImages
     // PTR_DAT_8007a554.
     internal static (byte[] Buffer, int Offset)? Resolve(int address)
     {
-        int offset = address - Dat8007a220Address;
-        if (offset >= 0 && offset < DAT_8007a220.Length)
+        int offset = address - g_FaceVramCoordTableAddress;
+        if (offset >= 0 && offset < g_FaceVramCoordTable.Length)
         {
-            return (DAT_8007a220, offset);
+            return (g_FaceVramCoordTable, offset);
         }
 
         offset = address - Dat80079b34Address;

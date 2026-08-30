@@ -4,7 +4,7 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The title screen itself. FUN_80021e28 @ 0x80021E28 is the task FUN_80021dd0 registers in list 6,
+// The title screen itself. UpdateTitleScreen @ 0x80021E28 is the task SetupTitleScreen registers in list 6,
 // and it runs once per frame for as long as the title screen is up.
 //
 // Its task context is 0x70 bytes, which it treats as three POLY_FT4 slots:
@@ -32,8 +32,8 @@ internal static class TitleScreenTask
     // .
     private const int TitleBBufferAddress = unchecked((int)0x80110000);
 
-    // GHIDRA: FUN_80021e28 @ 0x80021E28
-    internal static int FUN_80021e28()
+    // GHIDRA: UpdateTitleScreen @ 0x80021E28
+    internal static int UpdateTitleScreen()
     {
         POLY_FT4Ref p = TaskContext();
 
@@ -52,7 +52,7 @@ internal static class TitleScreenTask
         switch (iVar10)
         {
             case 0:
-                FUN_80022630();
+                InitializeMemoryCard();
                 SharedHighRam.DAT_801ff068 = FUN_80022780(0);
                 // JUSTIFICATION: C# language bridge only
                 // RELATION: the original reaches LAB_80021F98 two ways, once by falling into the
@@ -135,7 +135,7 @@ internal static class TitleScreenTask
                     } while (-1 < iVar10);
                 }
 
-                FUN_80022680();
+                ShutdownMemoryCard();
                 SetPolyFT4(p);
                 SetPolyFT4(p_00);
                 p.tpage = 0x46;
@@ -223,7 +223,7 @@ internal static class TitleScreenTask
                 break;
 
             case 3:
-                if (((PadInput.DAT_800834fc[0] | PadInput.DAT_800834fc[1]) & 0x800) == 0)
+                if (((PadInput.g_PadNewlyPressed[0] | PadInput.g_PadNewlyPressed[1]) & 0x800) == 0)
                 {
                     uint uVar11 = (uint)(ushort)p_02.ReadHalf(2) + 1;
                     p_02.WriteHalf(2, (short)uVar11);
@@ -306,8 +306,8 @@ internal static class TitleScreenTask
                     else
                     {
                         FrameLoop.DAT_800835b4 = sVar6b;
-                        TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                            (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                        TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                            (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                     }
                 }
 
@@ -338,19 +338,19 @@ internal static class TitleScreenTask
         if (iVar10 == 3)
         {
             ushort uVar1 = (ushort)p_02.ReadHalf(4);
-            SpriteRenderer.FUN_80048f88(
+            SpriteRenderer.DrawSpriteGroup(
                 TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x10),
                 (short)((int)((uVar1 - 0x50) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000, 0x1000,
                 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
         }
 
         ushort uVar2 = (ushort)p_02.ReadHalf(6);
-        SpriteRenderer.FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x08),
+        SpriteRenderer.DrawSpriteGroup(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x08),
             (short)((int)((-0x50 - (uint)uVar2) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000,
             0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
 
         ushort uVar3 = (ushort)p_02.ReadHalf(6);
-        int iVar8 = SpriteRenderer.FUN_80048f88(
+        int iVar8 = SpriteRenderer.DrawSpriteGroup(
             TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x0c),
             (short)((int)((uVar3 - 0x50) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000, 0x1000, 0,
             0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
@@ -372,17 +372,17 @@ internal static class TitleScreenTask
         p_00.x0 = sVar6;
         sVar6 = p_02.x0;
         p_00.y1 = 0xbc;
-        iVar10 = FrameLoop.DAT_800834e0;
+        iVar10 = FrameLoop.g_ActiveDrawEnvAddress;
         p_00.x1 = (short)(sVar6 + 0x140);
         sVar6 = p_02.x0;
 
-        // The bucket for both background bands, derived from the third FUN_80048f88 call's return
-        // exactly the way FUN_80048f88 derives its own. That return is now a real OT index rather
+        // The bucket for both background bands, derived from the third DrawSpriteGroup call's return
+        // exactly the way DrawSpriteGroup derives its own. That return is now a real OT index rather
         // than the constant 0 the stub used to give back, so the bands no longer always land in
         // bucket 0.
-        // PARTIAL: when FUN_80048f88 returns -1 - no record was added, or the last one failed the
-        // OT range test - this evaluates to DAT_800834e0 + 0x6c, which is FOUR BYTES BELOW the
-        // ordering table at DAT_800834e0 + 0x70. On the console that writes into the tail of
+        // PARTIAL: when DrawSpriteGroup returns -1 - no record was added, or the last one failed the
+        // OT range test - this evaluates to g_ActiveDrawEnvAddress + 0x6c, which is FOUR BYTES BELOW the
+        // ordering table at g_ActiveDrawEnvAddress + 0x70. On the console that writes into the tail of
         // DRAWENV_800a67c0. In this port only the table itself is a registered RAM region, so
         // AddPrim cannot resolve that address and silently does nothing. The original is not
         // corrected here; the difference is in what the unmodelled write lands on.
@@ -393,12 +393,12 @@ internal static class TitleScreenTask
         p_00.y3 = 0xf0;
         p_00.x3 = (short)(sVar6 + 0x140);
         AddPrim(iVar8 + iVar10, p);
-        AddPrim(iVar8 + FrameLoop.DAT_800834e0, p_00);
+        AddPrim(iVar8 + FrameLoop.g_ActiveDrawEnvAddress, p_00);
 
-        SpriteRenderer.FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, piVar14c),
+        SpriteRenderer.DrawSpriteGroup(TitleBBufferAddress + MipsMemory.ReadI32(file, piVar14c),
             (short)unchecked((int)0xffffffb0), 0, 0x1000, 0, 0,
             0, 0x1000, 0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
-        uVar7 = (uint)SpriteRenderer.FUN_80048f88(
+        uVar7 = (uint)SpriteRenderer.DrawSpriteGroup(
             TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x04),
             0x1b0, 0, 0x1000, 0, 0,
             0, 0x1000, 0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
@@ -407,11 +407,11 @@ internal static class TitleScreenTask
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: `p = *(POLY_FT4 **)(PTR_80083224 + 8)` in one step. The task block's +8 word is its
+    // RELATION: `p = *(POLY_FT4 **)(g_CurrentTask + 8)` in one step. The task block's +8 word is its
     // context pointer, and the context is heap memory, so the address resolves to a real packet.
     private static POLY_FT4Ref TaskContext()
     {
-        int context = PsxRam.ReadI32(TaskSystem.PTR_80083224 + 8);
+        int context = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
         return RamResolve(context, out byte[] buffer, out int offset)
             ? new POLY_FT4Ref(buffer, offset)
             : default;
@@ -420,20 +420,20 @@ internal static class TitleScreenTask
     // GHIDRA: auStack_30 — the eight-byte result buffer CdControl fills.
     private static readonly byte[] auStack_30 = new byte[8];
 
-    // GHIDRA: FUN_80022630 @ 0x80022630
-    private static void FUN_80022630()
+    // GHIDRA: InitializeMemoryCard @ 0x80022630
+    private static void InitializeMemoryCard()
     {
         // BLOCKED: memory card bring-up — InitCARD(1), StartCARD, _bu_init, FUN_80022c94,
         // _card_auto(0), ChangeClearPAD(0), FUN_80023290. libcard is not modelled by the SDK, and
         // none of the seven is closed.
     }
 
-    // GHIDRA: FUN_80022680 @ 0x80022680
-    private static void FUN_80022680()
+    // GHIDRA: ShutdownMemoryCard @ 0x80022680
+    private static void ShutdownMemoryCard()
     {
         // BLOCKED: memory card teardown — eight DisableEvent then eight CloseEvent inside a
         // critical section, StopCARD, then StartPAD and ChangeClearPAD(0) to hand the port back to
-        // the pad. Nothing is torn down here because FUN_80022630 started nothing.
+        // the pad. Nothing is torn down here because InitializeMemoryCard started nothing.
     }
 
     // GHIDRA: FUN_80022780 @ 0x80022780

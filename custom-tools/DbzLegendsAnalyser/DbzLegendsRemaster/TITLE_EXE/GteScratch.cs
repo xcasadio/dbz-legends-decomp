@@ -18,7 +18,7 @@ internal static class GteScratch
     internal static readonly LibGte.MATRIX MATRIX_1f800000 = new();
 
     // GHIDRA: SVECTOR_1f800020 @ 0x1F800020
-    // 0x1F800020..0x1F80003F is one contiguous four-element SVECTOR array: FUN_80048f88
+    // 0x1F800020..0x1F80003F is one contiguous four-element SVECTOR array: DrawSpriteGroup
     // @ 0x80048F88 fills it with the four corners of the sprite quad and hands all four to
     // RotAverage4 in that order. This one is corner 0, the top-left.
     internal static readonly LibGte.SVECTOR SVECTOR_1f800020 = new();
@@ -41,7 +41,7 @@ internal static class GteScratch
     internal static readonly LibGte.VECTOR VECTOR_1f800048 = new();
 
     // GHIDRA: SVECTOR_1f800058 @ 0x1F800058
-    // The RotMatrix input, reused twice per sprite record by FUN_80048f88: first as the per-record
+    // The RotMatrix input, reused twice per sprite record by DrawSpriteGroup: first as the per-record
     // flip/spin (flipX ? 0x800 : 0, flipY ? 0x800 : 0, record.rotZ), then as the group-wide
     // rotation (param_5 & 0xfff, param_6, param_7). Written at 0x8004922C, 0x8004927C, 0x8004928C,
     // 0x800492A0, 0x800492B0, 0x80049368, 0x80049378 and 0x80049380.
@@ -60,7 +60,7 @@ internal static class GteScratch
 
     // GHIDRA: DAT_1f800078 @ 0x1F800078
     // PARTIAL: passed to RotTrans as its (long *) flag argument; only ever written by the callee.
-    // FUN_80048f88 @ 0x80048F88 passes it to RotAverage4 in the same role.
+    // DrawSpriteGroup @ 0x80048F88 passes it to RotAverage4 in the same role.
     internal static readonly int[] DAT_1f800078 = new int[1];
 
     // GHIDRA: SVECTOR_1f80007c @ 0x1F80007C

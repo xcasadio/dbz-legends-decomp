@@ -3,24 +3,24 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The display / fade machine. FUN_80038228 @ 0x80038228 is a state machine over DAT_80083454,
-// driving one full-screen POLY_GT4 that is composited over the frame, with FUN_80038684 registered
+// The display / fade machine. ControlScreenFade @ 0x80038228 is a state machine over DAT_80083454,
+// driving one full-screen POLY_GT4 that is composited over the frame, with UpdateScreenFade registered
 // as the task that animates it.
 //
 // Callers select an operation through the first argument; the second carries the fade intensity.
-// main reaches it as FUN_80038228(8, 0), which is the initialisation case.
+// main reaches it as ControlScreenFade(8, 0), which is the initialisation case.
 internal static class DisplayMachine
 {
-    // GHIDRA: POLY_GT4_800b9518 @ 0x800B9518
+    // GHIDRA: g_FadeQuad @ 0x800B9518
     // The full-screen quad. Every field offset below was checked against the raw stores rather than
     // taken from the decompiler, which rendered v0 and v1 as the unnamed _2 and _3.
     //
     // Real memory rather than an object: FUN_80037388 @ 0x80037388 submits it with
-    // AddPrim(DAT_800834e0 + 0x206c, &POLY_GT4_800b9518), and the bucket stores the packet's PSX
+    // AddPrim(g_ActiveDrawEnvAddress + 0x206c, &g_FadeQuad), and the bucket stores the packet's PSX
     // address. The field names below are unchanged; only the storage under them is.
     private const int Poly800b9518Address = unchecked((int)0x800B9518);
 
-    internal static readonly POLY_GT4Ref POLY_GT4_800b9518 =
+    internal static readonly POLY_GT4Ref g_FadeQuad =
         new(RamRegion(Poly800b9518Address, POLY_GT4Ref.Size), 0);
 
     // GHIDRA: _DAT_800834b4 @ 0x800834B4
@@ -31,13 +31,13 @@ internal static class DisplayMachine
     // Scratch rect LoadImageInVram fills before every upload.
     private static readonly RECT RECT_80083550 = new();
 
-    // GHIDRA: FUN_80038684 @ 0x80038684
+    // GHIDRA: UpdateScreenFade @ 0x80038684
     // The task that animates the fade. The task block carries this PSX address, exactly as the
     // console holds it; the body is below.
-    private const int FUN_80038684_Address = unchecked((int)0x80038684);
+    private const int UpdateScreenFade_Address = unchecked((int)0x80038684);
 
-    // GHIDRA: FUN_80038228 @ 0x80038228
-    internal static short FUN_80038228(ushort param_1, ushort param_2)
+    // GHIDRA: ControlScreenFade @ 0x80038228
+    internal static short ControlScreenFade(ushort param_1, ushort param_2)
     {
         if ((TITLE_EXE_exe.DAT_800a897a & 1) != 0)
         {
@@ -49,14 +49,14 @@ internal static class DisplayMachine
         {
             case 0:
                 TITLE_EXE_exe.DAT_80083454 = 0x4003;
-                POLY_GT4_800b9518.tpage = 0x50;
+                g_FadeQuad.tpage = 0x50;
                 _DAT_800834b4 = 0xff;
-                FUN_80038684();
+                UpdateScreenFade();
                 SetDispMask(0);
                 return 0;
 
             case 1:
-                POLY_GT4_800b9518.tpage = 0x50;
+                g_FadeQuad.tpage = 0x50;
                 TITLE_EXE_exe.DAT_80083454 = 2;
                 goto LAB_80038610;
 
@@ -64,7 +64,7 @@ internal static class DisplayMachine
                 if (TITLE_EXE_exe.DAT_80083454 == 0
                     && CreateFadeTask() != 0)
                 {
-                    POLY_GT4_800b9518.tpage = 0x50;
+                    g_FadeQuad.tpage = 0x50;
                     TITLE_EXE_exe.DAT_80083454 = 2;
                     _DAT_800834b4 = param_2;
                     SetDispMask(1);
@@ -79,7 +79,7 @@ internal static class DisplayMachine
                 {
                     TITLE_EXE_exe.DAT_80083454 = 3;
                     _DAT_800834b4 = param_2;
-                    POLY_GT4_800b9518.tpage = 0x50;
+                    g_FadeQuad.tpage = 0x50;
                     return 0;
                 }
 
@@ -92,7 +92,7 @@ internal static class DisplayMachine
                     {
                         TITLE_EXE_exe.DAT_80083454 = 4;
                         _DAT_800834b4 = param_2;
-                        POLY_GT4_800b9518.tpage = 0x30;
+                        g_FadeQuad.tpage = 0x30;
                         return 0;
                     }
                 }
@@ -112,7 +112,7 @@ internal static class DisplayMachine
                     {
                         TITLE_EXE_exe.DAT_80083454 = 5;
                         _DAT_800834b4 = param_2;
-                        POLY_GT4_800b9518.tpage = 0x30;
+                        g_FadeQuad.tpage = 0x30;
                         return 0;
                     }
                 }
@@ -131,7 +131,7 @@ internal static class DisplayMachine
                 {
                     TITLE_EXE_exe.DAT_80083454 = 6;
                     _DAT_800834b4 = 0;
-                    POLY_GT4_800b9518.tpage = 0x30;
+                    g_FadeQuad.tpage = 0x30;
                     return 0;
                 }
 
@@ -139,49 +139,49 @@ internal static class DisplayMachine
 
             case 7:
                 TITLE_EXE_exe.DAT_80083454 = 0x4005;
-                POLY_GT4_800b9518.tpage = 0x30;
+                g_FadeQuad.tpage = 0x30;
                 LAB_80038610:
                 _DAT_800834b4 = 0xff;
-                FUN_80038684();
+                UpdateScreenFade();
                 SetDispMask(1);
                 return 0;
 
             case 8:
                 // Two consecutive halfwords on the stack, so one little-endian PSX word.
                 ulong[] local_18 = { 0x1111FFFFUL };
-                SetPolyGT4(POLY_GT4_800b9518);
-                SetSemiTrans(POLY_GT4_800b9518, 1);
-                SetShadeTex(POLY_GT4_800b9518, 0);
-                POLY_GT4_800b9518.v0 = 0xff;
-                POLY_GT4_800b9518.v1 = 0xff;
-                POLY_GT4_800b9518.v2 = 0xff;
-                POLY_GT4_800b9518.v3 = 0xff;
-                POLY_GT4_800b9518.u1 = 1;
-                POLY_GT4_800b9518.u3 = 1;
-                POLY_GT4_800b9518.x0 = -2;
-                POLY_GT4_800b9518.y0 = -2;
-                POLY_GT4_800b9518.y1 = -2;
-                POLY_GT4_800b9518.x2 = -2;
-                POLY_GT4_800b9518.y2 = 0xf2;
-                POLY_GT4_800b9518.y3 = 0xf2;
-                POLY_GT4_800b9518.tpage = 0x10;
-                POLY_GT4_800b9518.clut = 0x7f80;
-                POLY_GT4_800b9518.b3 = 0x80;
-                POLY_GT4_800b9518.g3 = 0x80;
-                POLY_GT4_800b9518.r3 = 0x80;
-                POLY_GT4_800b9518.b2 = 0x80;
-                POLY_GT4_800b9518.g2 = 0x80;
-                POLY_GT4_800b9518.r2 = 0x80;
-                POLY_GT4_800b9518.b1 = 0x80;
-                POLY_GT4_800b9518.g1 = 0x80;
-                POLY_GT4_800b9518.r1 = 0x80;
-                POLY_GT4_800b9518.b0 = 0x80;
-                POLY_GT4_800b9518.g0 = 0x80;
-                POLY_GT4_800b9518.r0 = 0x80;
-                POLY_GT4_800b9518.u0 = 0;
-                POLY_GT4_800b9518.u2 = 0;
-                POLY_GT4_800b9518.x1 = 0x142;
-                POLY_GT4_800b9518.x3 = 0x142;
+                SetPolyGT4(g_FadeQuad);
+                SetSemiTrans(g_FadeQuad, 1);
+                SetShadeTex(g_FadeQuad, 0);
+                g_FadeQuad.v0 = 0xff;
+                g_FadeQuad.v1 = 0xff;
+                g_FadeQuad.v2 = 0xff;
+                g_FadeQuad.v3 = 0xff;
+                g_FadeQuad.u1 = 1;
+                g_FadeQuad.u3 = 1;
+                g_FadeQuad.x0 = -2;
+                g_FadeQuad.y0 = -2;
+                g_FadeQuad.y1 = -2;
+                g_FadeQuad.x2 = -2;
+                g_FadeQuad.y2 = 0xf2;
+                g_FadeQuad.y3 = 0xf2;
+                g_FadeQuad.tpage = 0x10;
+                g_FadeQuad.clut = 0x7f80;
+                g_FadeQuad.b3 = 0x80;
+                g_FadeQuad.g3 = 0x80;
+                g_FadeQuad.r3 = 0x80;
+                g_FadeQuad.b2 = 0x80;
+                g_FadeQuad.g2 = 0x80;
+                g_FadeQuad.r2 = 0x80;
+                g_FadeQuad.b1 = 0x80;
+                g_FadeQuad.g1 = 0x80;
+                g_FadeQuad.r1 = 0x80;
+                g_FadeQuad.b0 = 0x80;
+                g_FadeQuad.g0 = 0x80;
+                g_FadeQuad.r0 = 0x80;
+                g_FadeQuad.u0 = 0;
+                g_FadeQuad.u2 = 0;
+                g_FadeQuad.x1 = 0x142;
+                g_FadeQuad.x3 = 0x142;
                 LoadImageInVram(local_18, 0, 0x1fe, 2, 1, '\0');
                 SetDispMask(0);
                 TITLE_EXE_exe.DAT_80083454 = 0;
@@ -202,27 +202,27 @@ internal static class DisplayMachine
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: the original spells this inline as
-    // `CreateTask(FUN_80038684, 0x56, 1, 0, 0, DAT_80079858)` at five call sites. DAT_80079858 is
+    // `CreateTask(UpdateScreenFade, 0x56, 1, 0, 0, DAT_80079858)` at five call sites. DAT_80079858 is
     // g_TaskListHead + 4, that is the head of list 1, which matches the listIndex of 1.
     //
-    // The RegisterCallback line is the same bridge TitleImages.FUN_80021dd0 uses: the block stores
+    // The RegisterCallback line is the same bridge TitleImages.SetupTitleScreen uses: the block stores
     // the raw PSX address, and this table is what turns that address back into the ported method
     // when ExecuteTaskList dispatches it. Assigning the same pair repeatedly is harmless, so the
     // five original call sites keep their shape.
     private static int CreateFadeTask()
     {
-        TaskSystem.RegisterCallback(FUN_80038684_Address, FUN_80038684);
-        return TaskSystem.CreateTask(FUN_80038684_Address, 0x56, 1, 0, 0,
+        TaskSystem.RegisterCallback(UpdateScreenFade_Address, UpdateScreenFade);
+        return TaskSystem.CreateTask(UpdateScreenFade_Address, 0x56, 1, 0, 0,
             TaskSystem.g_TaskListHead[1]);
     }
 
-    // GHIDRA: FUN_80038684 @ 0x80038684
+    // GHIDRA: UpdateScreenFade @ 0x80038684
     // One frame of the fade. It is the task body CreateFadeTask registers in list 1, and cases 0
     // and 7 above also reach it as a plain call — the original does that with a direct `jal` at
     // 0x80038648 and 0x80038614, not through the block's function pointer, so this is a direct
     // call here too.
     //
-    // It walks the twelve RGB bytes of POLY_GT4_800b9518 toward 0x00 or toward 0xff, one step per
+    // It walks the twelve RGB bytes of g_FadeQuad toward 0x00 or toward 0xff, one step per
     // frame, and on the frame the ramp lands it rewrites the state word and deletes its own task.
     // Only r0 is ever read back: it is the machine's current level, and the other eleven bytes are
     // write-only mirrors of it.
@@ -231,7 +231,7 @@ internal static class DisplayMachine
     // through the jump table at 0x800206DC and it could not see their definitions on every path.
     // Both are in fact assigned here: s1 is zeroed in the delay slot of the bounds branch at
     // 0x800386BC, and s0 on every path that later reads it.
-    internal static void FUN_80038684()
+    internal static void UpdateScreenFade()
     {
         if ((TITLE_EXE_exe.DAT_800a897a & 1) != 0)
         {
@@ -252,7 +252,7 @@ internal static class DisplayMachine
         // bVar1 still false and this function does nothing at all.
         //
         // 0x4000 is then tested on its own before each DeleteTask below, so bit 14 is a flag riding
-        // on the state word rather than part of the state. Its only two writers are FUN_80038228
+        // on the state word rather than part of the state. Its only two writers are ControlScreenFade
         // cases 0 and 7, which are precisely the two that call this function directly instead of
         // handing it to CreateTask — so when it is set there is no task of ours on any list and the
         // delete has to be skipped. Nothing ever clears it explicitly; the terminal states written
@@ -263,7 +263,7 @@ internal static class DisplayMachine
         {
             case 2:
                 // Unsigned compare, and it reads the step as a halfword (`lhu` at 0x800386E8).
-                if ((ushort)_DAT_800834b4 < POLY_GT4_800b9518.r0)
+                if ((ushort)_DAT_800834b4 < g_FadeQuad.r0)
                 {
                     goto LAB_800386fc;
                 }
@@ -271,8 +271,8 @@ internal static class DisplayMachine
                 unaff_s0 = 0;
                 if (((ushort)TITLE_EXE_exe.DAT_80083454 & 0x4000) == 0)
                 {
-                    TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                        (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                    TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                        (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                 }
 
                 TITLE_EXE_exe.DAT_80083454 = 1;
@@ -284,18 +284,18 @@ internal static class DisplayMachine
                 // comparison above read it as a halfword. Both widths are the original's, and a
                 // step above 0xff would make the two disagree. TITLE.EXE only ever passes 4, 0x10
                 // and 0x40, so the divergence is not exercised in this overlay.
-                unaff_s0 = POLY_GT4_800b9518.r0 - (byte)_DAT_800834b4;
+                unaff_s0 = g_FadeQuad.r0 - (byte)_DAT_800834b4;
                 break;
 
             case 3:
-                if (0xfe < POLY_GT4_800b9518.r0 + (ushort)_DAT_800834b4)
+                if (0xfe < g_FadeQuad.r0 + (ushort)_DAT_800834b4)
                 {
                     SetDispMask(0);
                     unaff_s0 = 0xff;
                     if (((ushort)TITLE_EXE_exe.DAT_80083454 & 0x4000) == 0)
                     {
-                        TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                            (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                        TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                            (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                     }
 
                     TITLE_EXE_exe.DAT_80083454 = 0;
@@ -306,13 +306,13 @@ internal static class DisplayMachine
             // 0x80038814. It physically sits inside case 5's block; case 3 branches forward into it
             // and case 5 falls into it, so the increment is written once for both.
             LAB_80038814:
-                unaff_s0 = POLY_GT4_800b9518.r0 + (byte)_DAT_800834b4;
+                unaff_s0 = g_FadeQuad.r0 + (byte)_DAT_800834b4;
                 break;
 
             case 4:
                 // Behaviourally identical to case 2 — the binary duplicates the block instead of
                 // sharing it, and only the branch sense differs. Kept as two blocks.
-                if ((ushort)_DAT_800834b4 < POLY_GT4_800b9518.r0)
+                if ((ushort)_DAT_800834b4 < g_FadeQuad.r0)
                 {
                     goto LAB_800386fc;
                 }
@@ -320,8 +320,8 @@ internal static class DisplayMachine
                 unaff_s0 = 0;
                 if (((ushort)TITLE_EXE_exe.DAT_80083454 & 0x4000) == 0)
                 {
-                    TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                        (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                    TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                        (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                 }
 
                 TITLE_EXE_exe.DAT_80083454 = 1;
@@ -330,7 +330,7 @@ internal static class DisplayMachine
             case 5:
                 // Same saturating add and same 0xff threshold as case 3. The differences are that
                 // there is no SetDispMask here and that the terminal state is 7, not 0.
-                if (POLY_GT4_800b9518.r0 + (ushort)_DAT_800834b4 < 0xff)
+                if (g_FadeQuad.r0 + (ushort)_DAT_800834b4 < 0xff)
                 {
                     goto LAB_80038814;
                 }
@@ -338,31 +338,31 @@ internal static class DisplayMachine
                 unaff_s0 = 0xff;
                 if (((ushort)TITLE_EXE_exe.DAT_80083454 & 0x4000) == 0)
                 {
-                    TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                        (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                    TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                        (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                 }
 
                 TITLE_EXE_exe.DAT_80083454 = 7;
                 break;
 
             case 6:
-                // Here _DAT_800834b4 is a step counter, not a per-frame delta: FUN_80038228 case 6
+                // Here _DAT_800834b4 is a step counter, not a per-frame delta: ControlScreenFade case 6
                 // forces it to 0 and this block drives it 0 -> 1 -> 2. Three frames, and the first
                 // two write the colours themselves and leave bVar1 false so the tail is skipped.
                 if ((ushort)_DAT_800834b4 == 1)
                 {
-                    POLY_GT4_800b9518.b3 = 0x08;
-                    POLY_GT4_800b9518.g3 = 0x08;
-                    POLY_GT4_800b9518.r3 = 0x08;
-                    POLY_GT4_800b9518.b0 = 0x08;
-                    POLY_GT4_800b9518.g0 = 0x08;
-                    POLY_GT4_800b9518.r0 = 0x08;
-                    POLY_GT4_800b9518.b2 = 0x08;
-                    POLY_GT4_800b9518.g2 = 0x08;
-                    POLY_GT4_800b9518.r2 = 0x08;
-                    POLY_GT4_800b9518.b1 = 0x08;
-                    POLY_GT4_800b9518.g1 = 0x08;
-                    POLY_GT4_800b9518.r1 = 0x08;
+                    g_FadeQuad.b3 = 0x08;
+                    g_FadeQuad.g3 = 0x08;
+                    g_FadeQuad.r3 = 0x08;
+                    g_FadeQuad.b0 = 0x08;
+                    g_FadeQuad.g0 = 0x08;
+                    g_FadeQuad.r0 = 0x08;
+                    g_FadeQuad.b2 = 0x08;
+                    g_FadeQuad.g2 = 0x08;
+                    g_FadeQuad.r2 = 0x08;
+                    g_FadeQuad.b1 = 0x08;
+                    g_FadeQuad.g1 = 0x08;
+                    g_FadeQuad.r1 = 0x08;
                     _DAT_800834b4 = 2;
                     bVar1 = false;
                 }
@@ -370,18 +370,18 @@ internal static class DisplayMachine
                 {
                     if ((ushort)_DAT_800834b4 == 0)
                     {
-                        POLY_GT4_800b9518.b3 = 0x20;
-                        POLY_GT4_800b9518.g3 = 0x20;
-                        POLY_GT4_800b9518.r3 = 0x20;
-                        POLY_GT4_800b9518.b0 = 0x20;
-                        POLY_GT4_800b9518.g0 = 0x20;
-                        POLY_GT4_800b9518.r0 = 0x20;
-                        POLY_GT4_800b9518.b2 = 0x20;
-                        POLY_GT4_800b9518.g2 = 0x20;
-                        POLY_GT4_800b9518.r2 = 0x20;
-                        POLY_GT4_800b9518.b1 = 0x20;
-                        POLY_GT4_800b9518.g1 = 0x20;
-                        POLY_GT4_800b9518.r1 = 0x20;
+                        g_FadeQuad.b3 = 0x20;
+                        g_FadeQuad.g3 = 0x20;
+                        g_FadeQuad.r3 = 0x20;
+                        g_FadeQuad.b0 = 0x20;
+                        g_FadeQuad.g0 = 0x20;
+                        g_FadeQuad.r0 = 0x20;
+                        g_FadeQuad.b2 = 0x20;
+                        g_FadeQuad.g2 = 0x20;
+                        g_FadeQuad.r2 = 0x20;
+                        g_FadeQuad.b1 = 0x20;
+                        g_FadeQuad.g1 = 0x20;
+                        g_FadeQuad.r1 = 0x20;
                         _DAT_800834b4 = 1;
                         bVar1 = false;
                     }
@@ -404,9 +404,9 @@ internal static class DisplayMachine
                     // No 0x4000 guard on this one, unlike the four above. That asymmetry is in the
                     // machine code: there is no `andi 0x4000` anywhere in the block at 0x80038984.
                     // Consistent with the transitions, since state 6 is only ever entered through
-                    // FUN_80038228 case 6, which always goes through CreateTask.
-                    TaskSystem.DeleteTask(TaskSystem.PTR_80083224,
-                        (uint)(ushort)TaskSystem.PTR_ARRAY_80083228);
+                    // ControlScreenFade case 6, which always goes through CreateTask.
+                    TaskSystem.DeleteTask(TaskSystem.g_CurrentTask,
+                        (uint)(ushort)TaskSystem.g_CurrentTaskListIndex);
                 }
                 else
                 {
@@ -430,18 +430,18 @@ internal static class DisplayMachine
             // Store order taken from the twelve `sb` at 0x800389B0..0x80038A0C. Ghidra prints them
             // in the opposite order; all twelve take the same byte, so it is not observable either
             // way. The `sb` is what truncates the 32-bit register, hence the cast.
-            POLY_GT4_800b9518.b3 = (byte)unaff_s0;
-            POLY_GT4_800b9518.g3 = (byte)unaff_s0;
-            POLY_GT4_800b9518.r3 = (byte)unaff_s0;
-            POLY_GT4_800b9518.b2 = (byte)unaff_s0;
-            POLY_GT4_800b9518.g2 = (byte)unaff_s0;
-            POLY_GT4_800b9518.r2 = (byte)unaff_s0;
-            POLY_GT4_800b9518.b1 = (byte)unaff_s0;
-            POLY_GT4_800b9518.g1 = (byte)unaff_s0;
-            POLY_GT4_800b9518.r1 = (byte)unaff_s0;
-            POLY_GT4_800b9518.b0 = (byte)unaff_s0;
-            POLY_GT4_800b9518.g0 = (byte)unaff_s0;
-            POLY_GT4_800b9518.r0 = (byte)unaff_s0;
+            g_FadeQuad.b3 = (byte)unaff_s0;
+            g_FadeQuad.g3 = (byte)unaff_s0;
+            g_FadeQuad.r3 = (byte)unaff_s0;
+            g_FadeQuad.b2 = (byte)unaff_s0;
+            g_FadeQuad.g2 = (byte)unaff_s0;
+            g_FadeQuad.r2 = (byte)unaff_s0;
+            g_FadeQuad.b1 = (byte)unaff_s0;
+            g_FadeQuad.g1 = (byte)unaff_s0;
+            g_FadeQuad.r1 = (byte)unaff_s0;
+            g_FadeQuad.b0 = (byte)unaff_s0;
+            g_FadeQuad.g0 = (byte)unaff_s0;
+            g_FadeQuad.r0 = (byte)unaff_s0;
         }
     }
 

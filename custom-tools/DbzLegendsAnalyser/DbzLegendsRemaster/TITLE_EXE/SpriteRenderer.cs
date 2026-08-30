@@ -2,10 +2,10 @@
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The sprite-group renderer. FUN_80048f88 @ 0x80048F88 walks a count-prefixed block of sprite
+// The sprite-group renderer. DrawSpriteGroup @ 0x80048F88 walks a count-prefixed block of sprite
 // records, builds one textured quad per record out of slot 1 of the primitive pool, projects it
 // through the GTE and files it in the ordering table. It is what actually draws the title screen:
-// FUN_80021e28 @ 0x80021E28 calls it five times a frame, for the logo, the two background layers,
+// UpdateTitleScreen @ 0x80021E28 calls it five times a frame, for the logo, the two background layers,
 // PRESS START and the copyright line.
 //
 // THE RECORD STREAM. param_1 is a real PSX address; on the title screen it points into the TITLE.B
@@ -32,8 +32,8 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 //   +0x06  s16  scaleY   -> ScaleMatrix vy = scaleY + param_9
 // A record is therefore 16 bytes with an implicit square size and 20 bytes with an explicit one.
 //
-// THE PRIMITIVE. Every quad comes from slot 1 of the pool context DAT_800835f8, whose element size
-// is 0x28 (DAT_8007adf8[1]) and whose entries FUN_80057094 @ 0x80057094 pre-tags with SetPolyFT4
+// THE PRIMITIVE. Every quad comes from slot 1 of the pool context g_PrimitivePoolContext, whose element size
+// is 0x28 (g_PrimitiveSizeTable[1]) and whose entries InitializePrimitivePool @ 0x80057094 pre-tags with SetPolyFT4
 // followed by SetSemiTrans(p, 1). The code byte is therefore 0x2E and this function never touches
 // it: every sprite it draws is a SEMI-TRANSPARENT textured quad blended in the tpage's ABR mode.
 // The tag word is left alone too - AddPrim rewrites its low 24 bits.
@@ -54,13 +54,13 @@ internal static class SpriteRenderer
     // JUSTIFICATION: PSX hardware adaptation only
     // RELATION: stands in for the raw pointer `p` when the slot-1 pool is not addressable in this
     // port. On the console p always points at real RAM. Here the pool only becomes addressable once
-    // FUN_80056dc0 @ 0x80056DC0 has allocated it on the heap, and an unmapped address has no byte
+    // CreatePrimitivePools @ 0x80056DC0 has allocated it on the heap, and an unmapped address has no byte
     // buffer to give RotAverage4 its four sxy destinations. Pointing them here keeps the GTE work,
     // the control flow and the ordering-table test exactly as they are, and only the four projected
     // corners land somewhere nothing reads. This path does not exist on hardware.
     private static readonly byte[] s_unmappedPrimitive = new byte[0x28];
 
-    // GHIDRA: FUN_80048f88 @ 0x80048F88
+    // GHIDRA: DrawSpriteGroup @ 0x80048F88
     //
     // The eighteen arguments, each closed against a decoded instruction (o32: param_1..param_4
     // arrive in a0..a3, params 5..18 are read back from the caller's outgoing-argument area at
@@ -100,14 +100,14 @@ internal static class SpriteRenderer
     //        LAST record failed the ordering-table range test (addiu s2,zero,-1 @0x800494B0)
     //   else 0x800 minus the OTZ RotAverage4 produced for the LAST record that was added, WITHOUT
     //        param_10 folded back in (subu s2,v1,v0 @0x80049454, v1 = 0x800 from @0x8004944C)
-    // FUN_80021e28 turns that into a bucket exactly the way this function does - `iVar8 * 4 + 0x70`
-    // then AddPrim(iVar8 + DAT_800834e0, p) - which is direct confirmation it is an OT index.
+    // UpdateTitleScreen turns that into a bucket exactly the way this function does - `iVar8 * 4 + 0x70`
+    // then AddPrim(iVar8 + g_ActiveDrawEnvAddress, p) - which is direct confirmation it is an OT index.
     //
     // The local names are the decompiler's. Where Ghidra types a local `char` or `short` this port
     // keeps it as an int and truncates at the store instead: the MIPS body holds all of these in
     // 32-bit registers and only the sb/sh narrows them, and the intermediate `+ 0xFF80` in
     // particular is a ZERO-extended `ori t0,zero,0xff80` (0x80049160) rather than a sign extension.
-    internal static int FUN_80048f88(int param_1, short param_2, short param_3, short param_4,
+    internal static int DrawSpriteGroup(int param_1, short param_2, short param_3, short param_4,
         ushort param_5, short param_6, short param_7, int param_8, int param_9, int param_10,
         short param_11, short param_12, byte param_13, byte param_14, byte param_15, byte param_16,
         byte param_17, int param_18)
@@ -165,14 +165,14 @@ internal static class SpriteRenderer
         LibGte.ReadRotMatrix(MStack_d0);
         int iVar15 = PsxRam.ReadI32(param_1);
         param_1 = param_1 + 4;
-        int local_30 = PsxRam.ReadI32(PrimitivePools.DAT_800835f8 + 0x44) * 0x28
-            + PsxRam.ReadI32(PrimitivePools.DAT_800835f8 + 4);
+        int local_30 = PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 0x44) * 0x28
+            + PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 4);
         if (0 < iVar15)
         {
             do
             {
-                if ((uint)PsxRam.ReadI32(PrimitivePools.DAT_800835f8 + 0x24)
-                    <= (uint)PsxRam.ReadI32(PrimitivePools.DAT_800835f8 + 0x44))
+                if ((uint)PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 0x24)
+                    <= (uint)PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 0x44))
                 {
                     // The pool is full. This return LEAKS the outer PushMatrix above, and that is a
                     // BUG OF THE ORIGINAL reproduced deliberately - rule 12 forbids repairing it.
@@ -185,7 +185,7 @@ internal static class SpriteRenderer
                     // PARTIAL: this port's PushMatrix throws on overflow where the console silently
                     // wraps its own small stack, so a run that took this path repeatedly would fault
                     // rather than corrupt the matrix. Whether the path ever fires is NOT established:
-                    // it depends on the slot-1 capacity FUN_80056dc0 @ 0x80056DC0 is called with, and
+                    // it depends on the slot-1 capacity CreatePrimitivePools @ 0x80056DC0 is called with, and
                     // that caller has not been traced.
                     return 0;
                 }
@@ -316,10 +316,10 @@ internal static class SpriteRenderer
                 // OTZ, gets a smaller bucket index - and 0x800 is the ordering table's own length.
                 if ((local_38 < iVar5) && (iVar5 < 0x800))
                 {
-                    LibGpu.AddPrim(iVar5 * 4 + 0x70 + FrameLoop.DAT_800834e0, p);
+                    LibGpu.AddPrim(iVar5 * 4 + 0x70 + FrameLoop.g_ActiveDrawEnvAddress, p);
                     uVar14 = uVar14 + 1;
-                    PsxRam.WriteI32(PrimitivePools.DAT_800835f8 + 0x44,
-                        PsxRam.ReadI32(PrimitivePools.DAT_800835f8 + 0x44) + 1);
+                    PsxRam.WriteI32(PrimitivePools.g_PrimitivePoolContext + 0x44,
+                        PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 0x44) + 1);
                 }
                 else
                 {

@@ -16,10 +16,10 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 // camera state block it owns. Both are settled by first-hand Ghidra evidence and neither depends on
 // any unported producer.
 //
-// A NOTE ON THE POINTER PARAMETERS. FUN_8003bec8, FUN_8003c108 and FUN_8003d724 take `short *` in
+// A NOTE ON THE POINTER PARAMETERS. CalculateDistance3D, CalculateLookAtAngles and FUN_8003d724 take `short *` in
 // the original. They are spelled here as `int` PSX addresses, which is this port's standing
-// convention for a pointer parameter (SpriteRenderer.FUN_80048f88, SelectScreenSetup.FUN_8004737c,
-// PrimitivePools.FUN_80056dc0 all do the same) and the body reads through PsxRam exactly as one
+// convention for a pointer parameter (SpriteRenderer.DrawSpriteGroup, SecondScreenSetup.FUN_8004737c,
+// PrimitivePools.CreatePrimitivePools all do the same) and the body reads through PsxRam exactly as one
 // MIPS `lh` each. That convention is correct for the call sites that pass a real RAM address
 // (LAB_80027f5c passes `actor + 0x114`; FUN_8002417c passes `&param_1->rect_114`). It is NOT
 // sufficient for the call sites that pass a STACK triple — LAB_80027f5c does that four times, with
@@ -33,14 +33,14 @@ internal static class Camera
     // GTE scratch globals used by the look-at helper.
     //
     // Cross-referenced program-wide, so the sharing is measured rather than assumed:
-    //   SVECTOR_800832fc  3 references, ALL inside FUN_8003c108. Nothing else in TITLE.EXE
-    //                     touches it, which is what makes its `vy` closed: FUN_8003c108 writes
+    //   SVECTOR_800832fc  3 references, ALL inside CalculateLookAtAngles. Nothing else in TITLE.EXE
+    //                     touches it, which is what makes its `vy` closed: CalculateLookAtAngles writes
     //                     only vx and vz, so vy is whatever .bss was loaded with, i.e. 0, on the
     //                     console as well as here. (It is dead anyway: the matrix in play is a
     //                     pure Y rotation, so m[2][1] is 0 and vy cannot reach the only component
     //                     read back, VECTOR_800a8a08.vz.)
-    //   VECTOR_800a8a08   1 reference, the RotTrans output parameter in FUN_8003c108.
-    //   MATRIX_8007ad48   10 references: 4 from FUN_8003c108, 3 from FUN_8004a220 and 3 from
+    //   VECTOR_800a8a08   1 reference, the RotTrans output parameter in CalculateLookAtAngles.
+    //   MATRIX_8007ad48   10 references: 4 from CalculateLookAtAngles, 3 from FUN_8004a220 and 3 from
     //                     FUN_8004a6c8. The last two are NOT ported. It is shared GTE scratch, so
     //                     whoever ports them must use THIS declaration rather than make a second
     //                     one.
@@ -64,7 +64,7 @@ internal static class Camera
     // the flag back, and nothing is lost by not mirroring it into VECTOR_800a8a08.pad.
     private static readonly int[] VECTOR_800a8a08_pad = new int[1];
 
-    // GHIDRA: FUN_8003bec8 @ 0x8003BEC8
+    // GHIDRA: CalculateDistance3D @ 0x8003BEC8
     // 3D distance between two short triples, returned narrowed to short.
     // Six callers program-wide: four from inside LAB_80027f5c (0x800284BC, 0x80028938, 0x80029230,
     // 0x80029240) plus FUN_8002417c @ 0x800243C8 and FUN_8004af78 @ 0x8004AFB4. It is therefore a
@@ -73,8 +73,8 @@ internal static class Camera
     // Its one callee, SquareRoot0, is REAL in the C# SDK.
     // NOT A BUG TO FIX (rule 12): the 0x7FFF wrap fold is applied to the X and Z components but NOT
     // to Y — `param_2[1] - param_1[1]` goes into the sum of squares raw. That asymmetry is what the
-    // original does; FUN_8003c108 below folds all the components it uses. Reproduced as-is.
-    internal static int FUN_8003bec8(int param_1, int param_2)
+    // original does; CalculateLookAtAngles below folds all the components it uses. Reproduced as-is.
+    internal static int CalculateDistance3D(int param_1, int param_2)
     {
         int lVar1;
         int local_18;
@@ -107,7 +107,7 @@ internal static class Camera
         return (short)lVar1;
     }
 
-    // GHIDRA: FUN_8003c108 @ 0x8003C108
+    // GHIDRA: CalculateLookAtAngles @ 0x8003C108
     // Look-at angles from param_1 to param_2, written as a three-short triple at param_3:
     //   param_3[0] = 0, param_3[1] = yaw = ratan2(dx, dz) & 0xfff,
     //   param_3[2] = pitch = ratan2(dy, rotated z) & 0xfff.
@@ -117,7 +117,7 @@ internal static class Camera
     // to 0xfff, so it is in [1, 0x1000].
     // The statement order below is the original's, including `*param_3 = 0` landing in the middle
     // of the matrix stores rather than beside the other two param_3 writes.
-    internal static void FUN_8003c108(int param_1, int param_2, int param_3)
+    internal static void CalculateLookAtAngles(int param_1, int param_2, int param_3)
     {
         int lVar1;
         int local_18;
@@ -197,7 +197,7 @@ internal static class Camera
     // GHIDRA: FUN_8003d724 @ 0x8003D724
     // Polar offset: rotates the vector (param_5, 0, 0) by the yaw/pitch triple at param_1 — biased
     // by param_4 and param_3 respectively, with the yaw turned a quarter circle by the -0x400 — and
-    // writes the result into param_2. Its callers inside LAB_80027f5c pass the triple FUN_8003c108
+    // writes the result into param_2. Its callers inside LAB_80027f5c pass the triple CalculateLookAtAngles
     // filled, so param_1[1] is the yaw and param_1[2] the pitch; param_1[0] is never read.
     // Callees PushMatrix, RotMatrix, SetRotMatrix, SetTransMatrix, RotTrans and PopMatrix are all
     // present and REAL in the C# SDK. RotMatrix carries a PARTIAL note about negative vx/vy/vz, and
@@ -424,7 +424,7 @@ internal static class Camera
     // producer, and 0x80035814 so DAT_80083644 has one, then come back. B2 is already done.
     //
     // ONE MORE CORRECTION TO THE BRIEF THIS FILE WAS WRITTEN FROM. LAB_80027f5c does NOT reach a
-    // task context through PTR_80083224 + 8 the way TitleScreenTask.FUN_80021e28 does. The
+    // task context through g_CurrentTask + 8 the way TitleScreenTask.UpdateTitleScreen does. The
     // contextSize FUN_80058a9c passes to CreateTask is ZERO, and the decoded global-access table
     // over all 1650 instructions contains no access to 0x80083224 at all — that address would be
     // `lw rt,0x70(gp)`, an encoding that never occurs in the range. It is a task callback that

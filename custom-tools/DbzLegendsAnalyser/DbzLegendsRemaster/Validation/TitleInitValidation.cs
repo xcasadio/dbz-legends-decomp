@@ -101,8 +101,8 @@ internal static class TitleInitValidation
         Check(GteScratch.DAT_1f800128 >= 0,
             $"profondeur derivee non negative, lu {GteScratch.DAT_1f800128}");
 
-        // FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0) alloue six pools sur huit.
-        int ctx = PrimitivePools.DAT_800835f8;
+        // CreatePrimitivePools(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0) alloue six pools sur huit.
+        int ctx = PrimitivePools.g_PrimitivePoolContext;
         Check(ctx != 0, "le contexte des pools est enregistre");
         if (ctx != 0)
         {
@@ -135,8 +135,8 @@ internal static class TitleInitValidation
             }
         }
 
-        // FUN_80038228(8, 0) configure le quad plein ecran du fondu puis remet l'etat a zero.
-        var fade = DisplayMachine.POLY_GT4_800b9518;
+        // ControlScreenFade(8, 0) configure le quad plein ecran du fondu puis remet l'etat a zero.
+        var fade = DisplayMachine.g_FadeQuad;
         Check(fade.x0 == -2 && fade.y0 == -2, $"coin haut gauche (-2,-2), lu ({fade.x0},{fade.y0})");
         Check(fade.x1 == 0x142 && fade.x3 == 0x142, $"bord droit 0x142, lu 0x{fade.x1:X}");
         Check(fade.y2 == 0xf2 && fade.y3 == 0xf2, $"bord bas 0xf2, lu 0x{fade.y2:X}");

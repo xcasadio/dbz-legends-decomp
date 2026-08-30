@@ -4,7 +4,7 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The loading screen. FUN_800583fc @ 0x800583FC reads \CHR_DATA\LOAD.B;1 off the disc, decodes it,
+// The loading screen. ShowLoadingScreen @ 0x800583FC reads \CHR_DATA\LOAD.B;1 off the disc, decodes it,
 // uploads the picture and its CLUT to VRAM, then builds two textured bands and draws them once.
 //
 // Its only caller is FUN_80058a9c @ 0x80058A9C, which is not transliterated. This file holds the
@@ -30,7 +30,7 @@ internal static class LoadingScreen
     // silently corrupt the next symbol, which is the honest failure.
     //
     // Not registered with RamRegion: nothing here takes its address, and the raw-address resolver
-    // that FUN_80057b08 would need is TITLE_EXE_exe.ResolveAddress, which this file does not own.
+    // that LoadCompressedImageInVram would need is TITLE_EXE_exe.ResolveAddress, which this file does not own.
     internal static readonly byte[] BYTE_ARRAY_801d2000 = new byte[0xa0 * 0xf0 * 2];
 
     // GHIDRA: DISPENV_800a681c @ 0x800A681C
@@ -68,8 +68,8 @@ internal static class LoadingScreen
     internal static readonly POLY_FT4Ref POLY_FT4_800b9dfc =
         new(POLY_FT4_800b9dd4.Buf, POLY_FT4Ref.Size);
 
-    // GHIDRA: FUN_800583fc @ 0x800583FC
-    internal static void FUN_800583fc()
+    // GHIDRA: ShowLoadingScreen @ 0x800583FC
+    internal static void ShowLoadingScreen()
     {
         DeclareOrderingTableAddress();
 
@@ -120,7 +120,7 @@ internal static class LoadingScreen
 
         // The first 0x200 bytes of LOAD.B are the 256-entry CLUT, uploaded below; the LZSS payload
         // starts at +0x200.
-        TitleImages.FUN_80035778(TITLE_EXE_exe.DAT_80110000, 0x200, BYTE_ARRAY_801d2000, 0);
+        TitleImages.DecompressLzss(TITLE_EXE_exe.DAT_80110000, 0x200, BYTE_ARRAY_801d2000, 0);
         DisplayMachine.LoadImageInVram(
             ToWordBuffer(BYTE_ARRAY_801d2000, 0xa0 * 0xf0 * 2), 0x140, 0, 0xa0, 0xf0, '\0');
         DisplayMachine.LoadImageInVram(

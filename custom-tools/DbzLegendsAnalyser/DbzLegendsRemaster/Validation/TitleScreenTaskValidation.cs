@@ -5,7 +5,7 @@ using PsxSdkMonogame;
 namespace DbzLegendsRemaster.Validation;
 
 // JUSTIFICATION: backend MonoGame only
-// RELATION: bench for the title task FUN_80021e28 @ 0x80021E28.
+// RELATION: bench for the title task UpdateTitleScreen @ 0x80021E28.
 //
 // It is checked against the console rather than against itself. PCSX-Redux was stopped at the task
 // context's first AddPrim (0x80022524) on the real title screen, and the 112 bytes at 0x80017CB4
@@ -105,7 +105,7 @@ internal static class TitleScreenTaskValidation
 
         // --- la soumission ---
         // Bucket 0 is where everything lands on this frame: the two bands are AddPrim'd there
-        // directly, and FUN_80048f88 returns 0x800 - OTZ, which the console measured as bucket 0
+        // directly, and DrawSpriteGroup returns 0x800 - OTZ, which the console measured as bucket 0
         // too (a0 was 0x800A6830 exactly at the caller's first AddPrim).
         //
         // The bucket is a stack, so the head is whatever was added LAST. The title task adds the
@@ -153,7 +153,7 @@ internal static class TitleScreenTaskValidation
             $"les deux gardent leur longueur 9, lu {p.tag >> 24} / {p1.tag >> 24}");
 
         // The sprite renderer runs after the two bands, so anything ahead of them in the chain is
-        // its work. Zero would mean FUN_80048f88 emitted nothing.
+        // its work. Zero would mean DrawSpriteGroup emitted nothing.
         Check(posP1 > 0, $"le renderer de sprites a empile {posP1} primitive(s) devant les bandes");
 
         Console.WriteLine(

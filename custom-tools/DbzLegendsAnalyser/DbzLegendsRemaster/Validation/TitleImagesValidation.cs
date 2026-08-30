@@ -6,13 +6,13 @@ namespace DbzLegendsRemaster.Validation;
 
 // JUSTIFICATION: backend MonoGame only
 // RELATION: bench for the title screen's image upload. It runs main to stage TITLE.B, then walks
-// the load script the way FUN_80057c80 @ 0x80057C80 does and checks two things that matter.
+// the load script the way LoadImageListInVram @ 0x80057C80 does and checks two things that matter.
 //
-// First, the transliterated LZSS of FUN_80035778 @ 0x80035778 is compared byte for byte against
+// First, the transliterated LZSS of DecompressLzss @ 0x80035778 is compared byte for byte against
 // PsxTools.LzssDecompressor, an independent reading of the same format written for the analyser.
 // Two readings agreeing is much stronger evidence than one.
 //
-// Second, FUN_80021dd0 is run for real and VRAM is checked to have actually changed, which is what
+// Second, SetupTitleScreen is run for real and VRAM is checked to have actually changed, which is what
 // proves the uploads land.
 internal static class TitleImagesValidation
 {
@@ -69,7 +69,7 @@ internal static class TitleImagesValidation
 
                 // Notre translitteration.
                 byte[] mine = new byte[0x8000];
-                TitleImages.FUN_80035778(file, (int)dataOffset, mine, 0);
+                TitleImages.DecompressLzss(file, (int)dataOffset, mine, 0);
 
                 // L'oracle independant.
                 byte[] packed = new byte[file.Length - (int)dataOffset];
@@ -109,7 +109,7 @@ internal static class TitleImagesValidation
 
         // Et l'upload lui-meme: la VRAM doit changer.
         Array.Clear(LibGpu.Vram, 0, LibGpu.Vram.Length);
-        TitleImages.FUN_80021dd0();
+        TitleImages.SetupTitleScreen();
 
         int nonZero = 0;
         for (int i = 0; i < LibGpu.Vram.Length; i++)
@@ -124,7 +124,7 @@ internal static class TitleImagesValidation
             $"la VRAM porte {nonZero} cellules non nulles apres l'upload");
         Console.WriteLine($"  VRAM: {nonZero} cellules non nulles");
 
-        // main a deja appele FUN_80021dd0 une fois, et le banc vient de le rappeler pour mesurer
+        // main a deja appele SetupTitleScreen une fois, et le banc vient de le rappeler pour mesurer
         // l'upload, d'ou deux taches en liste 6.
         Check(TaskSystem.g_TaskListCount[6] == 2,
             $"deux taches en liste 6 apres le second appel, compte {TaskSystem.g_TaskListCount[6]}");

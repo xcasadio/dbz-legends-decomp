@@ -19,7 +19,7 @@ internal sealed class TITLE_EXE_exe
 
     // GHIDRA: BYTE_ARRAY_801d2000 @ 0x801D2000
     // Its PSX address. The buffer is LoadingScreen.BYTE_ARRAY_801d2000; FUN_80058a9c hands this raw
-    // address to ReadFile and reaches two offsets inside it through FUN_80057b08.
+    // address to ReadFile and reaches two offsets inside it through LoadCompressedImageInVram.
     private const int ByteArray801d2000Address = unchecked((int)0x801D2000);
 
     // GHIDRA: LAB_80027f5c @ 0x80027F5C
@@ -61,14 +61,14 @@ internal sealed class TITLE_EXE_exe
     // GHIDRA: DAT_80083498 @ 0x80083498
     private static int DAT_80083498;
 
-    // GHIDRA: DAT_8008344c @ 0x8008344C
-    internal static int DAT_8008344c;
+    // GHIDRA: g_BackgroundColorG @ 0x8008344C
+    internal static int g_BackgroundColorG;
 
-    // GHIDRA: DAT_80083450 @ 0x80083450
-    internal static int DAT_80083450;
+    // GHIDRA: g_BackgroundColorR @ 0x80083450
+    internal static int g_BackgroundColorR;
 
-    // GHIDRA: DAT_80083448 @ 0x80083448
-    internal static int DAT_80083448;
+    // GHIDRA: g_BackgroundColorB @ 0x80083448
+    internal static int g_BackgroundColorB;
 
     // GHIDRA: DAT_80083544 @ 0x80083544
     internal static int DAT_80083544;
@@ -80,7 +80,7 @@ internal sealed class TITLE_EXE_exe
     internal static ushort DAT_800833f0;
 
     // GHIDRA: DAT_80083454 @ 0x80083454
-    // State word of the display/fade machine FUN_80038228 @ 0x80038228, still open. Read here
+    // State word of the display/fade machine ControlScreenFade @ 0x80038228, still open. Read here
     // because FUN_80037388 gates its AddPrim on it.
     internal static int DAT_80083454;
 
@@ -110,16 +110,16 @@ internal sealed class TITLE_EXE_exe
         ExitCriticalSection();
         FntLoad(0x3c0, 0x100);
         DAT_80083498 = FntOpen(0x10, 0x10, 0x100, 200, 0, 0x200);
-        DAT_8008344c = 0;
-        DAT_80083450 = 0;
-        DAT_80083448 = 0;
+        g_BackgroundColorG = 0;
+        g_BackgroundColorR = 0;
+        g_BackgroundColorB = 0;
         SetupGeometry(0xa8, 0x80, 0x1000, 0, 0, 0, 0x1000, 0, 0, 0);
         TaskSystem.RegisterCallback(FUN_80037388_Address, FUN_80037388);
         TaskSystem.CreateTask(FUN_80037388_Address, 0, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_80037388();
-        PrimitivePools.FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
+        PrimitivePools.CreatePrimitivePools(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
         DAT_80083544 = 0;
-        DisplayMachine.FUN_80038228(8, 0);
+        DisplayMachine.ControlScreenFade(8, 0);
         FUN_80058d64();
 
         do
@@ -133,26 +133,33 @@ internal sealed class TITLE_EXE_exe
             SharedHighRam.SHORT_ARRAY_801ff000[0x80] = 2;
             SharedHighRam.SHORT_ARRAY_801ff000[0x87] =
                 (short)(SharedHighRam.SHORT_ARRAY_801ff000[0x87] + 1);
-            DisplayMachine.FUN_80038228(8, 0);
+            DisplayMachine.ControlScreenFade(8, 0);
             FrameLoop.DAT_800835b4 = 1;
-            TitleImages.FUN_80021dd0();
+            TitleImages.SetupTitleScreen();
             FrameLoop.RunFrameLoop();
             FUN_80058a9c();
-            DisplayMachine.FUN_80038228(2, 4);
-            FrameLoop.DAT_80083504 = 0;
+            DisplayMachine.ControlScreenFade(2, 4);
+            FrameLoop.g_FrameCounter = 0;
             FrameLoop.RunFrameLoop();
         } while (true);
     }
 
     // GHIDRA: FUN_80058a9c @ 0x80058A9C
-    // The title-to-select handover, and the only reference to it in the whole overlay is the call
-    // at 0x800583BC inside main. It frees the six live primitive pools, destroys the first twenty
-    // task lists, re-arms the heap from scratch, re-arms the geometry for the select screen
+    // What main runs between its two RunFrameLoop calls, and the only reference to it in the whole
+    // overlay is the call at 0x800583BC inside main. It frees the six live primitive pools,
+    // destroys the first twenty task lists, re-arms the heap from scratch, re-arms the geometry
     // (h = 0x200 against the title's 0x1000), rebuilds the task set, loads two CD files plus a
     // synthetic CLUT, and latches DAT_80083544 so the second and later passes skip one task.
     //
-    // THE ORDER OF THE FIRST THREE STEPS IS LOAD-BEARING: six FUN_80057030 frees, then twenty
-    // FUN_80049a14 list destructions, then InitHeap. Reversing any pair changes what the heap holds.
+    // BLOCKED: WHICH screen it builds. It is NOT the character select: SELECT.EXE is a separate
+    // overlay, reached through LoadExec from UpdateTitleScreen's state 5, so nothing inside
+    // TITLE.EXE can build it. The assets it loads - a stage archive, character portraits, effect
+    // textures, a camera task, an audio task, a 0x3034-byte object - point at an in-overlay scene,
+    // but LAB_8004c010's four arms are undecoded, so the screen has no closed identity. That is
+    // why this function keeps its raw name while its callees do not.
+    //
+    // THE ORDER OF THE FIRST THREE STEPS IS LOAD-BEARING: six FreePrimitivePool frees, then twenty
+    // DeleteTaskList list destructions, then InitHeap. Reversing any pair changes what the heap holds.
     //
     // THE FOUR CreateTask SITES ARE TRANSLITERATED IN FULL — same callback addresses, ids, list
     // indices, context sizes and insert points as the console. TaskSystem stores the raw PSX
@@ -189,21 +196,21 @@ internal sealed class TITLE_EXE_exe
         byte[] local_210 = new byte[0x200];
 
         uVar4 = 0;
-        ClearOTag(FrameLoop.DAT_800834e0 + 0x70, 0x800);
+        ClearOTag(FrameLoop.g_ActiveDrawEnvAddress + 0x70, 0x800);
         do
         {
             uVar3 = uVar4 & 0xffff;
             uVar4 = uVar4 + 1;
 
-            // DAT_800835f8 is re-loaded from memory on every iteration in the original
-            // (lui/lw at 0x80058AC0), not hoisted: FUN_80057030 can change it.
-            PrimitivePools.FUN_80057030(PrimitivePools.DAT_800835f8, uVar3);
+            // g_PrimitivePoolContext is re-loaded from memory on every iteration in the original
+            // (lui/lw at 0x80058AC0), not hoisted: FreePrimitivePool can change it.
+            PrimitivePools.FreePrimitivePool(PrimitivePools.g_PrimitivePoolContext, uVar3);
         } while ((int)uVar4 < 6);
 
         uVar4 = 0;
         do
         {
-            TaskSystem.FUN_80049a14(uVar4 & 0xffff);
+            TaskSystem.DeleteTaskList(uVar4 & 0xffff);
             uVar4 = uVar4 + 1;
         } while ((int)uVar4 < 0x14);
 
@@ -211,14 +218,14 @@ internal sealed class TITLE_EXE_exe
         // created below survives and why DAT_80083544 only has to gate its creation.
         InitHeap(HeapBaseAddress, 0x10000);
         SetupGeometry(0xa0, 0xef, 0x200, 0, 0, 0, 0x400, 0, 0, 0);
-        DisplayMachine.FUN_80038228(8, 0);
+        DisplayMachine.ControlScreenFade(8, 0);
 
         // Site 1. main creates the SAME callback in the SAME list with id 0; here the id is 0x58.
         // The ids differ in the original, and 0x58 is reproduced.
         TaskSystem.CreateTask(FUN_80037388_Address, 0x58, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_80037388();
-        PrimitivePools.FUN_80056dc0(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
-        LoadingScreen.FUN_800583fc();
+        PrimitivePools.CreatePrimitivePools(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
+        LoadingScreen.ShowLoadingScreen();
 
         // Site 2. Note the asymmetry with site 3 below: this one is handed g_TaskListHead[0x13]
         // (lw v0,-0x6760 at 0x80058BB4, and 0x800798A0 - 0x80079854 = 19 * 4), while site 3 is
@@ -251,8 +258,8 @@ internal sealed class TITLE_EXE_exe
         // The two blocks EFF_AUTO.B carries at +0xA0 and +0x355C, each decoding to a 0x40 x 0x100
         // texture. 0x801D20A0 and 0x801D555C are raw addresses inside BYTE_ARRAY_801d2000, which
         // ResolveAddress now answers for.
-        TitleImages.FUN_80057b08(unchecked((int)0x801d20a0), 0x280, 0, 0x40, 0x100, '\0');
-        TitleImages.FUN_80057b08(unchecked((int)0x801d555c), 0x280, 0x100, 0x40, 0x100, '\0');
+        TitleImages.LoadCompressedImageInVram(unchecked((int)0x801d20a0), 0x280, 0, 0x40, 0x100, '\0');
+        TitleImages.LoadCompressedImageInVram(unchecked((int)0x801d555c), 0x280, 0x100, 0x40, 0x100, '\0');
         DisplayMachine.LoadImageInVram(
             ToWordBuffer(LoadingScreen.BYTE_ARRAY_801d2000, 0x50 * 1 * 2), 0, 0x1e0, 0x50, 1, '\x01');
         ReadFile("\\CHR_DATA\\CH_EF_P0.B;1".ToCharArray(), ByteArray801d2000Address, 0);
@@ -278,9 +285,9 @@ internal sealed class TITLE_EXE_exe
         // as of 2026-08-30, so the twelve portrait slots land on twelve different sectors.
         FaceImages.LoadFACE_B();
 
-        SelectScreenSetup.FUN_80035700();
-        SelectScreenSetup.FUN_8004737c(uVar6);
-        SelectScreenSetup.FUN_80027354();
+        SecondScreenSetup.FUN_80035700();
+        SecondScreenSetup.FUN_8004737c(uVar6);
+        SecondScreenSetup.FUN_80027354();
         DAT_80083544 = 1;
     }
 
@@ -420,10 +427,10 @@ internal sealed class TITLE_EXE_exe
         PopMatrix();
         if (1 < DAT_80083454)
         {
-            // 0x206c reaches ordering-table bucket 0x7ff: DAT_800834e0 + 0x70 is the table's first
+            // 0x206c reaches ordering-table bucket 0x7ff: g_ActiveDrawEnvAddress + 0x70 is the table's first
             // entry, so (0x206c - 0x70) / 4 = 0x7ff, the last bucket. Forward-linked, that bucket
             // draws last, which is what puts the fade quad over everything else.
-            AddPrim(FrameLoop.DAT_800834e0 + 0x206c, DisplayMachine.POLY_GT4_800b9518);
+            AddPrim(FrameLoop.g_ActiveDrawEnvAddress + 0x206c, DisplayMachine.g_FadeQuad);
         }
     }
 
@@ -437,7 +444,7 @@ internal sealed class TITLE_EXE_exe
         new(RamRegion(PolyFt4Array800a8894Address, POLY_FT4Ref.Size * 5), 0);
 
     // GHIDRA: DAT_800a897a @ 0x800A897A
-    // Cleared by FUN_80058d64. FUN_80038228 @ 0x80038228 returns 1 immediately when its bit 0 is
+    // Cleared by FUN_80058d64. ControlScreenFade @ 0x80038228 returns 1 immediately when its bit 0 is
     // set, so it gates the whole display machine.
     internal static byte DAT_800a897a;
 
@@ -446,7 +453,7 @@ internal sealed class TITLE_EXE_exe
     // (0x27,0x67), clut 0x7985, tpage 0x19, flat white. Field order follows the original, which
     // writes them out of sequence through a single roaming byte pointer.
     //
-    // NOT called from main yet: it comes after FUN_80038228(8, 0), which is still open, and
+    // NOT called from main yet: it comes after ControlScreenFade(8, 0), which is still open, and
     // reordering the two would not be faithful.
     internal static void FUN_80058d64()
     {
@@ -574,7 +581,7 @@ internal sealed class TITLE_EXE_exe
         }
 
         // BYTE_ARRAY_801d2000 @ 0x801D2000, the CD staging buffer LoadingScreen declares. Four of
-        // FUN_80058a9c's calls address it raw — ReadFile twice and FUN_80057b08 at +0xA0 and
+        // FUN_80058a9c's calls address it raw — ReadFile twice and LoadCompressedImageInVram at +0xA0 and
         // +0x355C — and ReadCDData hands its PSX address straight to CdRead, which writes through
         // PsxRam. Without this row those reads and decodes silently go nowhere.
         if (address >= ByteArray801d2000Address
@@ -584,12 +591,12 @@ internal sealed class TITLE_EXE_exe
         }
 
         return TitleImages.Resolve(address)
-               ?? SelectScreenSetup.Resolve(address)
+               ?? SecondScreenSetup.Resolve(address)
                // astruct_1_800acda0 @ 0x800ACDA0, the 23 x 23 backdrop grid: FUN_800376c0 writes
                // its twelve SVECTOR halfwords per element by raw PSX address. The same array is
                // also registered with LibGpu.RamRegion, so both maps hand back one buffer.
                ?? StageBackdrop.Resolve(address)
-               // DAT_8007a220 @ 0x8007A220 and DAT_80079b34 @ 0x80079B34, the two .data spans
+               // g_FaceVramCoordTable @ 0x8007A220 and DAT_80079b34 @ 0x80079B34, the two .data spans
                // LoadFACE_B reads by raw address.
                ?? FaceImages.Resolve(address)
                ?? SharedHighRam.Resolve(address)

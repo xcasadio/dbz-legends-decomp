@@ -3,21 +3,21 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.TITLE_EXE;
 
-// The stage backdrop. FUN_800376c0 @ 0x800376C0 is the sixth step of the select-screen build-up
+// The stage backdrop. FUN_800376c0 @ 0x800376C0 is the sixth step of the build-up
 // FUN_80058a9c @ 0x80058A9C performs, and find-cross-references reports exactly ONE reference to it
 // in the whole overlay: the call at 0x80058CF4.
 //
 // It creates two more tasks in list 1, and proceeds only if the SECOND one was created. Then it
 // reads one \STG\STGnTX.B;1 texture archive off the disc into BYTE_ARRAY_801d2000, runs the load
-// script that sits at the head of that same buffer through FUN_80057c80 @ 0x80057C80, copies the
-// stage's three background-colour components out of INT_ARRAY_80078948 into the DRAWENV globals,
+// script that sits at the head of that same buffer through LoadImageListInVram @ 0x80057C80, copies the
+// stage's three background-colour components out of g_StageBackgroundColorTable into the DRAWENV globals,
 // creates a third task through FUN_80037104 @ 0x80037104, and finally lays out a 23 x 23 grid of
 // world-space quads at 0x800ACDA0.
 internal static class StageBackdrop
 {
     // GHIDRA: BYTE_ARRAY_801d2000 @ 0x801D2000
     // Its PSX address. The buffer is LoadingScreen.BYTE_ARRAY_801d2000; this function hands the raw
-    // address to ReadFile and then to FUN_80057c80 twice, once as the script pointer and once as
+    // address to ReadFile and then to LoadImageListInVram twice, once as the script pointer and once as
     // the base every entry's dataOffset is measured from.
     private const int ByteArray801d2000Address = unchecked((int)0x801D2000);
 
@@ -27,7 +27,7 @@ internal static class StageBackdrop
     // of padding. The eight are, verbatim,
     //   \STG\STG1TX.B;1 \STG\STG2TX.B;1 \STG\STG3TX.B;1 \STG\STG4TX.B;1
     //   \STG\STG5TX.B;1 \STG\STG6TX.B;1 \STG\STG7TX.B;1 \STG\STG8TX.B;1
-    // and 0x800788B8 + 8 * 18 = 0x80078948, which is exactly where INT_ARRAY_80078948 begins — so
+    // and 0x800788B8 + 8 * 18 = 0x80078948, which is exactly where g_StageBackgroundColorTable begins — so
     // the table has eight entries and not one more.
     //
     // The name Ghidra gives the symbol says MD; the contents say TX. The Ghidra name is kept.
@@ -46,17 +46,17 @@ internal static class StageBackdrop
         "\\STG\\STG8TX.B;1".ToCharArray(),
     };
 
-    // GHIDRA: INT_ARRAY_80078948 @ 0x80078948
+    // GHIDRA: g_StageBackgroundColorTable @ 0x80078948
     // Initialised .data (0x80074FB4..0x800831B3), lifted out of the overlay image with read-memory.
     // Twenty-four ints, walked as [index * 3], [index * 3 + 1], [index * 3 + 2] — eight stages of
     // three components each. The extent is closed at both ends: it starts where STGxMD_FileNames
     // ends, and the 96 bytes after 0x80078948 are followed at 0x800789A8 by unrelated data
     // (3D 10 33 00 35 23 ...) rather than by more values of this shape.
     //
-    // The three ints feed DAT_80083450, DAT_8008344c and DAT_80083448 in that order, which
+    // The three ints feed g_BackgroundColorR, g_BackgroundColorG and g_BackgroundColorB in that order, which
     // main @ 0x800581DC zeroes together and which FrameLoop's DRAWENV carries as r0/g0/b0.
     // Nothing read here says which component is which, so nothing below claims one.
-    internal static readonly int[] INT_ARRAY_80078948 =
+    internal static readonly int[] g_StageBackgroundColorTable =
     {
         0xa0, 0xd0, 0xf8,
         0x70, 0xc8, 0x80,
@@ -71,7 +71,7 @@ internal static class StageBackdrop
     // GHIDRA: astruct_1_800acda0 @ 0x800ACDA0
     // The backdrop grid. 23 x 23 elements of 0x48 bytes = 0x94C8 bytes, all of it inside .bss
     // (0x800836BC..0x800B9EEF) and clear of every other modelled block: it ends at 0x800B6267, well
-    // below POLY_GT4_800b9518 @ 0x800B9518.
+    // below g_FadeQuad @ 0x800B9518.
     //
     // The element is a POLY_FT4 followed by four SVECTORs, closed from the store offsets rather than
     // assumed. InitializePolyFt4 writes the psyq POLY_FT4 fields at +0x04..+0x25, and the grid loop
@@ -171,13 +171,13 @@ internal static class StageBackdrop
 
             // Both arguments are the SAME address here. The archive carries its load script at
             // offset 0 and every entry's dataOffset is measured from that same offset 0, which is
-            // why the two pointers coincide — unlike FUN_80021dd0 @ 0x80021DD0, where the script
+            // why the two pointers coincide — unlike SetupTitleScreen @ 0x80021DD0, where the script
             // sits at &DAT_80110000 + DAT_80110004 and the base is &DAT_80110000.
-            TitleImages.FUN_80057c80(ByteArray801d2000Address, ByteArray801d2000Address);
+            TitleImages.LoadImageListInVram(ByteArray801d2000Address, ByteArray801d2000Address);
             polyFt4 = Astruct1800acda0Address;
-            TITLE_EXE_exe.DAT_80083450 = INT_ARRAY_80078948[uVar1 * 3];
-            TITLE_EXE_exe.DAT_8008344c = INT_ARRAY_80078948[uVar1 * 3 + 1];
-            TITLE_EXE_exe.DAT_80083448 = INT_ARRAY_80078948[uVar1 * 3 + 2];
+            TITLE_EXE_exe.g_BackgroundColorR = g_StageBackgroundColorTable[uVar1 * 3];
+            TITLE_EXE_exe.g_BackgroundColorG = g_StageBackgroundColorTable[uVar1 * 3 + 1];
+            TITLE_EXE_exe.g_BackgroundColorB = g_StageBackgroundColorTable[uVar1 * 3 + 2];
             sVar6 = 0x100;
 
             // Ghidra prints this call with no argument because it declares the callee void-param,
@@ -246,7 +246,7 @@ internal static class StageBackdrop
     // `void FUN_80037104(undefined2 param_1)`, because the very first instruction of the body,
     // `sh a0,0x2A4(gp)` at 0x80037108, stores a0 into DAT_80083458. The value a0 holds at the call
     // is the stage index: `addu a0,s0,zero` at 0x80037778 puts uVar1 there immediately after the
-    // FUN_80057c80 call returns, and the eighteen instructions from 0x8003777C to 0x800377D8 write
+    // LoadImageListInVram call returns, and the eighteen instructions from 0x8003777C to 0x800377D8 write
     // only s3, s2, v0, at, v1 and a1 — a0 is untouched all the way to the `jal 0x80037104` at
     // 0x800377DC, whose delay slot is `ori s4,zero,0x100`, the sVar6 initialiser, not an argument.
     internal static void FUN_80037104(ushort param_1)
@@ -308,7 +308,7 @@ internal static class StageBackdrop
     // JUSTIFICATION: C# language bridge only
     // RELATION: the original hands InitializePolyFt4 the raw `POLY_FT4 *` its grid cursor holds. A
     // primitive in this port is a (byte[], offset) pair, so the PSX address is split back into one
-    // against the grid's own base — the same split SpriteRenderer.FUN_80048f88 performs for its
+    // against the grid's own base — the same split SpriteRenderer.DrawSpriteGroup performs for its
     // pool pointer, done here against a known base because the grid is a single registered block.
     private static POLY_FT4Ref PolyFt4At(int address) =>
         new(astruct_1_800acda0, address - Astruct1800acda0Address);

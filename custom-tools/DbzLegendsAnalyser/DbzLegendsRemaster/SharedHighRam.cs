@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster;
 
@@ -14,7 +14,7 @@ namespace DbzLegendsRemaster;
 // 0x801FF03C. The bootstrap configures the pad for the whole game; every later overlay inherits it.
 //
 // Bytes rather than a short array, because the region is read at three widths. The title task
-// FUN_80021e28 @ 0x80021E28 writes single bytes at 0x58..0x5d, a word at 0x68, and walks the save
+// UpdateTitleScreen @ 0x80021E28 writes single bytes at 0x58..0x5d, a word at 0x68, and walks the save
 // table at 0x200 as both ints and shorts. Only bytes can carry all three.
 //
 // The extent, 0x248, is what the code actually touches and no more: LAB_80021F98 clears
@@ -123,7 +123,7 @@ internal static class SharedHighRam
             set => MipsMemory.WriteI32(_buf, _offset + (index * 4), value);
         }
 
-        // FUN_80021e28 walks this table by raw byte offset, reading halfwords out of it.
+        // UpdateTitleScreen walks this table by raw byte offset, reading halfwords out of it.
         internal ushort ReadU16At(int byteOffset) => MipsMemory.ReadU16(_buf, _offset + byteOffset);
     }
 }
