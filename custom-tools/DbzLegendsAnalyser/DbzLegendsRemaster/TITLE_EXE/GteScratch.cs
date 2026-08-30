@@ -18,13 +18,49 @@ internal static class GteScratch
     internal static readonly LibGte.MATRIX MATRIX_1f800000 = new();
 
     // GHIDRA: SVECTOR_1f800020 @ 0x1F800020
+    // 0x1F800020..0x1F80003F is one contiguous four-element SVECTOR array: FUN_80048f88
+    // @ 0x80048F88 fills it with the four corners of the sprite quad and hands all four to
+    // RotAverage4 in that order. This one is corner 0, the top-left.
     internal static readonly LibGte.SVECTOR SVECTOR_1f800020 = new();
+
+    // GHIDRA: SVECTOR_1f800028 @ 0x1F800028
+    // Corner 1, the top-right: vx = localX + width. Written at 0x800492E0 / 0x800492E8 / 0x800492F0.
+    internal static readonly LibGte.SVECTOR SVECTOR_1f800028 = new();
+
+    // GHIDRA: SVECTOR_1f800030 @ 0x1F800030
+    // Corner 2, the bottom-left: vy = localY + height. Written at 0x800492F8 / 0x80049300 /
+    // 0x80049308.
+    internal static readonly LibGte.SVECTOR SVECTOR_1f800030 = new();
+
+    // GHIDRA: SVECTOR_1f800038 @ 0x1F800038
+    // Corner 3, the bottom-right. Written at 0x80049310 / 0x80049318 / 0x80049320, its vx and vy
+    // copied from corner 1 and corner 2 rather than recomputed.
+    internal static readonly LibGte.SVECTOR SVECTOR_1f800038 = new();
 
     // GHIDRA: VECTOR_1f800048 @ 0x1F800048
     internal static readonly LibGte.VECTOR VECTOR_1f800048 = new();
 
+    // GHIDRA: SVECTOR_1f800058 @ 0x1F800058
+    // The RotMatrix input, reused twice per sprite record by FUN_80048f88: first as the per-record
+    // flip/spin (flipX ? 0x800 : 0, flipY ? 0x800 : 0, record.rotZ), then as the group-wide
+    // rotation (param_5 & 0xfff, param_6, param_7). Written at 0x8004922C, 0x8004927C, 0x8004928C,
+    // 0x800492A0, 0x800492B0, 0x80049368, 0x80049378 and 0x80049380.
+    internal static readonly LibGte.SVECTOR SVECTOR_1f800058 = new();
+
+    // GHIDRA: VECTOR_1f800060 @ 0x1F800060
+    // The ScaleMatrix vector: vx = record.scaleX + param_8 (0x80049240), vy = record.scaleY +
+    // param_9 (0x80049260), vz = the hard-coded 0x1000 at 0x8004924C / 0x80049254.
+    internal static readonly LibGte.VECTOR VECTOR_1f800060 = new();
+
+    // GHIDRA: DAT_1f800074 @ 0x1F800074
+    // PARTIAL: RotAverage4's (long *) p argument — the `stdp` depth-cue readback. Its address is
+    // materialised at 0x8004941C. A cross-reference search over TITLE.EXE finds exactly that one
+    // reference, so it is a write-only sink: nothing in the overlay ever reads it back.
+    internal static readonly int[] DAT_1f800074 = new int[1];
+
     // GHIDRA: DAT_1f800078 @ 0x1F800078
     // PARTIAL: passed to RotTrans as its (long *) flag argument; only ever written by the callee.
+    // FUN_80048f88 @ 0x80048F88 passes it to RotAverage4 in the same role.
     internal static readonly int[] DAT_1f800078 = new int[1];
 
     // GHIDRA: SVECTOR_1f80007c @ 0x1F80007C

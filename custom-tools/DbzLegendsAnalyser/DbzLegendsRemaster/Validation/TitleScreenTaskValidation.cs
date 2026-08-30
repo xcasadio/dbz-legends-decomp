@@ -104,22 +104,60 @@ internal static class TitleScreenTaskValidation
         Check(p1.y3 == 0xf0, $"p[1].y3 = 0xf0, lu 0x{p1.y3:X}");
 
         // --- la soumission ---
-        // FUN_80048f88 is not ported and returns 0, so both bands land in bucket 0, which is where
-        // the console put them on the captured frame: a0 was 0x800A6830 exactly.
+        // Bucket 0 is where everything lands on this frame: the two bands are AddPrim'd there
+        // directly, and FUN_80048f88 returns 0x800 - OTZ, which the console measured as bucket 0
+        // too (a0 was 0x800A6830 exactly at the caller's first AddPrim).
+        //
+        // The bucket is a stack, so the head is whatever was added LAST. The title task adds the
+        // two bands in the middle of its tail and then calls the sprite renderer twice more, so
+        // the bands sit further down the chain, not at the head. What has to hold is their ORDER:
+        // p is added before p_00, so p_00 links to p.
         uint bucket0 = ReadWord(FrameLoop.OT_800a6830, 0);
         int contextLow = contextAddress & 0x00ffffff;
         Check((bucket0 & 0x00ffffff) != 0x00ffffff && bucket0 != 0,
             $"la case 0 porte une primitive, lu 0x{bucket0:X8}");
 
-        // The second AddPrim leaves p[1] at the head, and p[1] links to p[0].
-        Check((bucket0 & 0x00ffffff) == ((contextLow + POLY_FT4Ref.Size) & 0x00ffffff),
-            $"la case 0 pointe sur p[1], attendu 0x{(contextLow + POLY_FT4Ref.Size) & 0xffffff:X6}, lu 0x{bucket0 & 0x00ffffff:X6}");
+        int bandTop = (contextLow + POLY_FT4Ref.Size) & 0x00ffffff;
+        int posP1 = -1;
+        int posP0 = -1;
+        int chainLength = 0;
+        uint link = bucket0 & 0x00ffffff;
+        while (link != 0x00ffffff && link != 0 && chainLength < 4096)
+        {
+            if ((int)link == bandTop && posP1 < 0)
+            {
+                posP1 = chainLength;
+            }
+
+            if ((int)link == contextLow && posP0 < 0)
+            {
+                posP0 = chainLength;
+            }
+
+            if (!LibGpu.RamResolveLink(link, out byte[] nodeBuf, out int nodeOff))
+            {
+                break;
+            }
+
+            link = ReadWord(nodeBuf, nodeOff) & 0x00ffffff;
+            chainLength++;
+        }
+
+        Check(posP1 >= 0, $"p[1] est dans la chaine de la case 0, position {posP1}");
+        Check(posP0 >= 0, $"p[0] est dans la chaine de la case 0, position {posP0}");
+        Check(posP1 >= 0 && posP0 == posP1 + 1,
+            $"p[1] precede immediatement p[0], positions {posP1} et {posP0}");
         Check((p1.tag & 0x00ffffff) == (uint)contextLow,
             $"p[1] chaine vers p[0], attendu 0x{contextLow:X6}, lu 0x{p1.tag & 0x00ffffff:X6}");
         Check((p.tag >> 24) == 9 && (p1.tag >> 24) == 9,
             $"les deux gardent leur longueur 9, lu {p.tag >> 24} / {p1.tag >> 24}");
 
-        Console.WriteLine($"  case 0 -> 0x{bucket0 & 0x00ffffff:X6} -> 0x{p1.tag & 0x00ffffff:X6}");
+        // The sprite renderer runs after the two bands, so anything ahead of them in the chain is
+        // its work. Zero would mean FUN_80048f88 emitted nothing.
+        Check(posP1 > 0, $"le renderer de sprites a empile {posP1} primitive(s) devant les bandes");
+
+        Console.WriteLine(
+            $"  case 0: {chainLength} primitives, p[1] en position {posP1}, p[0] en {posP0}");
 
         // --- la machine a etats, etat 1: le fondu monte de 8 par frame jusqu'a 0x80 ---
         int frames = 0;
@@ -139,6 +177,29 @@ internal static class TitleScreenTaskValidation
         Check(p2.x0 == (short)(xBefore - 0x50),
             $"x0 recule de 0x50 par frame, {xBefore} -> {p2.x0}");
         Check(p.x0 == (short)-p2.x0, $"p[0].x0 suit -x0, lu {p.x0} pour x0 {p2.x0}");
+
+        // --- la preuve de bout en bout: la chaine atteint-elle la VRAM ---
+        // Rien n'est asserti sur CE QUE ca dessine - les couleurs et les UV sont deja verifies
+        // champ par champ plus haut. La question ici est la seule qui restait ouverte: la
+        // soumission traverse-t-elle jusqu'au framebuffer. C'est exactement ce qui echouait avant,
+        // et en silence: le rasteriseur resolvait ses liens par le seul miroir 0x80000000 alors que
+        // TITLE.EXE arme son tas a 0x00010000, donc chaque primitive etait jetee sans un mot.
+        ushort[] before = new ushort[LibGpu.Vram.Length];
+        Array.Copy(LibGpu.Vram, before, LibGpu.Vram.Length);
+
+        LibGpu.DrawOTag(unchecked((int)0x800A6830));
+
+        int changed = 0;
+        for (int i = 0; i < LibGpu.Vram.Length; i++)
+        {
+            if (LibGpu.Vram[i] != before[i])
+            {
+                changed++;
+            }
+        }
+
+        Check(changed > 0, $"la soumission ecrit dans la VRAM, {changed} cellules changees");
+        Console.WriteLine($"  VRAM: {changed} cellules changees par la soumission");
 
         Console.WriteLine(s_failures == 0
             ? "TITLE-TASK: toutes les verifications passent"

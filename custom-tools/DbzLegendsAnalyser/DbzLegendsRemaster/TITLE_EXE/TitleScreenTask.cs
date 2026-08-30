@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibGpu;
 
@@ -338,20 +338,22 @@ internal static class TitleScreenTask
         if (iVar10 == 3)
         {
             ushort uVar1 = (ushort)p_02.ReadHalf(4);
-            FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x10),
-                (int)((uVar1 - 0x50) * 0x10000) >> 0x10, 0, 0x1000, 0, 0, 0, 0x1000, 0x1000, 0, 0, 0,
-                0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
+            SpriteRenderer.FUN_80048f88(
+                TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x10),
+                (short)((int)((uVar1 - 0x50) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000, 0x1000,
+                0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
         }
 
         ushort uVar2 = (ushort)p_02.ReadHalf(6);
-        FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x08),
-            (int)((-0x50 - (uint)uVar2) * 0x10000) >> 0x10, 0, 0x1000, 0, 0, 0, 0x1000, 0x1000, 0, 0,
-            0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
+        SpriteRenderer.FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x08),
+            (short)((int)((-0x50 - (uint)uVar2) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000,
+            0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
 
         ushort uVar3 = (ushort)p_02.ReadHalf(6);
-        int iVar8 = FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x0c),
-            (int)((uVar3 - 0x50) * 0x10000) >> 0x10, 0, 0x1000, 0, 0, 0, 0x1000, 0x1000, 0, 0, 0, 0,
-            0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
+        int iVar8 = SpriteRenderer.FUN_80048f88(
+            TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x0c),
+            (short)((int)((uVar3 - 0x50) * 0x10000) >> 0x10), 0, 0x1000, 0, 0, 0, 0x1000, 0x1000, 0,
+            0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
 
         short sVar6 = p_02.x0;
         p.y0 = 0;
@@ -373,6 +375,17 @@ internal static class TitleScreenTask
         iVar10 = FrameLoop.DAT_800834e0;
         p_00.x1 = (short)(sVar6 + 0x140);
         sVar6 = p_02.x0;
+
+        // The bucket for both background bands, derived from the third FUN_80048f88 call's return
+        // exactly the way FUN_80048f88 derives its own. That return is now a real OT index rather
+        // than the constant 0 the stub used to give back, so the bands no longer always land in
+        // bucket 0.
+        // PARTIAL: when FUN_80048f88 returns -1 - no record was added, or the last one failed the
+        // OT range test - this evaluates to DAT_800834e0 + 0x6c, which is FOUR BYTES BELOW the
+        // ordering table at DAT_800834e0 + 0x70. On the console that writes into the tail of
+        // DRAWENV_800a67c0. In this port only the table itself is a registered RAM region, so
+        // AddPrim cannot resolve that address and silently does nothing. The original is not
+        // corrected here; the difference is in what the unmodelled write lands on.
         iVar8 = (iVar8 * 4) + 0x70;
         p_00.y2 = 0xf0;
         p_00.x2 = sVar6;
@@ -382,10 +395,11 @@ internal static class TitleScreenTask
         AddPrim(iVar8 + iVar10, p);
         AddPrim(iVar8 + FrameLoop.DAT_800834e0, p_00);
 
-        FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, piVar14c),
-            unchecked((int)0xffffffb0), 0, 0x1000, 0, 0,
+        SpriteRenderer.FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, piVar14c),
+            (short)unchecked((int)0xffffffb0), 0, 0x1000, 0, 0,
             0, 0x1000, 0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
-        uVar7 = (uint)FUN_80048f88(TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x04),
+        uVar7 = (uint)SpriteRenderer.FUN_80048f88(
+            TitleBBufferAddress + MipsMemory.ReadI32(file, iVar12b + 0x04),
             0x1b0, 0, 0x1000, 0, 0,
             0, 0x1000, 0x1000, 0, 0, 0, 0, 0, p_02.u2, p_02.u2, p_02.u2, unchecked((int)0xffffe890));
 
@@ -442,22 +456,6 @@ internal static class TitleScreenTask
         // Measured the same way, breaking at 0x80021EC0: v0 = 0, meaning no valid save was found.
         // The caller then sets DAT_801ff068 = 2 and clears the table, which is the state C# statics
         // already start in.
-        return 0;
-    }
-
-    // GHIDRA: FUN_80048f88 @ 0x80048F88
-    private static int FUN_80048f88(int groupAddress, int x, int y, int scaleX, int p5, int p6,
-        int p7, int scaleY, int scaleZ, int p10, int p11, int p12, int p13, int p14, int r, int g,
-        int b, int z)
-    {
-        // BLOCKED: the sprite-group renderer, 1404 bytes of GTE work — PushMatrix, RotMatrix,
-        // ScaleMatrix, CompMatrix, TransMatrix, RotAverage4 and one AddPrim. Every callee is a
-        // libgte routine the SDK already carries, so it is portable; it is simply not ported yet.
-        //
-        // Its return is the Z the caller turns into an ordering-table bucket
-        // (iVar8 * 4 + 0x70), so returning 0 puts both background bands in bucket 0. That matches
-        // what the console does on the frame this was measured on: breaking at the first AddPrim
-        // gave a0 = 0x800A6830, which is bucket 0 exactly.
         return 0;
     }
 }
