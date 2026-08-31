@@ -9,12 +9,12 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // pairs: a BUILD that arms the sprites for a screen and plays it in, and an UNWIND that plays the
 // same screen out when the player cancels. The seventh, FUN_8002cc04, is the hand-off transition
 // every branch runs once the choice is made.
-//     0x80029684  FUN_80029684   build   the DEMO save-slot picker      (unwind FUN_80029f9c)
-//     0x80029F9C  FUN_80029f9c   unwind
+//     0x80029684  BuildDemoSaveSlotScreen   build   the DEMO save-slot picker      (unwind UnwindDemoSaveSlotScreen)
+//     0x80029F9C  UnwindDemoSaveSlotScreen   unwind
 //     0x8002A178  FUN_8002a178   build   the VS sub-menu                (unwind FUN_8002a6f8)
 //     0x8002A6F8  FUN_8002a6f8   unwind
-//     0x8002A7F4  FUN_8002a7f4   build   the SP save-slot picker        (unwind FUN_8002b174)
-//     0x8002B174  FUN_8002b174   unwind
+//     0x8002A7F4  BuildSpSaveSlotScreen   build   the SP save-slot picker        (unwind UnwindSpSaveSlotScreen)
+//     0x8002B174  UnwindSpSaveSlotScreen   unwind
 //     0x8002CC04  FUN_8002cc04   the hand-off transition, plus its satellite pass FUN_8002dec0
 //                                @ 0x8002DEC0
 //
@@ -46,7 +46,7 @@ internal static class ScreenDecoration
 {
     // GHIDRA: g_SpBuildDigitCellRect @ 0x80055A10
     // .sdata, undefined4, image value 0x00DD0000 (the bytes at 0x80055A10 are 00 00 DD 00, read with
-    // read-memory). The FIRST half of the RECT constant FUN_8002a7f4 copies into its stack frame:
+    // read-memory). The FIRST half of the RECT constant BuildSpSaveSlotScreen copies into its stack frame:
     // x = 0x0000, y = 0x00DD. It is the same four-by-sixteen digit cell as ModeBranches.g_SpBranchDigitCellRect,
     // which is the copy RunSpModeScreen makes of the same source RECT.
     private static readonly uint g_SpBuildDigitCellRect = 0x00DD0000;
@@ -82,7 +82,7 @@ internal static class ScreenDecoration
         0xFF, 0x01, 0x04, 0x08, 0x0D, 0x13, 0x1A, 0x22,
     };
 
-    // GHIDRA: FUN_80029684 @ 0x80029684
+    // GHIDRA: BuildDemoSaveSlotScreen @ 0x80029684
     // 2328 bytes. THE DEMO SAVE-SLOT PICKER'S BUILD, called by ModeBranches.RunDemoModeScreen with the
     // preselected cursor and the base of the three eight-byte records at 0x801FF200.
     //
@@ -91,7 +91,7 @@ internal static class ScreenDecoration
     // labels (10, 11, 12) and the four selectable rows (16..19); brighten the preselected row; then
     // play the whole thing in over 32 frames, scaling from 0x2000 down to 0x1000 while the
     // background brightens 0 -> 0x7C and the panel spins through eight 30-degree steps.
-    internal static void FUN_80029684(int param_1, int param_2)
+    internal static void BuildDemoSaveSlotScreen(int param_1, int param_2)
     {
         ushort uVar1;
         bool bVar2;
@@ -455,14 +455,14 @@ internal static class ScreenDecoration
         FrameStep.DrawFrame();
     }
 
-    // GHIDRA: FUN_80029f9c @ 0x80029F9C
-    // 476 bytes. THE DEMO PICKER'S CANCEL UNWIND — the exact reverse of FUN_80029684's closing
+    // GHIDRA: UnwindDemoSaveSlotScreen @ 0x80029F9C
+    // 476 bytes. THE DEMO PICKER'S CANCEL UNWIND — the exact reverse of BuildDemoSaveSlotScreen's closing
     // animation: 32 frames counting 0x80 down to 4, the same eight-step spin, the same sprite
     // offsets negated, and the background dimmed back to 0. It ends by re-initialising elements
     // 1..19, which is what leaves the mode menu a clean array to rebuild into.
-    // The scale here is `iVar3 << 5` on both axes rather than FUN_80029684's asymmetric pair, so the
+    // The scale here is `iVar3 << 5` on both axes rather than BuildDemoSaveSlotScreen's asymmetric pair, so the
     // panel shrinks to nothing instead of settling at 0x1000.
-    internal static void FUN_80029f9c()
+    internal static void UnwindDemoSaveSlotScreen()
     {
         int iVar1;
         int iVar2;
@@ -867,7 +867,7 @@ internal static class ScreenDecoration
         SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
     }
 
-    // GHIDRA: FUN_8002a7f4 @ 0x8002A7F4
+    // GHIDRA: BuildSpSaveSlotScreen @ 0x8002A7F4
     // 2432 bytes. THE SP SAVE-SLOT PICKER'S BUILD, called by ModeBranches.RunSpModeScreen with the
     // preselected cursor and the base of the three sixteen-byte records at 0x801FF218.
     //
@@ -881,7 +881,7 @@ internal static class ScreenDecoration
     // three row icons (7, 8, 9), the three row labels (10, 11, 12), the two caption strips (14, 15)
     // and the four selectable rows (16..19) — played in over 32 frames while everything slides to
     // its resting x.
-    internal static void FUN_8002a7f4(int param_1, int param_2)
+    internal static void BuildSpSaveSlotScreen(int param_1, int param_2)
     {
         bool bVar3;
         uint uVar4;
@@ -1209,13 +1209,13 @@ internal static class ScreenDecoration
         while (iVar9 < 0x80);
     }
 
-    // GHIDRA: FUN_8002b174 @ 0x8002B174
+    // GHIDRA: UnwindSpSaveSlotScreen @ 0x8002B174
     // 360 bytes. THE SP PICKER'S CANCEL UNWIND — 32 frames counting 0x80 down to 4, every panel
     // strip sliding back off the way it came, then elements 1..19 re-initialised.
     // NOTE THE THREE OFFSET PAIRS, which are NOT the build's: sprites 7/10 track 0x11 by +0xE2/+0x8C
     // (the build used +0xD2/+0x8C), 8/0xB track 0x12 by +0xB2/+0x5C (the build used +0xBA/+0x74) and
     // 9/0xC track 0x13 by +0xE2/+0x8C (the build used +0xBA/+0x74). Reproduced, not reconciled.
-    internal static void FUN_8002b174()
+    internal static void UnwindSpSaveSlotScreen()
     {
         int iVar1;
 
@@ -1289,7 +1289,7 @@ internal static class ScreenDecoration
 
     // GHIDRA: FUN_8002cc04 @ 0x8002CC04
     // 1836 bytes. THE HAND-OFF TRANSITION. All three branches call it immediately before
-    // ModeBranches.FUN_80025894 and the LoadExec, so it is the last thing SELECT.EXE draws.
+    // ModeBranches.StopCdAudio and the LoadExec, so it is the last thing SELECT.EXE draws.
     //
     // NO ARGUMENT IS READ. The two card pickers write a0 (0 and 1) and RunVsModeScreen leaves whatever
     // was in the register, but Ghidra recovers `void FUN_8002cc04(void)` — the first instruction

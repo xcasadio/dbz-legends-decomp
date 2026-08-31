@@ -4,7 +4,7 @@ using static PsxSdkMonogame.MipsMemory;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// FUN_8002ea8c @ 0x8002EA8C — 6608 bytes, 916 lines, the FIRST function of SELECT.EXE's "select.c"
+// BuildModeMenuScreen @ 0x8002EA8C — 6608 bytes, 916 lines, the FIRST function of SELECT.EXE's "select.c"
 // emission block and the largest one in it. It ends at 0x8003045B, immediately before main.
 //
 // WHAT IT IS: the mode menu's BUILD plus its entry animation. main calls it once per rebuild, in
@@ -79,7 +79,7 @@ internal static class MenuIntro
     // write through it is a write to that global. Nothing else in this file is renamed.
     private static LibGs.GsSPRITE[] Sprites => SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec;
 
-    // GHIDRA: FUN_8002ea8c @ 0x8002EA8C
+    // GHIDRA: BuildModeMenuScreen @ 0x8002EA8C
     //
     // JUSTIFICATION: C# language bridge only
     // RELATION: three shapes could not be spelled literally.
@@ -90,7 +90,7 @@ internal static class MenuIntro
     //   (2) The struct assignments become CopySprite above.
     //   (3) The libgcc soft-float calls are PsxSdkMonogame/LibGcc.cs's; the (lo, hi) register pairs Ghidra
     //       prints become one double.
-    internal static void FUN_8002ea8c()
+    internal static void BuildModeMenuScreen()
     {
         short sVar2;
         bool bVar3;

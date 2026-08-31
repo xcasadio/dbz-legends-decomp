@@ -7,16 +7,16 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // THE MEMORY CARD MODULE of SELECT.EXE — the bring-up, the kernel-event handshake, the probe, the
 // boot-time save load and the teardown. main calls three of them on its pre-loop path
-// (InitializeMemoryCard, FUN_80021e34, FUN_80021618) and the exit path ShutdownAndLoadExecutable calls the fourth
+// (InitializeMemoryCard, ProbeMemoryCard, RunSaveLoadFlow) and the exit path ShutdownAndLoadExecutable calls the fourth
 // (ShutdownMemoryCard), so nothing downstream of main's `switch` is right without this file.
 //
 // WHERE THE FUNCTIONS LIVE IN THE IMAGE: two runs of .text.
-//   0x800213A8..0x800213B7   FUN_800213a8, the two-store state reset
-//   0x80021618..0x800218D3   FUN_80021618, the boot-time save load
+//   0x800213A8..0x800213B7   ResetCardOperationState, the two-store state reset
+//   0x80021618..0x800218D3   RunSaveLoadFlow, the boot-time save load
 //   0x80021CE4..0x80021D33   InitializeMemoryCard, the bring-up
 //   0x80021D34..0x80021E33   ShutdownMemoryCard, the teardown
-//   0x80021E34..0x80021F0B   FUN_80021e34, the probe
-//   0x80021FB4..0x80022023   FUN_80021fb4, the single-shot _card_info wrapper
+//   0x80021E34..0x80021F0B   ProbeMemoryCard, the probe
+//   0x80021FB4..0x80022023   QueryCardStatus, the single-shot _card_info wrapper
 //   0x800220D4..0x80022137   IsSaveFileMissing, "does the save file exist"
 //   0x800221D0..0x80022243   FUN_800221d0, the 0xF4000001 poll
 //   0x80022244..0x800222B7   FUN_80022244, the 0xF0000011 poll
@@ -42,8 +42,8 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     spec 0x0004 -> 0     spec 0x8000 -> 1     spec 0x0100 -> 2     spec 0x2000 -> 4
 // LibApi._card_info delivers 0x0004 for a present card and 0x8000 for a missing one; _card_load
 // delivers 0x0004; _card_clear delivers (0xF0000011, 0x0004). Nothing in this port ever delivers
-// 0x0100 or 0x2000, so codes 2 and 4 are unreachable here — which is why FUN_80021fb4's retry arm
-// and FUN_80021e34's _card_clear arm are dead in the port and live on the console. Stated so the
+// 0x0100 or 0x2000, so codes 2 and 4 are unreachable here — which is why QueryCardStatus's retry arm
+// and ProbeMemoryCard's _card_clear arm are dead in the port and live on the console. Stated so the
 // unexecuted branches are not read as wrong.
 internal static class MemoryCard
 {
@@ -62,17 +62,17 @@ internal static class MemoryCard
     internal const string g_CardDevicePort2 = "bu10:";
 
     // GHIDRA: DAT_80055a78 @ 0x80055A78
-    // .sbss, undefined4. FUN_80021618 writes only its LOW HALFWORD (`sh`, which Ghidra spells
-    // `DAT_80055a78._0_2_`) with FUN_80021fb4's result, and reads it back as a signed short. The
+    // .sbss, undefined4. RunSaveLoadFlow writes only its LOW HALFWORD (`sh`, which Ghidra spells
+    // `DAT_80055a78._0_2_`) with QueryCardStatus's result, and reads it back as a signed short. The
     // masked store below is that `sh`, not a widening.
     // This is also the first word start's .bss clear loop covers — SELECT_EXE_exe.BssClearFirst
     // names the same address as the start of the range.
     internal static int DAT_80055a78;
 
     // GHIDRA: DAT_80055a80 @ 0x80055A80
-    // .sbss, undefined2. FUN_80021618 sets it to 1 on entry.
+    // .sbss, undefined2. RunSaveLoadFlow sets it to 1 on entry.
     // PARTIAL: WRITE-ONLY IN THE WHOLE OVERLAY. find-cross-references reports exactly two references
-    // and both are writes (FUN_80021618 @ 0x8002163C and FUN_800213b8 @ 0x800213DC). Nothing reads
+    // and both are writes (RunSaveLoadFlow @ 0x8002163C and LoadSaveRecords @ 0x800213DC). Nothing reads
     // it, so what it means is not closed; the store is kept because the original makes it.
     // The C# compiler flags it CS0414, "assigned but never used", and unlike CdAudio.g_CdPlayTocIndex
     // that is a property OF THE ORIGINAL and not of this port — there is no reader to port.
@@ -82,14 +82,14 @@ internal static class MemoryCard
 #pragma warning restore CS0414
 
     // GHIDRA: g_CardOperationState @ 0x80055A84
-    // .sbss, undefined2. THE SAVE-LOAD STATE. FUN_800213a8 zeroes it during bring-up; FUN_80021618's
+    // .sbss, undefined2. THE SAVE-LOAD STATE. ResetCardOperationState zeroes it during bring-up; RunSaveLoadFlow's
     // switch drives it. The states this slice sees: 0 (start) -> 7 (does the file exist) -> 0xF
     // (read the record) or 8 / 0x10 (the two failure screens) or 2 (the "wrong card" screen).
     internal static ushort g_CardOperationState;
 
     // GHIDRA: g_CardReprobeRequest @ 0x80055A88
-    // .sbss, undefined2. "Re-probe the card on the next pass" — FUN_80021618's loop head consumes it
-    // and calls FUN_80021e34. FUN_800213a8 zeroes it during bring-up.
+    // .sbss, undefined2. "Re-probe the card on the next pass" — RunSaveLoadFlow's loop head consumes it
+    // and calls ProbeMemoryCard. ResetCardOperationState zeroes it during bring-up.
     internal static ushort g_CardReprobeRequest;
 
     // GHIDRA: DAT_80055a8c @ 0x80055A8C
@@ -111,14 +111,14 @@ internal static class MemoryCard
 
     // GHIDRA: DAT_80055b60 @ 0x80055B60
     // .sbss, undefined4. OpenEvent(0xF4000001, 0x2000, 0x2000, NULL) — poll code 4, the "new /
-    // unformatted card" answer FUN_80021e34 reacts to with _card_clear.
+    // unformatted card" answer ProbeMemoryCard reacts to with _card_clear.
     private static int DAT_80055b60;
 
     // GHIDRA: DAT_80055b68 @ 0x80055B68
-    // .sbss, undefined2. FUN_80021e34 sets it to 1 when the probe took the _card_clear arm and to 0
+    // .sbss, undefined2. ProbeMemoryCard sets it to 1 when the probe took the _card_clear arm and to 0
     // otherwise.
     // PARTIAL: WRITE-ONLY IN THE WHOLE OVERLAY — find-cross-references reports exactly the two
-    // writes inside FUN_80021e34 (0x80021E88 and 0x80021E9C) and no read at all. CS0414 is
+    // writes inside ProbeMemoryCard (0x80021E88 and 0x80021E9C) and no read at all. CS0414 is
     // suppressed for the same reason as DAT_80055a80 above: the original has no reader either.
 #pragma warning disable CS0414
     private static ushort DAT_80055b68;
@@ -141,7 +141,7 @@ internal static class MemoryCard
     private static int DAT_80055b7c;
 
     // GHIDRA: g_OptionsRecord64 @ 0x801FF018
-    // The destination FUN_80021618 copies the 64-byte save record to, inside the cross-overlay block
+    // The destination RunSaveLoadFlow copies the 64-byte save record to, inside the cross-overlay block
     // SharedHighRam models. The write goes through the raw PSX address the original writes, which
     // SELECT_EXE_exe.ResolveAddress answers for by chaining SharedHighRam — the same route main's own
     // read of this word takes.
@@ -165,7 +165,7 @@ internal static class MemoryCard
 
     // GHIDRA: InitializeMemoryCard @ 0x80021CE4
     // Eighty bytes, seven calls, no locals — the memory-card bring-up. main calls it once, between
-    // OverlayExit.FUN_80034380 and the probe FUN_80021e34; FUN_800276d8 @ 0x800276D8 is the other
+    // OverlayExit.InitializePadRemapTablePointers and the probe ProbeMemoryCard; FUN_800276d8 @ 0x800276D8 is the other
     // call site and is not on this slice's path.
     // It is the same seven calls in the same order as TITLE.EXE's InitializeMemoryCard @ 0x80022630.
     internal static void InitializeMemoryCard()
@@ -176,7 +176,7 @@ internal static class MemoryCard
         OpenMemoryCardEvents();
         _card_auto(0);
         ChangeClearPAD(0);
-        FUN_800213a8();
+        ResetCardOperationState();
     }
 
     // GHIDRA: OpenMemoryCardEvents @ 0x80022348
@@ -184,7 +184,7 @@ internal static class MemoryCard
     // EnableEvent calls outside it — the split is load-bearing on the console (the table is built
     // with the ISR masked, and only armed once it is safe for a delivery to land) and LibApi's
     // OpenEvent honours it by NOT arming the descriptor it returns.
-    // FUN_8004eb04 / FUN_8004ee04 are EnterCriticalSection / ExitCriticalSection — three-instruction
+    // EnterCriticalSection / ExitCriticalSection are EnterCriticalSection / ExitCriticalSection — three-instruction
     // `li a0,1 / syscall 0 / jr ra` bodies in this image, not jump stubs; see the evidence block at
     // the foot of LibApi.cs. They are empty on desktop because every DeliverEvent in this port is
     // issued synchronously by the game thread, so there is no ISR to mask.
@@ -211,14 +211,14 @@ internal static class MemoryCard
         EnableEvent(DAT_80055b7c);
     }
 
-    // GHIDRA: FUN_800213a8 @ 0x800213A8
+    // GHIDRA: ResetCardOperationState @ 0x800213A8
     // Sixteen bytes and the whole of it is two halfword stores — read with read-memory:
     //     A7 80 00 9C   sh zero, 0x9C(gp)   -> g_CardOperationState (gp = 0x800559E8)
     //     A7 80 00 A0   sh zero, 0xA0(gp)   -> g_CardReprobeRequest
     //     03 E0 00 08   jr ra
-    // It resets the save-load state machine that FUN_80021618 (and its two siblings FUN_800213b8 and
-    // FUN_800218d4, neither on this slice's path) drive.
-    private static void FUN_800213a8()
+    // It resets the save-load state machine that RunSaveLoadFlow (and its two siblings LoadSaveRecords and
+    // RunSaveWriteFlow, neither on this slice's path) drive.
+    private static void ResetCardOperationState()
     {
         g_CardOperationState = 0;
         g_CardReprobeRequest = 0;
@@ -288,7 +288,7 @@ internal static class MemoryCard
     // GHIDRA: FUN_80022244 @ 0x80022244
     // One hundred and sixteen bytes, the 0xF0000011 twin of FUN_800221d0, with the same code map.
     // Its two call sites both follow a _card_clear.
-    // PARTIAL: the value is discarded at the call site inside FUN_80021e34 (Ghidra renders it as a
+    // PARTIAL: the value is discarded at the call site inside ProbeMemoryCard (Ghidra renders it as a
     // bare `FUN_80022244();`), so only its blocking effect matters there.
     private static int FUN_80022244()
     {
@@ -321,7 +321,7 @@ internal static class MemoryCard
         return 4;
     }
 
-    // GHIDRA: FUN_80021e34 @ 0x80021E34
+    // GHIDRA: ProbeMemoryCard @ 0x80021E34
     // Two hundred and sixteen bytes, six call sites — THE PROBE, and its return value is the card
     // status word main stores at 0x801FF068.
     // Two retry loops of at most five passes each, with an optional _card_clear between them:
@@ -333,8 +333,8 @@ internal static class MemoryCard
     // WHAT IT RETURNS IN THIS PORT: 0. LibMcrd.CardIsPresent is unconditionally true, so _card_info
     // delivers (0xF4000001, 0x0004) and the first poll returns 0 on its first pass; the _card_clear
     // arm is skipped (the code is 0, not 4); _card_load delivers the same pair and the second poll
-    // returns 0 too. main then takes its `g_CardProbeResult == 0` arm and calls FUN_80021618.
-    internal static int FUN_80021e34(int param_1)
+    // returns 0 too. main then takes its `g_CardProbeResult == 0` arm and calls RunSaveLoadFlow.
+    internal static int ProbeMemoryCard(int param_1)
     {
         int iVar1;
         int iVar2;
@@ -412,8 +412,8 @@ internal static class MemoryCard
         ChangeClearPAD(0);
     }
 
-    // GHIDRA: FUN_80021f0c @ 0x80021F0C
-    // One hundred and sixty-eight bytes. THE RE-POLL: a cut-down FUN_80021e34 with no retry loops,
+    // GHIDRA: RepollMemoryCard @ 0x80021F0C
+    // One hundred and sixty-eight bytes. THE RE-POLL: a cut-down ProbeMemoryCard with no retry loops,
     // issued once per frame by ListCursor.RunListSelect @ 0x80033D34 while either card picker is up,
     // so that inserting or removing a card is noticed.
     //
@@ -424,7 +424,7 @@ internal static class MemoryCard
     // The two arms it gates: a code-4 answer is only cleared when the caller was ALREADY at 4 (so a
     // card that has just gone unformatted is reported once before being formatted), and a code-2
     // answer is retried once. Neither arm fires when param_1 is 2.
-    internal static int FUN_80021f0c(int param_1)
+    internal static int RepollMemoryCard(int param_1)
     {
         int iVar1;
 
@@ -448,22 +448,22 @@ internal static class MemoryCard
         return iVar1;
     }
 
-    // GHIDRA: FUN_80021fb4 @ 0x80021FB4
+    // GHIDRA: QueryCardStatus @ 0x80021FB4
     // One hundred and twelve bytes, three call sites, all of them the head of a save-load driver
-    // (FUN_80021618 here, plus FUN_800213b8 and FUN_800218d4 which are not on this slice's path).
+    // (RunSaveLoadFlow here, plus LoadSaveRecords and RunSaveWriteFlow which are not on this slice's path).
     // A single _card_info, retried exactly once when the code came back 2.
     //
-    // NOTE ON param_1 — IT IS NOT PASSED. FUN_80021618's call at 0x80021640 has
+    // NOTE ON param_1 — IT IS NOT PASSED. RunSaveLoadFlow's call at 0x80021640 has
     // `addu s3, zero, zero` in its delay slot and its prologue never touches a0, so a0 holds
-    // whatever the CALLER of FUN_80021618 left there. Traced from main: the jal at 0x80030524 is
-    // preceded by `addu a0, zero, zero` at 0x80030508 (the delay slot of the FUN_80021e34(0) call)
+    // whatever the CALLER of RunSaveLoadFlow left there. Traced from main: the jal at 0x80030524 is
+    // preceded by `addu a0, zero, zero` at 0x80030508 (the delay slot of the ProbeMemoryCard(0) call)
     // and nothing writes a0 in between, so a0 = 0 on main's path. The 0 below is that traced value,
     // not an invented argument.
-    // PARTIAL: the OTHER caller of FUN_80021618, FUN_800276d8 @ 0x8002781C, is not on this slice's
+    // PARTIAL: the OTHER caller of RunSaveLoadFlow, FUN_800276d8 @ 0x8002781C, is not on this slice's
     // path and its leaked a0 has not been traced. It cannot change anything reachable here: param_1
     // is read only inside `if ((iVar1 == 2) && (param_1 != 2))`, and code 2 means spec 0x0100, which
     // nothing in this port ever delivers.
-    internal static int FUN_80021fb4(int param_1)
+    internal static int QueryCardStatus(int param_1)
     {
         int iVar1;
 
@@ -484,7 +484,7 @@ internal static class MemoryCard
     // One hundred bytes. Builds "bu00:BISLPS-00355DRAGON" in a 32-byte stack buffer and asks the
     // BIOS card directory whether it is there. RETURNS 1 WHEN THE FILE IS ABSENT: the original is
     // `return iVar1 == 0;`, compiled as `sltiu v0, v0, 1`, over a firstfile that answers NULL/0 when
-    // the directory has no match. FUN_80021618's state 7 reads it as `if (iVar6 == 0)` = "the save
+    // the directory has no match. RunSaveLoadFlow's state 7 reads it as `if (iVar6 == 0)` = "the save
     // exists, go read it".
     // The DIRENTRY it fills (`undefined1 auStack_30[40]`) is never looked at.
     internal static int IsSaveFileMissing(int param_1)
@@ -596,7 +596,7 @@ internal static class MemoryCard
         return uVar3;
     }
 
-    // GHIDRA: FUN_80021618 @ 0x80021618
+    // GHIDRA: RunSaveLoadFlow @ 0x80021618
     // Seven hundred bytes — THE BOOT-TIME SAVE LOAD, and what main calls it for. main only reaches it
     // when the probe returned 0, and it arms g_CurrentMenuState = 0xFFFF first, which is the flag this
     // function reads as "there is no menu to fall back to, just report".
@@ -620,7 +620,7 @@ internal static class MemoryCard
     // item 2 to state 3. That IS the console's no-save behaviour on a blank card.
     // A save file placed in the backend's card folder takes the other branch: state 0xF, one
     // ReadSaveRecord, and the 64-byte record lands at 0x801FF018.
-    internal static int FUN_80021618()
+    internal static int RunSaveLoadFlow()
     {
         uint uVar7;
         uint uVar8;
@@ -638,9 +638,9 @@ internal static class MemoryCard
         DAT_80055a80 = 1;
         sVar5 = 0;
 
-        // `DAT_80055a78._0_2_ = FUN_80021fb4();` — a halfword store into the low half of an
-        // undefined4, and the 0 is the traced leaked a0 (see FUN_80021fb4's own remarks).
-        DAT_80055a78 = (DAT_80055a78 & unchecked((int)0xffff0000)) | (ushort)FUN_80021fb4(0);
+        // `DAT_80055a78._0_2_ = QueryCardStatus();` — a halfword store into the low half of an
+        // undefined4, and the 0 is the traced leaked a0 (see QueryCardStatus's own remarks).
+        DAT_80055a78 = (DAT_80055a78 & unchecked((int)0xffff0000)) | (ushort)QueryCardStatus(0);
         if ((short)DAT_80055a78 == 2)
         {
             g_CardReprobeRequest = 1;
@@ -652,7 +652,7 @@ internal static class MemoryCard
             if (g_CardReprobeRequest == 1)
             {
                 g_CardReprobeRequest = 0;
-                sVar5 = (short)FUN_80021e34(0);
+                sVar5 = (short)ProbeMemoryCard(0);
             }
 
             // Ghidra's `if (false) goto switchD_800216b0_caseD_3;` sits here and is dead.
@@ -671,7 +671,7 @@ internal static class MemoryCard
                     else
                     {
                         g_CardOperationState = 2;
-                        FUN_80027a58(2);
+                        ShowCardMessage(2);
                     }
 
                     break;
@@ -711,7 +711,7 @@ internal static class MemoryCard
                         }
 
                         g_CardOperationState = 8;
-                        FUN_80027a58(3);
+                        ShowCardMessage(3);
                     }
 
                     break;
@@ -747,7 +747,7 @@ internal static class MemoryCard
                         else
                         {
                             g_CardOperationState = 0x10;
-                            FUN_80027a58(3);
+                            ShowCardMessage(3);
                         }
                     }
                     else if (DAT_80055a8c == 1)
@@ -776,12 +776,12 @@ internal static class MemoryCard
     // on, which is the module it actually belongs to; the call above goes there. The reason the
     // stub gave for blocking — that InitPAD / StartPAD never filled the two BIOS buffers — no longer
     // holds: LibApi.RefreshBiosPadBuffers publishes the real backend into them every V-BLANK.
-    // CONSEQUENCE FOR FUN_80021618: bit 0x40 is now reachable, so its states 2, 8 and 0x10 can leave
+    // CONSEQUENCE FOR RunSaveLoadFlow: bit 0x40 is now reachable, so its states 2, 8 and 0x10 can leave
     // through the Cross arm. None of the three is reachable on this port's boot path anyway — see
     // that function's own remarks.
 
-    // GHIDRA: FUN_80027a58 @ 0x80027A58
-    internal static void FUN_80027a58(int param_1)
+    // GHIDRA: ShowCardMessage @ 0x80027A58
+    internal static void ShowCardMessage(int param_1)
     {
         // BLOCKED: the memory-card message overlay, 2376 bytes / 288 lines, ending at 0x8002839F
         // immediately before the mode menu RunModeMenu. It saves the 320x240 frame to VRAM at
@@ -790,7 +790,7 @@ internal static class MemoryCard
         // step DrawFrame four times inline. Eleven call sites across the four card screens; its
         // argument selects which message.
         // Not this module and not this slice: it is a screen body, it owns the boxfill element
-        // FrameStep.cs already documents as "only ever written by FUN_80027a58", and it needs the
+        // FrameStep.cs already documents as "only ever written by ShowCardMessage", and it needs the
         // sprite/VRAM work the screen-body slice owns.
         _ = param_1;
     }

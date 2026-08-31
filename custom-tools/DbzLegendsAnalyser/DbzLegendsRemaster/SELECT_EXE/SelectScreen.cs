@@ -7,7 +7,7 @@ using static PsxSdkMonogame.MipsMemory;
 namespace DbzLegendsRemaster.SELECT_EXE;
 
 // The "select.c" module of SELECT.EXE — the functions emitted between 0x8002EA8C and 0x800315C0,
-// in that order: FUN_8002ea8c (intro animation), main, FUN_80030698 (graphics + CD bring-up),
+// in that order: BuildModeMenuScreen (intro animation), main, FUN_80030698 (graphics + CD bring-up),
 // InitializeSpriteArray (GsSPRITE array initialiser), ClearVram (ClearVram), LoadUSAGI_B (the USAGI.B
 // load), FUN_80030a6c (menu wrapper) and the four state handlers.
 //
@@ -22,7 +22,7 @@ internal static class SelectScreen
     // is 0x800B0000..0x800F97FF.
     // EXTENT: 0x50000. The lower bound is the address CdRead is given; the upper bound is closed by
     // the next address any SELECT.EXE code uses above it, 0x80100000 — the BGM.B VAB body that
-    // FUN_80022994 reads in menu state 3. Nothing is modelled between the two.
+    // InitializeSoundSystem reads in menu state 3. Nothing is modelled between the two.
     internal const int g_UsagiBFileBuffer_Address = unchecked((int)0x800B0000);
 
     internal static readonly byte[] g_UsagiBFileBuffer = new byte[0x50000];
@@ -153,7 +153,7 @@ internal static class SelectScreen
         ResetGraph(0);
         LibGs.GsInitGraph(0x140, 0xf0, 0, 0, 0);
 
-        // GHIDRA: FUN_8004879c @ 0x8004879C — Ghidra leaves it unnamed and plates it
+        // GHIDRA: GsDefDispBuff @ 0x8004879C — Ghidra leaves it unnamed and plates it
         // "Possible GS_103.OBJ/GsDefDispBuff"; PsxSdkMonogame/LibGs.cs carries it under that name.
         LibGs.GsDefDispBuff(0, 0, 0x140, 0);
 
@@ -325,10 +325,10 @@ internal static class SelectScreen
         } while (iVar2 != 0);
 
         iVar2 = 0;
-        FUN_80025658();
+        InitializeCdAudio();
         FUN_800258f0(10, 3);
         int iVar3 = 0;
-        FUN_80025d04();
+        PlayCdCurrentTrack();
 
         // `rect = (RECT *)&DAT_8004f384;` — the RECT half of record 0, i.e. table byte offset 4 —
         // advanced by `rect = (RECT *)&rect[1].w;`, which is +12, the record stride.
@@ -367,10 +367,10 @@ internal static class SelectScreen
         };
     }
 
-    // GHIDRA: FUN_80025658 @ 0x80025658
-    private static void FUN_80025658()
+    // GHIDRA: InitializeCdAudio @ 0x80025658
+    private static void InitializeCdAudio()
     {
-        // BLOCKED: the CD-DA / sound-mix bring-up. It sets the CdlSetmode byte at DAT_80055ad0 to
+        // BLOCKED: the CD-DA / sound-mix bring-up. It sets the CdlSetmode byte at g_CdSetmodeParam to
         // 5 (CdlModeDA | CdlModeRept), calls CdGetToc into the TOC array at 0x80055CEC,
         // normalises every entry through CdPosToInt/CdIntToPos, defaults the track index to 3, and
         // then picks CD mix volumes from bit 0x801FF01E (the stereo/mono option) through CdMix
@@ -385,13 +385,13 @@ internal static class SelectScreen
     {
         // BLOCKED: the CD-DA play/seek helper. LoadUSAGI_B calls it as (10, 3) — mode bit 3 set,
         // track index 3 — which takes the CdlStandby / CdlSetmode / CdlPlay branch against the TOC
-        // entry FUN_80025658 would have filled. Depends on that TOC, so it is blocked with it.
+        // entry InitializeCdAudio would have filled. Depends on that TOC, so it is blocked with it.
         _ = param_1;
         _ = param_2;
     }
 
-    // GHIDRA: FUN_80025d04 @ 0x80025D04
-    private static void FUN_80025d04()
+    // GHIDRA: PlayCdCurrentTrack @ 0x80025D04
+    private static void PlayCdCurrentTrack()
     {
         // BLOCKED: re-issues CdControl(CdlPlay) at the current TOC position. Same dependency.
     }

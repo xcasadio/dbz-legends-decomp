@@ -6,8 +6,8 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // the globals the whole little module keeps.
 //
 // THE SELECT SCREEN'S MUSIC IS A DISC TRACK, NOT A SEQUENCE. LoadUSAGI_B @ 0x80030908 starts it
-// with FUN_80025658 (CdGetToc + CdMix + the default track index 3), FUN_800258f0(10, 3)
-// (CdlStandby + CdlSetmode + CdlPlay against that TOC entry) and FUN_80025d04 (CdlPlay again at the
+// with InitializeCdAudio (CdGetToc + CdMix + the default track index 3), FUN_800258f0(10, 3)
+// (CdlStandby + CdlSetmode + CdlPlay against that TOC entry) and PlayCdCurrentTrack (CdlPlay again at the
 // current position). Those three are still BLOCKED stubs in SelectScreen.cs — they are the same
 // 0x80025658..0x80025D63 module as the function below, and they are left where the boot phase put
 // them rather than moved here, because moving them would be a refactor and not a transliteration.
@@ -16,7 +16,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 internal static class CdAudio
 {
     // GHIDRA: g_CdSyncResult @ 0x80055AA8
-    // .sbss, undefined4. The last CdSync status. FUN_80025658 zeroes it; UpdateCdAudio stores
+    // .sbss, undefined4. The last CdSync status. InitializeCdAudio zeroes it; UpdateCdAudio stores
     // CdSync(1, NULL) into it every frame.
     // PARTIAL: no reader is on this slice's path, so what consumes the status is not closed.
     internal static int g_CdSyncResult;
@@ -27,18 +27,18 @@ internal static class CdAudio
     internal static int g_CdReadyResult;
 
     // GHIDRA: DAT_80055ab8 @ 0x80055AB8
-    // .sbss, undefined4. The track number the drive reports, decoded from BCD. FUN_80025658 seeds
+    // .sbss, undefined4. The track number the drive reports, decoded from BCD. InitializeCdAudio seeds
     // it with 3 and FUN_800258f0 sets it to the track it was asked to play.
     internal static int DAT_80055ab8;
 
     // GHIDRA: g_CdPlayTocIndex @ 0x80055ABC
     // .sbss, undefined4. The track index the module is playing — the index into the TOC array at
-    // 0x80055CEC, not a physical track number. FUN_80025658 seeds it with 3, FUN_800258f0 sets it
+    // 0x80055CEC, not a physical track number. InitializeCdAudio seeds it with 3, FUN_800258f0 sets it
     // from its own second argument. The compare against DAT_80055ab8 is SIGNED (`slt` at
     // 0x800257F0).
     //
     // The C# compiler flags it CS0649, "never assigned", and the flag is true of THIS PORT rather
-    // than of the original: both writers — FUN_80025658 @ 0x80025658 and FUN_800258f0 @ 0x800258F0
+    // than of the original: both writers — InitializeCdAudio @ 0x80025658 and FUN_800258f0 @ 0x800258F0
     // — are still BLOCKED stubs in SelectScreen.cs. The warning is suppressed for this one field so
     // the build stays clean. The field is otherwise untouched, and the value it holds in the port
     // is the 0 that start's .sbss clear leaves, which indexes TOC entry 0 instead of entry 3.
@@ -48,8 +48,8 @@ internal static class CdAudio
 
     // GHIDRA: DAT_80055ac0 @ 0x80055AC0
     // .sbss, undefined4. THE CD-DA STATE FLAGS, three of which this slice sees:
-    //   bit 0 (1)  suppress the whole per-frame service. FUN_80025658 SETS it as its last act;
-    //              FUN_800258f0's play branch and FUN_80025d04 clear it again.
+    //   bit 0 (1)  suppress the whole per-frame service. InitializeCdAudio SETS it as its last act;
+    //              FUN_800258f0's play branch and PlayCdCurrentTrack clear it again.
     //   bit 1 (2)  a track is playing -> re-issue CdlPlay when the drive has run past it
     //   bit 2 (4)  pause first -> CdlPause, then latch bit 0 back on
     // FUN_800258f0(10, 3) leaves it at 0x0A (bits 1 and 3 from its first argument, bit 0 cleared),
@@ -62,7 +62,7 @@ internal static class CdAudio
     // second byte — what Ghidra names DAT_80055ad5 and reads with `lbu a0,0xed(gp)` — is the BCD
     // minute CdReady reports in CdlModeDA report mode.
     // EXTENT CLOSED AT BOTH ENDS: 0x80055AD4 is the address CdReady is given, and 0x80055ADC is
-    // g_CdMixVolume, the four-byte CdlATV FUN_80025658 hands to CdMix. Eight bytes, which is what a
+    // g_CdMixVolume, the four-byte CdlATV InitializeCdAudio hands to CdMix. Eight bytes, which is what a
     // libcd result block is.
     internal static readonly byte[] g_CdResultBuffer8 = new byte[8];
 
@@ -73,7 +73,7 @@ internal static class CdAudio
     internal static byte DAT_80055ae0;
 
     // GHIDRA: g_CdTocLocations @ 0x80055CEC
-    // .bss. THE DISC TOC, as CdlLOC entries. FUN_80025658 @ 0x80025658 closes both the element type
+    // .bss. THE DISC TOC, as CdlLOC entries. InitializeCdAudio @ 0x80025658 closes both the element type
     // and the stride: it does `p = (CdlLOC *)&g_CdTocLocations`, fills it with
     // `CdGetToc((CdlLOC *)&g_CdTocLocations)` and then normalises entry by entry with `p = p + 1`. The
     // byte arithmetic every other reader uses agrees — UpdateCdAudio below indexes
@@ -84,7 +84,7 @@ internal static class CdAudio
     // hands to InitPAD, and nothing between the two addresses is referenced anywhere in the program
     // (find-constants-in-range over 0x80055CED..0x80055D6B returns nothing).
     // PARTIAL: how many of the 32 CdGetToc actually fills is a property of the disc, not of the
-    // code. FUN_80025658 keeps the answer in DAT_80055ab0 as `CdGetToc(...) - 1`.
+    // code. InitializeCdAudio keeps the answer in DAT_80055ab0 as `CdGetToc(...) - 1`.
     internal static readonly CdlLOC[] g_CdTocLocations = NewCdlLocArray(32);
 
     // JUSTIFICATION: C# language bridge only
@@ -103,7 +103,7 @@ internal static class CdAudio
 
     // GHIDRA: UpdateCdAudio @ 0x80025788
     // 268 bytes, 7 call sites — the frame step DrawFrame @ 0x800344A4 once per frame, plus the
-    // memory-card screens FUN_80021618, FUN_800218d4 and FUN_800276d8, which spin on it with
+    // memory-card screens RunSaveLoadFlow, RunSaveWriteFlow and FUN_800276d8, which spin on it with
     // VSync(0) while they wait on the card.
     //
     // WHAT IT IS FOR: the drive is playing a CD-DA track in CdlModeRept, and this watches the BCD
@@ -119,8 +119,8 @@ internal static class CdAudio
     // CdSync(1, NULL) store at the end. Stated here so the silence is read as a missing SDK body
     // and not as this function being wrong.
     //
-    // SECOND, SMALLER CONSEQUENCE OF THE SAME KIND: on the console FUN_80025658 sets DAT_80055ac0
-    // to 1 and FUN_800258f0 / FUN_80025d04 clear bit 0 again, so the gate is open by the time the
+    // SECOND, SMALLER CONSEQUENCE OF THE SAME KIND: on the console InitializeCdAudio sets DAT_80055ac0
+    // to 1 and FUN_800258f0 / PlayCdCurrentTrack clear bit 0 again, so the gate is open by the time the
     // first frame is presented. In this port those three are BLOCKED stubs, so DAT_80055ac0 is
     // still 0 and the gate is open for a different reason. The observable behaviour is the same;
     // the reason is not, which is why it is written down.

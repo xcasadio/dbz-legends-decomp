@@ -80,7 +80,7 @@ internal sealed class SELECT_EXE_exe
     // GHIDRA: g_CurrentMenuState @ 0x80055B50
     // .sbss, SIXTEEN BITS (Ghidra types it undefined2 and main's second store is
     // `(undefined2)iVar2`). main writes 0xFFFF before the memory-card save load and then writes the
-    // menu state into it once per outer iteration. MemoryCard.FUN_80021618 reads that 0xFFFF as a
+    // menu state into it once per outer iteration. MemoryCard.RunSaveLoadFlow reads that 0xFFFF as a
     // SIGNED short — its state 7 tests `g_CurrentMenuState == -1`, which is what makes "no save file on
     // the card" return 0 to main instead of putting a message screen up.
     internal static ushort g_CurrentMenuState;
@@ -216,14 +216,14 @@ internal sealed class SELECT_EXE_exe
         GsOT_800654c4[1].org = RamAddressOf(g_OrderingTableTags1, 0);
 
         SelectScreen.FUN_80030698();
-        OverlayExit.FUN_80034380();
+        OverlayExit.InitializePadRemapTablePointers();
         MemoryCard.InitializeMemoryCard();
-        SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021e34(0);
+        SharedHighRam.g_CardProbeResult = MemoryCard.ProbeMemoryCard(0);
         bVar1 = false;
         if (SharedHighRam.g_CardProbeResult == 0)
         {
             g_CurrentMenuState = 0xffff;
-            iVar2 = MemoryCard.FUN_80021618();
+            iVar2 = MemoryCard.RunSaveLoadFlow();
             if (iVar2 == 0)
             {
                 SharedHighRam.g_CardProbeResult = 2;
@@ -239,7 +239,7 @@ internal sealed class SELECT_EXE_exe
                 DAT_80055b80 = 0;
                 SelectScreen.InitializeSpriteArray(GsSPRITE_ARRAY_800654ec, 0, 100);
                 SelectScreen.LoadUSAGI_B();
-                MenuIntro.FUN_8002ea8c();
+                MenuIntro.BuildModeMenuScreen();
 
                 // 0x80065AB0 = GsSPRITE_ARRAY_800654ec + 36 * 41, i.e. element 41 of the same
                 // array, twelve entries.
@@ -257,7 +257,7 @@ internal sealed class SELECT_EXE_exe
             // PsxSdkBridges.ActivateSelectExe to have installed this overlay's resolver, exactly
             // as every other raw-address read in the ported overlays does.
             // PARTIAL: what the bit means is NOT ESTABLISHED. Its two writers are the memory-card
-            // load path — MemoryCard.FUN_80021618, which is ported now and copies SIXTY-FOUR bytes
+            // load path — MemoryCard.RunSaveLoadFlow, which is ported now and copies SIXTY-FOUR bytes
             // of the 0x80-byte card record over 0x801FF018..0x801FF057 — and FUN_80031c8c, which is
             // not in this slice. On this port's boot path no card record is read (there is no save
             // file to find), so the bit is the 0 start's .bss clear leaves and item 2 is redirected.
@@ -280,7 +280,7 @@ internal sealed class SELECT_EXE_exe
                     ModeBranches.RunSpModeScreen();
                     break;
                 case 3:
-                    FUN_800315c0();
+                    RunOptionsScreen();
                     break;
                 case -1:
                     bVar1 = true;
@@ -295,7 +295,7 @@ internal sealed class SELECT_EXE_exe
         exit(0);
     }
 
-    // FUN_8002ea8c @ 0x8002EA8C stood here as a BLOCKED stub. It is now transliterated in
+    // BuildModeMenuScreen @ 0x8002EA8C stood here as a BLOCKED stub. It is now transliterated in
     // MenuIntro.cs — the mode menu's build and entry animation, 6608 bytes.
 
     // FUN_80030a6c @ 0x80030A6C, RunDemoModeScreen @ 0x80030AF8, RunVsModeScreen @ 0x80030EF8 and
@@ -303,25 +303,25 @@ internal sealed class SELECT_EXE_exe
     // ModeBranches.cs, with the menu driver RunModeMenu @ 0x800283A0 in ModeMenu.cs and the shared
     // list cursor RunListSelect @ 0x80033D34 in ListCursor.cs. main's switch calls them above.
 
-    // GHIDRA: FUN_800315c0 @ 0x800315C0
-    private static void FUN_800315c0()
+    // GHIDRA: RunOptionsScreen @ 0x800315C0
+    private static void RunOptionsScreen()
     {
         // BLOCKED: state 3, the in-place options sub-screen, 1668 bytes. It does NOT LoadExec — it
         // returns to main's loop.
         //
         // THE REASON RE-MEASURED, not inherited. Its nine callees are GetPadStatus, FUN_80031c8c,
-        // DrawFrame, FUN_8002bcbc, FUN_80031c44, InitializeSpriteArray, FUN_80026420, FUN_80026208 and
-        // FUN_8002b2dc. Four of those (GetPadStatus, DrawFrame, InitializeSpriteArray, FUN_80026208) are
+        // DrawFrame, UnwindOptionsScreen, RunButtonConfigScreen, InitializeSpriteArray, RunSoundTestScreen, FUN_80026208 and
+        // BuildOptionsScreen. Four of those (GetPadStatus, DrawFrame, InitializeSpriteArray, FUN_80026208) are
         // ported; FUN_80031c8c's own card call now lands on CardRecords.FUN_800276d8, which is
-        // ported too. THE BLOCKER IS FUN_80026420 @ 0x80026420 — 1788 bytes — which tail-calls
-        // FUN_80022994 @ 0x80022994, whose callee list (read today, 36 entries) carries SpuInit,
+        // ported too. THE BLOCKER IS RunSoundTestScreen @ 0x80026420 — 1788 bytes — which tail-calls
+        // InitializeSoundSystem @ 0x80022994, whose callee list (read today, 36 entries) carries SpuInit,
         // SpuStInit, SpuSetVoiceAttr, SpuMallocWithStartAddr, SpuSetTransferMode,
         // SpuSetTransferStartAddr, SpuWrite0, SpuIsTransferCompleted, SsSetReservedVoice,
         // SsUtGetVBaddrInSB and the three SpuSt* callback registrations, alongside six
         // CdSearchFile / CdRead / CdReadSync groups — the \SOUND\*.B VAB loads.
         // PsxSdkMonogame/LibSnd.cs is 161 methods and all 161 bodies are `// Do nothing PSX SDK`
         // (counted in the file: 163 declarations, two of which are delegates, and 161 stub markers).
-        // Three of its screen functions — FUN_8002bcbc, FUN_80031c44 and FUN_8002b2dc — are also
+        // Three of its screen functions — UnwindOptionsScreen, RunButtonConfigScreen and BuildOptionsScreen — are also
         // still unported.
     }
 

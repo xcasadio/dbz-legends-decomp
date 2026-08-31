@@ -6,7 +6,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // THE MENU WRAPPER AND THE THREE BRANCHES main DISPATCHES INTO — the four functions emitted at
 // 0x80030A6C, 0x80030AF8, 0x80030EF8 and 0x800310A8, in that order, immediately after the USAGI.B
-// loader and immediately before the options screen FUN_800315c0 @ 0x800315C0.
+// loader and immediately before the options screen RunOptionsScreen @ 0x800315C0.
 //
 // Each of the three branches is a BLOCKING SCREEN in this overlay's style: it owns a do/while (or a
 // while(true)) that calls the frame step FrameStep.DrawFrame to present, and it ends by handing
@@ -149,7 +149,7 @@ internal static class ModeBranches
         while (iVar10 < 3);
 
         iVar10 = 0;
-        ScreenDecoration.FUN_80029684(g_DemoListCursor, g_DemoSaveRecords3_Address);
+        ScreenDecoration.BuildDemoSaveSlotScreen(g_DemoListCursor, g_DemoSaveRecords3_Address);
         do
         {
             iVar10 = iVar10 + 1;
@@ -162,7 +162,7 @@ internal static class ModeBranches
             iVar10 = ListCursor.RunListSelect(ref g_DemoListCursor, 0x10, 4, 2);
             if (iVar10 == -1)
             {
-                ScreenDecoration.FUN_80029f9c();
+                ScreenDecoration.UnwindDemoSaveSlotScreen();
                 return;
             }
 
@@ -283,7 +283,7 @@ internal static class ModeBranches
         }
 
         ScreenDecoration.FUN_8002cc04(0);
-        FUN_80025894();
+        StopCdAudio();
         OverlayExit.ShutdownAndLoadExecutable("cdrom:\\DEMO.EXE;1");
     }
 
@@ -384,13 +384,13 @@ internal static class ModeBranches
 
         // `jal 0x8002CC04` at 0x80031064 has a NOP in its delay slot and nothing in this function
         // writes a0 before it, so the argument here is whatever the preceding code left in the
-        // register — the same leaked-argument shape MemoryCard.cs records for FUN_80021618. IT
+        // register — the same leaked-argument shape MemoryCard.cs records for RunSaveLoadFlow. IT
         // CANNOT MATTER, and that is now closed rather than assumed: Ghidra recovers FUN_8002cc04's
         // signature as `void FUN_8002cc04(void)` and its body never reads a0 — the first instruction
         // to touch that register is the `jal InitializeSpriteArray` at the top. The two card pickers pass 0
         // and 1 explicitly; the 0 here satisfies C# and is not a claim.
         ScreenDecoration.FUN_8002cc04(0);
-        FUN_80025894();
+        StopCdAudio();
         OverlayExit.ShutdownAndLoadExecutable("cdrom:\\VS.EXE;1");
     }
 
@@ -446,13 +446,13 @@ internal static class ModeBranches
         }
         while (iVar10 < 3);
 
-        ScreenDecoration.FUN_8002a7f4(g_SpListCursor, g_SpSaveRecords3_Address);
+        ScreenDecoration.BuildSpSaveSlotScreen(g_SpListCursor, g_SpSaveRecords3_Address);
         while (true)
         {
             iVar7 = ListCursor.RunListSelect(ref g_SpListCursor, 0x10, 4, 3);
             if (iVar7 == -1)
             {
-                ScreenDecoration.FUN_8002b174();
+                ScreenDecoration.UnwindSpSaveSlotScreen();
                 return;
             }
 
@@ -594,18 +594,18 @@ internal static class ModeBranches
         }
 
         ScreenDecoration.FUN_8002cc04(1);
-        FUN_80025894();
+        StopCdAudio();
         OverlayExit.ShutdownAndLoadExecutable("cdrom:\\SP.EXE;1");
     }
 
     // THE EIGHT STUBS THAT USED TO STAND HERE ARE GONE. FUN_800276d8 @ 0x800276D8 is transliterated
-    // in CardRecords.cs, the module it belongs to; FUN_80029684, FUN_80029f9c, FUN_8002a178,
-    // FUN_8002a6f8, FUN_8002a7f4, FUN_8002b174 and FUN_8002cc04 are transliterated in
+    // in CardRecords.cs, the module it belongs to; BuildDemoSaveSlotScreen, UnwindDemoSaveSlotScreen, FUN_8002a178,
+    // FUN_8002a6f8, BuildSpSaveSlotScreen, UnwindSpSaveSlotScreen and FUN_8002cc04 are transliterated in
     // ScreenDecoration.cs, which is their own emission block (0x80029684..0x8002EA8B). The call
     // sites above now name those classes.
 
-    // GHIDRA: FUN_80025894 @ 0x80025894
-    private static void FUN_80025894()
+    // GHIDRA: StopCdAudio @ 0x80025894
+    private static void StopCdAudio()
     {
         // BLOCKED: CdControlB(CdlInit) then CdControlB(CdlStop), 92 bytes, five call sites — it stops
         // the CD-DA track before the overlay hands over. It belongs to the CD module (CdAudio.cs),

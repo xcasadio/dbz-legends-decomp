@@ -8,37 +8,37 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // THE SAVE-RECORD DISPATCHER AND ITS TWO DRIVERS — the read side, the write side and the four card
 // primitives the write side needs. FUN_800276d8 @ 0x800276D8 is the single entry point the two save
 // pickers and the options screen call; everything else here is reached only through it.
-//     0x800213B8  FUN_800213b8   READ  the six records off the card into 0x801FF200 / 0x801FF218
-//     0x800218D4  FUN_800218d4   WRITE the seven blocks back, formatting or creating if needed
+//     0x800213B8  LoadSaveRecords   READ  the six records off the card into 0x801FF200 / 0x801FF218
+//     0x800218D4  RunSaveWriteFlow   WRITE the seven blocks back, formatting or creating if needed
 //     0x80022024  GetFreeCardBlocks   free blocks on the card = 15 - sum(size >> 13)
 //     0x80022094  FormatMemoryCard   format the card
 //     0x80022138  CreateSaveFile   create "BISLPS-00355DRAGON" and stamp its header
 //     0x800224B0  WriteSaveHeader   write the 512-byte icon/title header into blocks 0..3 of the file
 //     0x800226F8  WriteSaveRecord   write ONE 128-byte record, with the same checksum ReadSaveRecord reads
 // THE SEVEN OTHERS THEY CALL ARE ALREADY PORTED and live in MemoryCard.cs, which owns this module's
-// state (DAT_80055A78/80/84/88/8C): InitializeMemoryCard, ShutdownMemoryCard, FUN_80021e34, FUN_80021618,
-// FUN_80021fb4, IsSaveFileMissing, ReadSaveRecord and the message overlay FUN_80027a58 (still BLOCKED
+// state (DAT_80055A78/80/84/88/8C): InitializeMemoryCard, ShutdownMemoryCard, ProbeMemoryCard, RunSaveLoadFlow,
+// QueryCardStatus, IsSaveFileMissing, ReadSaveRecord and the message overlay ShowCardMessage (still BLOCKED
 // there). CdAudio.UpdateCdAudio and PadInput.FUN_80026208 are ported too.
 //
 // THE ADDRESS RUNS, so the module boundary is visible: 0x800213B8..0x80021617 and
 // 0x800218D4..0x80021CE3 sit inside MemoryCard.cs's own two .text runs, and 0x80022024..0x800220D3,
 // 0x80022138..0x800221CF, 0x800224B0..0x8002280F sit between the functions it already lists.
 // FUN_800276d8 itself is emitted with the screen module, at 0x800276D8, between the CD-DA stop
-// FUN_80025894 and the message overlay FUN_80027a58 — but everything it does is card work.
+// StopCdAudio and the message overlay ShowCardMessage — but everything it does is card work.
 //
 // WHICH BLOCK HOLDS WHAT, closed by reading the two sides against each other:
-//     block 0   the 64-byte options record at 0x801FF018 (read by MemoryCard.FUN_80021618)
+//     block 0   the 64-byte options record at 0x801FF018 (read by MemoryCard.RunSaveLoadFlow)
 //     block 1,2,3   the three EIGHT-byte DEMO records at 0x801FF200 / 0x801FF208 / 0x801FF210
 //     block 4,5,6   the three SIXTEEN-byte SP records at 0x801FF218 / 0x801FF228 / 0x801FF238
-// FUN_800213b8's read cases 0..2 write `(&g_DemoSaveRecords3)[i * 2]` = 0x801FF200 + i * 8 and its cases
+// LoadSaveRecords's read cases 0..2 write `(&g_DemoSaveRecords3)[i * 2]` = 0x801FF200 + i * 8 and its cases
 // 3..5 write `(&DAT_801ff1e8)[i * 4]` = 0x801FF1E8 + i * 16, which for i = 3, 4, 5 is exactly
-// 0x801FF218 / 0x801FF228 / 0x801FF238. FUN_800218d4's write cases 1..3 use 0x801FF1F8 + n * 8 and
+// 0x801FF218 / 0x801FF228 / 0x801FF238. RunSaveWriteFlow's write cases 1..3 use 0x801FF1F8 + n * 8 and
 // its cases 4..6 use 0x801FF1D8 + n * 16 — the same six addresses from the other direction.
 //
 // WHICH PATH THIS PORT TAKES, AND WHY IT IS CORRECT RATHER THAN A DEFECT — traced state by state,
-// not assumed. Both pickers call FUN_800276d8 with mode 0 or 1, which runs FUN_800213b8.
-// DAT_80055A84 is 0 when they do: main's pre-loop MemoryCard.FUN_80021618 leaves it at 0 on every
-// one of its exits. So FUN_800213b8 goes state 0 -> state 7, and state 7 asks
+// not assumed. Both pickers call FUN_800276d8 with mode 0 or 1, which runs LoadSaveRecords.
+// DAT_80055A84 is 0 when they do: main's pre-loop MemoryCard.RunSaveLoadFlow leaves it at 0 on every
+// one of its exits. So LoadSaveRecords goes state 0 -> state 7, and state 7 asks
 // MemoryCard.IsSaveFileMissing whether "bu00:BISLPS-00355DRAGON" is in the card directory.
 // PsxSdkMonogame's LibMcrd models each card as a folder of files next to the executable
 // (memorycard1/, created and filled with sixteen blank slotN.bin on first probe — LibMcrd.cs
@@ -56,7 +56,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // MODE 2 HAS NO CALL SITE ANYWHERE IN THE PROGRAM. find-cross-references on FUN_800276d8 reports
 // six callers: ModeBranches.RunDemoModeScreen twice with 0, ModeBranches.RunSpModeScreen twice with 1,
 // FUN_80031c8c with 3, and FUN_80031c8c's other call at 0x80031CB4 whose a0 is its own param_1,
-// which that arm has already tested as 0. So FUN_800218d4 and the five routines only it reaches are
+// which that arm has already tested as 0. So RunSaveWriteFlow and the five routines only it reaches are
 // transliterated and unreachable. They are here because the dispatcher's switch is here.
 internal static class CardRecords
 {
@@ -66,7 +66,7 @@ internal static class CardRecords
     private const int g_OptionsRecord64_Address = unchecked((int)0x801FF018);
 
     // GHIDRA: DAT_801ff1d8 @ 0x801FF1D8
-    // Not a record: the BASE FUN_800218d4 adds `DAT_80055a8c << 4` to for cases 4, 5 and 6, giving
+    // Not a record: the BASE RunSaveWriteFlow adds `DAT_80055a8c << 4` to for cases 4, 5 and 6, giving
     // 0x801FF218 / 0x801FF228 / 0x801FF238 — the three sixteen-byte SP records.
     private const int DAT_801ff1d8_Address = unchecked((int)0x801FF1D8);
 
@@ -138,13 +138,13 @@ internal static class CardRecords
     //
     // NOTE ON param_2 — THE ORIGINAL IGNORES IT. Every caller passes a list base in a1, but Ghidra
     // recovers `void FUN_800276d8(int param_1)` and nothing in the body reads a1. It cannot matter:
-    // FUN_800213b8 hard-codes both list bases itself, so the read fills the same two lists whichever
+    // LoadSaveRecords hard-codes both list bases itself, so the read fills the same two lists whichever
     // one the caller named. The parameter is kept because the call sites pass it.
     //
     // NOTE ON THE TWO RECTs — THEY ARE DEAD. The prologue copies four words of .rdata at 0x800205AC
     // into the stack frame as two RECTs, {0x280, 0, 320, 240} and {0, 0, 320, 240}, and NOTHING in
     // any of the four arms reads them back. They are kept because the stores are (rule 12); their
-    // shape is the same full-frame VRAM save/restore pair MemoryCard.FUN_80027a58 uses.
+    // shape is the same full-frame VRAM save/restore pair MemoryCard.ShowCardMessage uses.
     internal static void FUN_800276d8(int param_1, int param_2)
     {
         int iVar5;
@@ -166,7 +166,7 @@ internal static class CardRecords
         if (param_1 == 2)
         {
             // UNREACHABLE — no call site in the program passes 2. See the header.
-            MemoryCard.FUN_80027a58(5);
+            MemoryCard.ShowCardMessage(5);
             iVar6 = 0;
             MemoryCard.ShutdownMemoryCard();
             do
@@ -178,14 +178,14 @@ internal static class CardRecords
             while (iVar6 < 0x1e);
 
             MemoryCard.InitializeMemoryCard();
-            SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021e34(0);
-            FUN_800218d4();
+            SharedHighRam.g_CardProbeResult = MemoryCard.ProbeMemoryCard(0);
+            RunSaveWriteFlow();
         }
         else if (param_1 < 3)
         {
             if (-1 < param_1)
             {
-                iVar6 = FUN_800213b8();
+                iVar6 = LoadSaveRecords();
                 iVar5 = 0x11;
                 if (iVar6 == 0)
                 {
@@ -204,7 +204,7 @@ internal static class CardRecords
         }
         else if (param_1 == 3)
         {
-            MemoryCard.FUN_80027a58(1);
+            MemoryCard.ShowCardMessage(1);
             iVar6 = 1;
             do
             {
@@ -214,12 +214,12 @@ internal static class CardRecords
             }
             while ((short)iVar6 < 0xf);
 
-            MemoryCard.FUN_80021618();
+            MemoryCard.RunSaveLoadFlow();
         }
     }
 
-    // GHIDRA: FUN_800213b8 @ 0x800213B8
-    // 168 bytes. THE READ SIDE — the same state machine shape as MemoryCard.FUN_80021618, run to
+    // GHIDRA: LoadSaveRecords @ 0x800213B8
+    // 168 bytes. THE READ SIDE — the same state machine shape as MemoryCard.RunSaveLoadFlow, run to
     // completion inside its own blocking do/while, but with SIX passes instead of one and with no
     // message screens at all: every failure goes straight to state 0x10 and returns 0.
     //   state 0     -> 7, reset the pass counter, keep looping
@@ -229,12 +229,12 @@ internal static class CardRecords
     //               into the SP list, pass 6 -> 0 and RETURN 1. Any short/corrupt record -> 0x10.
     //   state 0x10  reset the pass counter and RETURN 0
     //
-    // THE TWO LEAKED ARGUMENTS ARE TRACED, not assumed. `FUN_80021fb4()` at 0x800213E0 has
+    // THE TWO LEAKED ARGUMENTS ARE TRACED, not assumed. `QueryCardStatus()` at 0x800213E0 has
     // `addu s3, zero, zero` in its delay slot and this function's prologue never touches a0, so a0
     // is whatever FUN_800276d8 left: the jal at 0x80027760 also has a nop in its delay slot, and a0
     // there is the third word of the RECT constant block loaded at 0x80027738 (`lwl a0, 0xB(a1)` /
-    // `lwr a0, 8(a1)`), which is 0x00000000. So FUN_80021fb4(0) below is a measured value.
-    internal static int FUN_800213b8()
+    // `lwr a0, 8(a1)`), which is 0x00000000. So QueryCardStatus(0) below is a measured value.
+    internal static int LoadSaveRecords()
     {
         bool bVar4;
         short sVar5;
@@ -251,10 +251,10 @@ internal static class CardRecords
         MemoryCard.DAT_80055a80 = 1;
         sVar5 = 0;
 
-        // `DAT_80055a78._0_2_ = FUN_80021fb4();` — an `sh` into the low half of an undefined4.
+        // `DAT_80055a78._0_2_ = QueryCardStatus();` — an `sh` into the low half of an undefined4.
         MemoryCard.DAT_80055a78 =
             (MemoryCard.DAT_80055a78 & unchecked((int)0xffff0000)) |
-            (ushort)MemoryCard.FUN_80021fb4(0);
+            (ushort)MemoryCard.QueryCardStatus(0);
         if ((short)MemoryCard.DAT_80055a78 == 2)
         {
             MemoryCard.g_CardReprobeRequest = 1;
@@ -266,7 +266,7 @@ internal static class CardRecords
             if (MemoryCard.g_CardReprobeRequest == 1)
             {
                 MemoryCard.g_CardReprobeRequest = 0;
-                sVar5 = (short)MemoryCard.FUN_80021e34(0);
+                sVar5 = (short)MemoryCard.ProbeMemoryCard(0);
             }
 
             // Ghidra's `if (false) goto switchD_80021458_caseD_2;` sits here and is dead.
@@ -394,7 +394,7 @@ internal static class CardRecords
         while (true);
     }
 
-    // GHIDRA: FUN_800218d4 @ 0x800218D4
+    // GHIDRA: RunSaveWriteFlow @ 0x800218D4
     // 1040 bytes. THE WRITE SIDE — the state machine FUN_800276d8's mode 2 drives, over the same
     // DAT_80055A84 / DAT_80055A8C pair.
     //   state 0     -> 3
@@ -414,14 +414,14 @@ internal static class CardRecords
     // `undefined4 unaff_s2` — the prologue at 0x800218F4 saves s2 and NEVER initialises it, so on
     // the console the "still running" iterations return whatever the caller had in s2. IT CANNOT BE
     // OBSERVED: the only call site, FUN_800276d8 @ 0x800277D4, DISCARDS the value (Ghidra renders it
-    // as a bare `FUN_800218d4();`, and the image has no `sw v0` after that jal). The two paths that
+    // as a bare `RunSaveWriteFlow();`, and the image has no `sw v0` after that jal). The two paths that
     // do assign it write 1 and 2 before returning.
     //
     // THE LEAKED a0 IS TRACED. This function's prologue never writes a0, and the jal at 0x800277D4
     // has a nop in its delay slot; the last write to a0 before it is `addu a0, zero, zero` at
-    // 0x800277C8, the delay slot of the FUN_80021e34(0) call one line above. So a0 = 0 and
-    // FUN_80021fb4(0) below is measured, not chosen.
-    internal static int FUN_800218d4()
+    // 0x800277C8, the delay slot of the ProbeMemoryCard(0) call one line above. So a0 = 0 and
+    // QueryCardStatus(0) below is measured, not chosen.
+    internal static int RunSaveWriteFlow()
     {
         bool bVar1;
         short sVar2;
@@ -436,7 +436,7 @@ internal static class CardRecords
         sVar2 = 0;
         MemoryCard.DAT_80055a78 =
             (MemoryCard.DAT_80055a78 & unchecked((int)0xffff0000)) |
-            (ushort)MemoryCard.FUN_80021fb4(0);
+            (ushort)MemoryCard.QueryCardStatus(0);
         if ((short)MemoryCard.DAT_80055a78 == 2)
         {
             MemoryCard.g_CardReprobeRequest = 1;
@@ -448,7 +448,7 @@ internal static class CardRecords
             if (MemoryCard.g_CardReprobeRequest == 1)
             {
                 MemoryCard.g_CardReprobeRequest = 0;
-                sVar2 = (short)MemoryCard.FUN_80021e34(0);
+                sVar2 = (short)MemoryCard.ProbeMemoryCard(0);
             }
 
             switch (MemoryCard.g_CardOperationState)
@@ -466,7 +466,7 @@ internal static class CardRecords
                     else
                     {
                         MemoryCard.g_CardOperationState = 2;
-                        MemoryCard.FUN_80027a58(2);
+                        MemoryCard.ShowCardMessage(2);
                     }
 
                     break;
@@ -474,10 +474,10 @@ internal static class CardRecords
                     uVar4 = PadInput.FUN_80026208(3);
                     goto LAB_80021c8c;
                 case 3:
-                    iVar3 = MemoryCard.FUN_80021e34(0);
+                    iVar3 = MemoryCard.ProbeMemoryCard(0);
                     if (iVar3 == 4)
                     {
-                        MemoryCard.FUN_80027a58(6);
+                        MemoryCard.ShowCardMessage(6);
                         MemoryCard.g_CardOperationState = 4;
                     }
                     else
@@ -509,7 +509,7 @@ internal static class CardRecords
                     }
 
                     MemoryCard.g_CardOperationState = 6;
-                    MemoryCard.FUN_80027a58(7);
+                    MemoryCard.ShowCardMessage(7);
                     break;
                 case 6:
                     goto LAB_80021c64;
@@ -541,7 +541,7 @@ internal static class CardRecords
                     }
 
                     MemoryCard.g_CardOperationState = 10;
-                    MemoryCard.FUN_80027a58(8);
+                    MemoryCard.ShowCardMessage(8);
                     break;
                 case 10:
                     goto LAB_80021c64;
@@ -562,7 +562,7 @@ internal static class CardRecords
                     else
                     {
                         MemoryCard.g_CardOperationState = 0xe;
-                        MemoryCard.FUN_80027a58(9);
+                        MemoryCard.ShowCardMessage(9);
                     }
 
                     break;
@@ -628,7 +628,7 @@ internal static class CardRecords
             if (iVar3 != 0x80)
             {
                 MemoryCard.g_CardOperationState = 0xe;
-                MemoryCard.FUN_80027a58(9);
+                MemoryCard.ShowCardMessage(9);
             }
 
             goto switchD_80021ba4_default;
@@ -677,7 +677,7 @@ internal static class CardRecords
 
     // GHIDRA: GetFreeCardBlocks @ 0x80022024
     // 112 bytes. HOW MANY BLOCKS ARE FREE — walk the whole card directory, add up each entry's size
-    // in 8 KB blocks (`size >> 13`) and return 15 minus the total. FUN_800218d4's state 9 tests it as
+    // in 8 KB blocks (`size >> 13`) and return 15 minus the total. RunSaveWriteFlow's state 9 tests it as
     // `!= 0`, i.e. "there is at least one block free". A full card returns 0.
     //
     // ON THE SIZE FIELD: the original reads the word at +0x18 of the BIOS DIRENTRY, which is `size`.
@@ -714,7 +714,7 @@ internal static class CardRecords
     // GHIDRA: FormatMemoryCard @ 0x80022094
     // 64 bytes. FORMAT THE CARD. Ghidra types it `bool` because the body is `return iVar1 == 0;`
     // compiled as `sltiu v0, v0, 1` over a format() that answers non-zero on success — so this
-    // RETURNS 1 WHEN THE FORMAT FAILED, and FUN_800218d4's state 5 reads `iVar3 == 0` as "it
+    // RETURNS 1 WHEN THE FORMAT FAILED, and RunSaveWriteFlow's state 5 reads `iVar3 == 0` as "it
     // worked". Kept as an int for the same reason MemoryCard.IsSaveFileMissing is.
     private static int FormatMemoryCard(int param_1)
     {

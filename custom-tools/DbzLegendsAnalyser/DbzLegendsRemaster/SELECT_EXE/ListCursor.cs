@@ -114,13 +114,13 @@ internal static class ListCursor
         {
             if ((SELECT_EXE_exe.g_CurrentMenuState == 0) || (SELECT_EXE_exe.g_CurrentMenuState == 2))
             {
-                // Ghidra prints the call as FUN_80021f0c() with no argument, but the register is set:
+                // Ghidra prints the call as RepollMemoryCard() with no argument, but the register is set:
                 // `lui a0,0x8020 / lw a0,-0x0f98(a0)` at 0x80033DAC-0x80033DB0 loads g_CardProbeResult
                 // into a0, `sw a0,0x164(gp)` at 0x80033DB8 is this very store into g_PrevCardProbeResult, and
                 // the jal at 0x80033DBC has a nop delay slot. So the argument is the OLD status —
-                // which is what FUN_80021f0c's own `param_1 != 2` / `param_1 == 4` tests need.
+                // which is what RepollMemoryCard's own `param_1 != 2` / `param_1 == 4` tests need.
                 g_PrevCardProbeResult = SharedHighRam.g_CardProbeResult;
-                SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021f0c(g_PrevCardProbeResult);
+                SharedHighRam.g_CardProbeResult = MemoryCard.RepollMemoryCard(g_PrevCardProbeResult);
                 if ((SharedHighRam.g_CardProbeResult == 4) && (g_PrevCardProbeResult != 4))
                 {
                     return -2;

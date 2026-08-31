@@ -4,12 +4,12 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// THE FRAME STEP of SELECT.EXE, and the GsBOXF array only it and FUN_80027a58 touch.
+// THE FRAME STEP of SELECT.EXE, and the GsBOXF array only it and ShowCardMessage touch.
 //
 // DrawFrame @ 0x800344A4 is the ONLY place SELECT.EXE draws. Sixty-one call sites, and NOT ONE
 // of them is a frame loop: this overlay has no scheduler and no dispatcher, so every screen body
 // sits in its own blocking do/while and calls this once per frame to present. main @ 0x8003045C
-// calls it once per outer iteration; FUN_8002ea8c @ 0x8002EA8C (the intro animation) calls it
+// calls it once per outer iteration; BuildModeMenuScreen @ 0x8002EA8C (the intro animation) calls it
 // fourteen times inline; the menu driver RunModeMenu @ 0x800283A0 twice inside its loop.
 //
 // It sits in SELECT.EXE's frame/shutdown module, the four functions emitted at 0x800344A4
@@ -25,7 +25,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //   * FUN_80030698 @ 0x80030698 calls GsInit3D, which sets libgs's sort origin to the screen centre
 //     (LibGs.DAT_800593b0 = width / 2 = 160, DAT_800593b2 = height / 2 = 120). A GsSPRITE's x and y
 //     are therefore OFFSETS FROM (160,120), plus the target buffer's VRAM origin. That is why
-//     FUN_80027a58 @ 0x80027A58 arms the full-screen boxfill below at x = -160, y = -120, w = 320,
+//     ShowCardMessage @ 0x80027A58 arms the full-screen boxfill below at x = -160, y = -120, w = 320,
 //     h = 240: those four numbers are the whole 320x240 screen expressed from its centre.
 //   * LibGs.GsSetDrawBuffOffset publishes that origin from the OPPOSITE buffer index to the one
 //     GsSetDrawBuffClip uses. That is deliberate and it is documented at the top of LibGs.cs: the
@@ -37,9 +37,9 @@ internal static class FrameStep
     // function's own — the boxfill pass below walks `bp = (GsBOXF *)&g_GsBoxfArray5` five times with
     // `bp = bp + 1`. Both ends are closed: 0x80067B68 is the address the pass starts from, and
     // 0x80067B68 + 5 * 16 = 0x80067BB8 is DAT_80067bb8, a libsnd global written by FUN_80039ee4
-    // @ 0x80039EE4 and FUN_8003a250 @ 0x8003A250 and read by FUN_8003b05c @ 0x8003B05C.
+    // @ 0x80039EE4 and SsSetTickMode @ 0x8003A250 and read by FUN_8003b05c @ 0x8003B05C.
     //
-    // ONLY ELEMENT 0 IS EVER WRITTEN, and only by FUN_80027a58 @ 0x80027A58 lines 231..242:
+    // ONLY ELEMENT 0 IS EVER WRITTEN, and only by ShowCardMessage @ 0x80027A58 lines 231..242:
     //     DAT_80067b70 = 0x140;      // [0].w  = 320
     //     DAT_80067b6c = 0xff60;     // [0].x  = -160
     //     DAT_80067b6e = 0xff88;     // [0].y  = -120
@@ -152,7 +152,7 @@ internal static class FrameStep
         }
         else
         {
-            // THE BOXFILL PASS, taken when bit 3 of DAT_80055b80 is set. FUN_80027a58 @ 0x80027A58
+            // THE BOXFILL PASS, taken when bit 3 of DAT_80055b80 is set. ShowCardMessage @ 0x80027A58
             // is the only writer of that bit — line 251 sets bits 0 and 3 together (`| 9`), calls
             // the frame step twice, and line 256 clears them again (`& 0xFFFFFFF6`). Four sprites,
             // five boxfills, then sprite 4 on top.
@@ -197,7 +197,7 @@ internal static class FrameStep
         LibGs.GsSwapDispBuff();
 
         // Bit 0 of DAT_80055b80 suppresses the background clear for this frame. FUN_8002cc04
-        // @ 0x8002CC04 line 159 and FUN_8002ea8c @ 0x8002EA8C line 408 set it; FUN_8002ea8c line
+        // @ 0x8002CC04 line 159 and BuildModeMenuScreen @ 0x8002EA8C line 408 set it; BuildModeMenuScreen line
         // 780 clears it.
         if ((SELECT_EXE_exe.DAT_80055b80 & 1) == 0)
         {

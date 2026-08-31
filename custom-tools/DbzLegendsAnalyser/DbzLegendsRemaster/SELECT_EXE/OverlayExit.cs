@@ -6,12 +6,12 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// The last emission block of SELECT.EXE's game code, 0x80034380..0x800347C3: FUN_80034380,
-// FUN_800343a4, the frame step DrawFrame and the shutdown/LoadExec path ShutdownAndLoadExecutable, with
+// The last emission block of SELECT.EXE's game code, 0x80034380..0x800347C3: InitializePadRemapTablePointers,
+// PadMaskToButtonIndex, the frame step DrawFrame and the shutdown/LoadExec path ShutdownAndLoadExecutable, with
 // SNMAIN's start immediately behind it at 0x800347C4.
 //
 // This file carries the two of them that are on the boot chain. The frame step is in FrameStep.cs;
-// FUN_800343a4 @ 0x800343A4 (a bit-to-index helper the button-remap path feeds) has no caller on
+// PadMaskToButtonIndex @ 0x800343A4 (a bit-to-index helper the button-remap path feeds) has no caller on
 // this slice's path and is not modelled.
 internal static class OverlayExit
 {
@@ -32,7 +32,7 @@ internal static class OverlayExit
     private const int DAT_801fff00 = unchecked((int)0x801FFF00);
 
     // GHIDRA: g_PadRemapTablePointers2 @ 0x80055B44
-    // .sbss. Holds &g_PadRemapTable0. Its consumer is FUN_8002c048 @ 0x8002C048, which reads the pair
+    // .sbss. Holds &g_PadRemapTable0. Its consumer is BuildButtonConfigScreen @ 0x8002C048, which reads the pair
     // below as a two-entry array selected by player index — `(&g_PadRemapTablePointers2)[param_1]` — and
     // indexes the table it points at by a pad byte.
     internal static int g_PadRemapTablePointers2;
@@ -41,11 +41,11 @@ internal static class OverlayExit
     // .sbss. Holds &g_PadRemapTable1, the second entry of that pair.
     internal static int DAT_80055b48;
 
-    // GHIDRA: FUN_80034380 @ 0x80034380
+    // GHIDRA: InitializePadRemapTablePointers @ 0x80034380
     // Thirty-six bytes, two stores, no callees. It publishes the two pointers into the
     // cross-overlay save block that the pad-remap path later reads. main calls it once, between
     // the graphics bring-up and the memory-card bring-up.
-    internal static void FUN_80034380()
+    internal static void InitializePadRemapTablePointers()
     {
         g_PadRemapTablePointers2 = g_PadRemapTable0_Address;
         DAT_80055b48 = g_PadRemapTable1_Address;

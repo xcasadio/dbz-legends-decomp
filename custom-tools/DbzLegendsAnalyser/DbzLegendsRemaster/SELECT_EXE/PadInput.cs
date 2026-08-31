@@ -16,7 +16,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     addresses are 0x22 apart, so the pair is one contiguous 68-byte region at 0x80055D6C.
 //   * GetPadStatus indexes STRAIGHT ACROSS BOTH as one region: `(&g_PadStatusBuffers)[param_1 * 0x22]`,
 //     which only type-checks if they are adjacent. It returns byte +0 of the selected buffer, and
-//     both consumers read 0 as "pad present" (RunVsModeScreen line 10; FUN_800315c0 lines 96/121).
+//     both consumers read 0 as "pad present" (RunVsModeScreen line 10; RunOptionsScreen lines 96/121).
 //   * FUN_80026208 reads bytes +2 and +3 of each buffer as ~CONCAT11(hi, lo) — that is,
 //     (buf[+2] << 8) | buf[+3], inverted, ACTIVE LOW.
 // Byte +1 is never read by SELECT.EXE and is left alone; LibApi.cs records the same.
