@@ -125,52 +125,52 @@ namespace DbzLegendsAnalyser.Viewers
 
         private static readonly PaletteReference[] CodeProvenPalettes =
         {
-            CreatePaletteReference(15, 0x000, 0x1F0, "FUN_8002b2dc tpage 0x10/0x12"),
-            CreatePaletteReference(15, 0x000, 0x1F1, "FUN_80029684 tpage 0x12/0x13"),
+            CreatePaletteReference(15, 0x000, 0x1F0, "BuildOptionsScreen tpage 0x10/0x12"),
+            CreatePaletteReference(15, 0x000, 0x1F1, "BuildDemoSaveSlotScreen tpage 0x12/0x13"),
             CreatePaletteReference(15, 0x000, 0x1F2, "FUN_8002a178 tpage 0x15/0x17"),
-            CreatePaletteReference(15, 0x000, 0x1F3, "FUN_8002a7f4 tpage 0x17/0x18"),
-            CreatePaletteReference(15, 0x000, 0x1F4, "FUN_8002ea8c tpage 0x1D record 04"),
-            CreatePaletteReference(15, 0x000, 0x1F5, "FUN_8002ea8c tpage 0x1A dynamic row base"),
-            CreatePaletteReference(15, 0x000, 0x1FD, "FUN_8002ea8c tpage 0x1A variant A"),
-            CreatePaletteReference(15, 0x000, 0x1FE, "FUN_8002ea8c tpage 0x1A variant B"),
-            CreatePaletteReference(15, 0x000, 0x1FF, "FUN_8002ea8c tpage 0x1A variant C"),
-            CreatePaletteReference(16, 0x100, 0x1F0, "FUN_8002ea8c tpage 0x0E"),
-            CreatePaletteReference(16, 0x100, 0x1F1, "FUN_8002c048 tpage 0x1D"),
-            CreatePaletteReference(16, 0x170, 0x1FA, "FUN_8002ea8c tpage 0x0A"),
-            CreatePaletteReference(16, 0x170, 0x1FB, "FUN_8002b2dc/FUN_8002c048 tpage 0x0B"),
-            CreatePaletteReference(16, 0x170, 0x1FC, "FUN_80029684 tpage 0x1D"),
+            CreatePaletteReference(15, 0x000, 0x1F3, "BuildSpSaveSlotScreen tpage 0x17/0x18"),
+            CreatePaletteReference(15, 0x000, 0x1F4, "BuildModeMenuScreen tpage 0x1D record 04"),
+            CreatePaletteReference(15, 0x000, 0x1F5, "BuildModeMenuScreen tpage 0x1A dynamic row base"),
+            CreatePaletteReference(15, 0x000, 0x1FD, "BuildModeMenuScreen tpage 0x1A variant A"),
+            CreatePaletteReference(15, 0x000, 0x1FE, "BuildModeMenuScreen tpage 0x1A variant B"),
+            CreatePaletteReference(15, 0x000, 0x1FF, "BuildModeMenuScreen tpage 0x1A variant C"),
+            CreatePaletteReference(16, 0x100, 0x1F0, "BuildModeMenuScreen tpage 0x0E"),
+            CreatePaletteReference(16, 0x100, 0x1F1, "BuildButtonConfigScreen tpage 0x1D"),
+            CreatePaletteReference(16, 0x170, 0x1FA, "BuildModeMenuScreen tpage 0x0A"),
+            CreatePaletteReference(16, 0x170, 0x1FB, "BuildOptionsScreen/BuildButtonConfigScreen tpage 0x0B"),
+            CreatePaletteReference(16, 0x170, 0x1FC, "BuildDemoSaveSlotScreen tpage 0x1D"),
             CreatePaletteReference(16, 0x170, 0x1FD, "FUN_8002a178 tpage 0x0D"),
-            CreatePaletteReference(16, 0x170, 0x1FE, "FUN_8002a7f4 tpage 0x1C"),
-            CreatePaletteReference(16, 0x170, 0x1F6, "FUN_80027a58 tpage 0x1F"),
-            CreatePaletteReference(16, 0x170, 0x1F7, "FUN_80026420 tpage 0x1E upper set"),
-            CreatePaletteReference(16, 0x170, 0x1F8, "FUN_80026420 tpage 0x1E strips"),
+            CreatePaletteReference(16, 0x170, 0x1FE, "BuildSpSaveSlotScreen tpage 0x1C"),
+            CreatePaletteReference(16, 0x170, 0x1F6, "ShowCardMessage tpage 0x1F"),
+            CreatePaletteReference(16, 0x170, 0x1F7, "RunSoundTestScreen tpage 0x1E upper set"),
+            CreatePaletteReference(16, 0x170, 0x1F8, "RunSoundTestScreen tpage 0x1E strips"),
         };
 
         private static readonly ChunkPaletteView[] ChunkPaletteViews =
         {
-            new(4, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F4, "FUN_8002ea8c tpage 0x1D record 04"), "FUN_8002ea8c", "chunk 04 full source sheet with portrait panel and star sprites"),
-            new(5, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FA, "FUN_8002ea8c tpage 0x0A"), "FUN_8002ea8c", "chunk 05 full page"),
-            new(7, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FB, "FUN_8002b2dc/FUN_8002c048 tpage 0x0B"), "FUN_8002b2dc", "chunk 07 tilesheet full page"),
-            new(9, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FC, "FUN_80029684 tpage 0x1D"), "FUN_80029684", "chunk 09 full record"),
-            new(10, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FD, "FUN_80029684/FUN_8002a7f4 tpage 0x0C"), "FUN_80029684", "chunk 10 full page"),
-            new(11, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FE, "FUN_8002a7f4 tpage 0x1C"), "FUN_8002a7f4", "chunk 11 full page"),
+            new(4, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F4, "BuildModeMenuScreen tpage 0x1D record 04"), "BuildModeMenuScreen", "chunk 04 full source sheet with portrait panel and star sprites"),
+            new(5, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FA, "BuildModeMenuScreen tpage 0x0A"), "BuildModeMenuScreen", "chunk 05 full page"),
+            new(7, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FB, "BuildOptionsScreen/BuildButtonConfigScreen tpage 0x0B"), "BuildOptionsScreen", "chunk 07 tilesheet full page"),
+            new(9, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FC, "BuildDemoSaveSlotScreen tpage 0x1D"), "BuildDemoSaveSlotScreen", "chunk 09 full record"),
+            new(10, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FD, "BuildDemoSaveSlotScreen/BuildSpSaveSlotScreen tpage 0x0C"), "BuildDemoSaveSlotScreen", "chunk 10 full page"),
+            new(11, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FE, "BuildSpSaveSlotScreen tpage 0x1C"), "BuildSpSaveSlotScreen", "chunk 11 full page"),
             new(12, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1FD, "FUN_8002a178 tpage 0x0D"), "FUN_8002a178", "chunk 12 full page"),
-            new(13, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F7, "FUN_80026420 tpage 0x1E upper set"), "FUN_80026420", "chunk 13 tilesheet palette A"),
-            new(13, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F8, "FUN_80026420 tpage 0x1E strips"), "FUN_80026420", "chunk 13 tilesheet palette B"),
-            new(17, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F6, "FUN_80027a58 tpage 0x1F"), "FUN_80027a58", "chunk 17 full record palette"),
+            new(13, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F7, "RunSoundTestScreen tpage 0x1E upper set"), "RunSoundTestScreen", "chunk 13 tilesheet palette A"),
+            new(13, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F8, "RunSoundTestScreen tpage 0x1E strips"), "RunSoundTestScreen", "chunk 13 tilesheet palette B"),
+            new(17, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F6, "ShowCardMessage tpage 0x1F"), "ShowCardMessage", "chunk 17 full record palette"),
         };
 
         private static readonly SpriteUsage[] SpriteUsages =
         {
-            new(4, 0x1D, 0x00, 0x78, 0x47, 0x46, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F4, "FUN_8002ea8c tpage 0x1D record 04"), "FUN_8002ea8c", "chunk 04 portrait panel"),
-            new(6, 0x0E, 0x09, 0x00, 0x3B, 0xF0, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F0, "FUN_8002ea8c repeated strip"), "FUN_8002ea8c", "chunk 06 repeated strip source"),
-            new(6, 0x0E, 0x48, 0x30, 0x7D, 0x60, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F0, "FUN_8002ea8c banner sprite"), "FUN_8002ea8c", "chunk 06 banner crop"),
-            new(8, 0x1D, 0x00, 0x28, 0x80, 0x50, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F1, "FUN_8002c048 tpage 0x1D"), "FUN_8002c048", "chunk 08 animated card source"),
-            new(14, 0x1A, 0x00, 0x00, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F5, "FUN_8002ea8c selector state 0"), "FUN_8002ea8c", "chunk 14 selector tile state 0"),
-            new(14, 0x1A, 0x00, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FD, "FUN_8002ea8c tpage 0x1A variant A"), "FUN_8002ea8c", "chunk 14 selector variant A"),
-            new(14, 0x1A, 0x50, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FE, "FUN_8002ea8c tpage 0x1A variant B"), "FUN_8002ea8c", "chunk 14 selector variant B"),
-            new(14, 0x1A, 0xA0, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FF, "FUN_8002ea8c tpage 0x1A variant C"), "FUN_8002ea8c", "chunk 14 selector variant C"),
-            new(17, 0x1F, 0x00, 0x80, 0x50, 0x10, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F6, "FUN_80027a58 tpage 0x1F"), "FUN_80027a58", "chunk 17 case 5 strip"),
+            new(4, 0x1D, 0x00, 0x78, 0x47, 0x46, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F4, "BuildModeMenuScreen tpage 0x1D record 04"), "BuildModeMenuScreen", "chunk 04 portrait panel"),
+            new(6, 0x0E, 0x09, 0x00, 0x3B, 0xF0, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F0, "BuildModeMenuScreen repeated strip"), "BuildModeMenuScreen", "chunk 06 repeated strip source"),
+            new(6, 0x0E, 0x48, 0x30, 0x7D, 0x60, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F0, "BuildModeMenuScreen banner sprite"), "BuildModeMenuScreen", "chunk 06 banner crop"),
+            new(8, 0x1D, 0x00, 0x28, 0x80, 0x50, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(16, 0x100, 0x1F1, "BuildButtonConfigScreen tpage 0x1D"), "BuildButtonConfigScreen", "chunk 08 animated card source"),
+            new(14, 0x1A, 0x00, 0x00, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1F5, "BuildModeMenuScreen selector state 0"), "BuildModeMenuScreen", "chunk 14 selector tile state 0"),
+            new(14, 0x1A, 0x00, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FD, "BuildModeMenuScreen tpage 0x1A variant A"), "BuildModeMenuScreen", "chunk 14 selector variant A"),
+            new(14, 0x1A, 0x50, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FE, "BuildModeMenuScreen tpage 0x1A variant B"), "BuildModeMenuScreen", "chunk 14 selector variant B"),
+            new(14, 0x1A, 0xA0, 0x90, 0x50, 0x30, PsxImageDecoder.PsxPixelMode.Bpp8, CreatePaletteReference(15, 0x000, 0x1FF, "BuildModeMenuScreen tpage 0x1A variant C"), "BuildModeMenuScreen", "chunk 14 selector variant C"),
+            new(17, 0x1F, 0x00, 0x80, 0x50, 0x10, PsxImageDecoder.PsxPixelMode.Bpp4, CreatePaletteReference(16, 0x170, 0x1F6, "ShowCardMessage tpage 0x1F"), "ShowCardMessage", "chunk 17 case 5 strip"),
         };
 
         private static readonly CompositeUsage[] CompositeUsages =
@@ -180,8 +180,8 @@ namespace DbzLegendsAnalyser.Viewers
                 0x200,
                 0x0F0,
                 PsxImageDecoder.PsxPixelMode.Bpp8,
-                CreatePaletteReference(15, 0x000, 0x1F0, "FUN_8002b2dc tpage 0x10/0x12"),
-                "FUN_8002b2dc",
+                CreatePaletteReference(15, 0x000, 0x1F0, "BuildOptionsScreen tpage 0x10/0x12"),
+                "BuildOptionsScreen",
                 "512x240 background composite; tpage 0x12 spans the tail of chunk 00 and the head of chunk 01",
                 new[]
                 {
@@ -193,8 +193,8 @@ namespace DbzLegendsAnalyser.Viewers
                 0x140,
                 0x0F0,
                 PsxImageDecoder.PsxPixelMode.Bpp8,
-                CreatePaletteReference(15, 0x000, 0x1F1, "FUN_80029684 tpage 0x12/0x13"),
-                "FUN_80029684",
+                CreatePaletteReference(15, 0x000, 0x1F1, "BuildDemoSaveSlotScreen tpage 0x12/0x13"),
+                "BuildDemoSaveSlotScreen",
                 "320x240 background composite",
                 new[]
                 {
@@ -219,8 +219,8 @@ namespace DbzLegendsAnalyser.Viewers
                 0x140,
                 0x0F0,
                 PsxImageDecoder.PsxPixelMode.Bpp8,
-                CreatePaletteReference(15, 0x000, 0x1F3, "FUN_8002a7f4 tpage 0x17/0x18"),
-                "FUN_8002a7f4",
+                CreatePaletteReference(15, 0x000, 0x1F3, "BuildSpSaveSlotScreen tpage 0x17/0x18"),
+                "BuildSpSaveSlotScreen",
                 "320x240 background composite",
                 new[]
                 {

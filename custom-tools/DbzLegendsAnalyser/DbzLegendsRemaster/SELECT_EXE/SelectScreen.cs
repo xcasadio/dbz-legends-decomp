@@ -153,8 +153,8 @@ internal static class SelectScreen
         ResetGraph(0);
         LibGs.GsInitGraph(0x140, 0xf0, 0, 0, 0);
 
-        // GHIDRA: GsDefDispBuff @ 0x8004879C — Ghidra leaves it unnamed and plates it
-        // "Possible GS_103.OBJ/GsDefDispBuff"; PsxSdkMonogame/LibGs.cs carries it under that name.
+        // GHIDRA: GsDefDispBuff @ 0x8004879C — closed from the four buffer origins it writes and
+        // from Ghidra's own "Possible GS_103.OBJ/GsDefDispBuff" plate; it now carries that name.
         LibGs.GsDefDispBuff(0, 0, 0x140, 0);
 
         LibGs.GsInit3D();
