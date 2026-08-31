@@ -19,6 +19,14 @@ else if (args.Length == 1 && args[0] == "--validate-title-task")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TitleScreenTaskValidation.Run();
 }
+else if (args.Length >= 1 && args[0] == "--diag-select")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SelectIntroDiagnostic.Run(args);
+}
+else if (args.Length == 1 && args[0] == "--validate-sortsprite")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SortSpriteValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-render")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.RenderPipelineValidation.Run();
