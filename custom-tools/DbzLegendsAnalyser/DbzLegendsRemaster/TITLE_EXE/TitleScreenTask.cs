@@ -53,19 +53,19 @@ internal static class TitleScreenTask
         {
             case 0:
                 InitializeMemoryCard();
-                SharedHighRam.DAT_801ff068 = FUN_80022780(0);
+                SharedHighRam.g_CardProbeResult = FUN_80022780(0);
                 // JUSTIFICATION: C# language bridge only
                 // RELATION: the original reaches LAB_80021F98 two ways, once by falling into the
                 // else arm and once by a goto out of the then arm. C# forbids jumping into another
                 // block, so the shared tail is lifted out behind a flag. Same three paths, same
                 // order.
                 bool clearSaveTable = false;
-                if (SharedHighRam.DAT_801ff068 == 0)
+                if (SharedHighRam.g_CardProbeResult == 0)
                 {
                     iVar10 = FUN_80023374();
                     if (iVar10 == 0)
                     {
-                        SharedHighRam.DAT_801ff068 = 2;
+                        SharedHighRam.g_CardProbeResult = 2;
                     }
                     else
                     {
@@ -112,7 +112,7 @@ internal static class TitleScreenTask
                         } while (iVar10 < 3);
                     }
 
-                    if (SharedHighRam.DAT_801ff068 != 0)
+                    if (SharedHighRam.g_CardProbeResult != 0)
                     {
                         clearSaveTable = true;
                     }
@@ -454,7 +454,7 @@ internal static class TitleScreenTask
         // BLOCKED: the save-slot scan, which fills INT_ARRAY_801ff200 from the card.
         //
         // Measured the same way, breaking at 0x80021EC0: v0 = 0, meaning no valid save was found.
-        // The caller then sets DAT_801ff068 = 2 and clears the table, which is the state C# statics
+        // The caller then sets g_CardProbeResult = 2 and clears the table, which is the state C# statics
         // already start in.
         return 0;
     }

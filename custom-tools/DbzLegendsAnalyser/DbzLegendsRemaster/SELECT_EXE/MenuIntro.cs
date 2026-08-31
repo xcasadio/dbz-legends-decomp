@@ -9,8 +9,8 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //
 // WHAT IT IS: the mode menu's BUILD plus its entry animation. main calls it once per rebuild, in
 // the same block that resets the hundred sprites and reloads USAGI.B, so every sprite the menu
-// driver ModeMenu.FUN_800283a0 later moves is armed here. It owns no loop of its own beyond the
-// animation; it calls the frame step FrameStep.FUN_800344a4 inline (twenty call sites, four of them
+// driver ModeMenu.RunModeMenu later moves is armed here. It owns no loop of its own beyond the
+// animation; it calls the frame step FrameStep.DrawFrame inline (twenty call sites, four of them
 // inside the outer animation loop) and returns.
 //
 // THE THREE PIECES, in order:
@@ -35,11 +35,11 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // triangular table holds exactly twenty-eight satellites.
 internal static class MenuIntro
 {
-    // GHIDRA: DAT_80020648 @ 0x80020648
+    // GHIDRA: g_SpriteVRowTable28 @ 0x80020648
     // .rdata, 28 bytes, extent closed at both ends: 0x80020638 is the eight-halfword angle block
-    // ModeMenu.DAT_800205e4 duplicates and 0x80020664 is the "\\SUB\\USAGI.B;1" string.
+    // ModeMenu.g_StartAngleTable8 duplicates and 0x80020664 is the "\\SUB\\USAGI.B;1" string.
     // Named here rather than left as immediates because the identification above is the point.
-    private static readonly byte[] DAT_80020648 =
+    private static readonly byte[] g_SpriteVRowTable28 =
     {
         0x8b, 0x8b, 0x8b, 0x9b, 0xab, 0x9b, 0x7b, 0x7b, 0x9b, 0x9b, 0x7b, 0x8b, 0x9b, 0x9b,
         0xab, 0x7b, 0x8b, 0x9b, 0x9b, 0x8b, 0xab, 0x7b, 0x8b, 0x9b, 0x9b, 0x8b, 0xab, 0x9b,
@@ -111,7 +111,7 @@ internal static class MenuIntro
         byte[] local_a8 = new byte[28];
         for (int i = 0; i < 28; i++)
         {
-            local_a8[i] = DAT_80020648[i];
+            local_a8[i] = g_SpriteVRowTable28[i];
         }
 
         // ---------------------------------------------------------------------------------------
@@ -148,7 +148,7 @@ internal static class MenuIntro
 
         while (true)
         {
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             uVar22 = 0x3c;
             if (Sprites[0x3c].y == -0x78)
             {
@@ -183,7 +183,7 @@ internal static class MenuIntro
         Sprites[0x48].x = -0xee;
         Sprites[0x47].y = -0x78;
         Sprites[0x48].y = -0x78;
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
 
         // ---------------------------------------------------------------------------------------
         // 2. THE STATIC BUILD. 0x2D0 / 0x24 = element 20; five plates, 20..24.
@@ -263,7 +263,7 @@ internal static class MenuIntro
         Sprites[0x18].v = 0x70;
         iVar11 = 0;
 
-        // The same options-word gate FUN_80030a6c and ModeMenu.FUN_800283a0 apply: with bit 1 clear
+        // The same options-word gate FUN_80030a6c and ModeMenu.RunModeMenu apply: with bit 1 clear
         // the fourth row is hidden and the third takes its artwork.
         if ((PsxRam.ReadI32(unchecked((int)0x801FF018)) & 2) == 0)
         {
@@ -296,7 +296,7 @@ internal static class MenuIntro
         Sprites[0x1c].v = 0x90;
         Sprites[0x1c].cy = 0x1fe;
 
-        // 0x801FF002 is the DEMO launch block's second halfword, which FUN_80030af8 wrote before the
+        // 0x801FF002 is the DEMO launch block's second halfword, which RunDemoModeScreen wrote before the
         // previous overlay hand-off. Sprite 0x19 picks its tile out of a 3-wide sheet with it.
         Sprites[0x19].cy = (short)(SharedHighRam.DAT_801ff002 + 0x1f5);
         cVar4 = (sbyte)(SharedHighRam.DAT_801ff002 / 3);
@@ -508,7 +508,7 @@ internal static class MenuIntro
                     }
                 }
 
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
 
                 // -- sub-block 2 --------------------------------------------------------------
                 Sprites[0x3d].x = (short)(Sprites[0x3d].x + -0xf);
@@ -574,7 +574,7 @@ internal static class MenuIntro
                     }
                 }
 
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
 
                 // -- sub-block 3, byte for byte the same as sub-block 2 -----------------------
                 Sprites[0x3d].x = (short)(Sprites[0x3d].x + -0xf);
@@ -639,7 +639,7 @@ internal static class MenuIntro
                     }
                 }
 
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
 
                 // -- sub-block 4, the band step is -0xE / +0xE here, not -0xF / +0xF ----------
                 Sprites[0x3d].x = (short)(Sprites[0x3d].x + -0xe);
@@ -704,7 +704,7 @@ internal static class MenuIntro
                     }
                 }
 
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
 
                 // The band recycle: the six-slot ring 0x3D..0x41 rotates one place left and the
                 // pair 0x47/0x48 wraps, so the sweep never runs out of bands.
@@ -751,8 +751,8 @@ internal static class MenuIntro
         Sprites[0].b = 0x80;
         Sprites[0].g = 0x80;
         Sprites[0].r = 0x80;
-        FrameStep.FUN_800344a4();
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
         iVar11 = 1;
         do
         {
@@ -765,22 +765,22 @@ internal static class MenuIntro
         Sprites[0].b = 0x60;
         Sprites[0].g = 0x60;
         Sprites[0].r = 0x60;
-        FrameStep.FUN_800344a4();
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
         Sprites[0].b = 0x40;
         Sprites[0].g = 0x40;
         Sprites[0].r = 0x40;
-        FrameStep.FUN_800344a4();
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
         Sprites[0].b = 0x20;
         Sprites[0].g = 0x20;
         Sprites[0].r = 0x20;
-        FrameStep.FUN_800344a4();
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
         CopySprite(Sprites[0x28], Sprites[0x3c]);
 
         // 0x80065AB0 = GsSPRITE_ARRAY_800654ec + 36 * 41, i.e. element 41; seventeen entries.
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 41, 0x11);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 41, 0x11);
         CopySprite(Sprites[0], Sprites[10]);
         Sprites[10].attribute = 0x80000000;
 
@@ -788,14 +788,14 @@ internal static class MenuIntro
         // The seven orbit chains, armed through the triangular table FUN_80030698 @ 0x80030698
         // built at 0x800593B8: field +0x00 of each record is the LEADER's sprite address and +0x04
         // points at that row's satellite addresses. Row r carries r + 1 satellites, so the twenty-
-        // eight v bytes of DAT_80020648 are consumed exactly.
+        // eight v bytes of g_SpriteVRowTable28 are consumed exactly.
         // ---------------------------------------------------------------------------------------
         iVar23 = 0;
         iVar24 = 0;
         iVar11 = 0;
         do
         {
-            int leader = ReadI32(SelectScreen.DAT_800593b8, iVar11);
+            int leader = ReadI32(SelectScreen.g_SpriteChainTable7, iVar11);
             ModeMenu.SpriteAtAddress(leader).tpage = 0x1d;
             ModeMenu.SpriteAtAddress(leader).u = 0;
             ModeMenu.SpriteAtAddress(leader).v = 0x78;
@@ -813,7 +813,7 @@ internal static class MenuIntro
                 {
                     iVar14 = iVar21 * 4;
                     int satellite = PsxRam.ReadI32(
-                        iVar14 + ReadI32(SelectScreen.DAT_800593b8, iVar11 + 4));
+                        iVar14 + ReadI32(SelectScreen.g_SpriteChainTable7, iVar11 + 4));
                     ModeMenu.SpriteAtAddress(satellite).tpage = 0x1d;
                     ModeMenu.SpriteAtAddress(satellite).u = 0x4b;
                     ModeMenu.SpriteAtAddress(satellite).v = local_a8[iVar23];

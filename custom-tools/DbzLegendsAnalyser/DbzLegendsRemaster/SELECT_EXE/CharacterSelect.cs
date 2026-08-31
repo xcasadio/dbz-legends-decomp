@@ -3,10 +3,10 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// THE 3-ON-3 CHARACTER SELECT — FUN_80031e98 @ 0x80031E98, 6040 bytes, the largest single function
+// THE 3-ON-3 CHARACTER SELECT — RunVsTeamSelect @ 0x80031E98, 6040 bytes, the largest single function
 // in SELECT.EXE and the last thing between the VS branch and LoadExec("cdrom:\\VS.EXE;1").
 //
-// ONE CALLER, ONE EXIT CONTRACT. FUN_80030ef8 @ 0x80030EF8 (ModeBranches) calls it from inside its
+// ONE CALLER, ONE EXIT CONTRACT. RunVsModeScreen @ 0x80030EF8 (ModeBranches) calls it from inside its
 // sub-menu loop and then tests bit 2 of DAT_80055B80. This function writes that bit on its confirm
 // path, at 0x80033488. It is NOT the only writer: 0x80055B80 has 27 references image-wide and THREE
 // of them set bit 2 - main @ 0x80030550, FUN_8002cc04 @ 0x8002CDA8 and this one. All three are
@@ -19,7 +19,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // and reads the bit instead.
 //
 // THE SHAPE: a blocking screen body, like every other screen in this overlay. No task, no
-// scheduler. Four fixed animation loops run first, each calling the frame step FUN_800344a4
+// scheduler. Four fixed animation loops run first, each calling the frame step DrawFrame
 // @ 0x800344A4 once per frame, then one `do { ... } while (true)` that reads both pads, moves the
 // cursors, repaints, calls the frame step, and only ever leaves through a `return`.
 //
@@ -32,7 +32,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // same 0..34 index. Both tables are copied onto the stack on entry and read from the copy.
 //
 // HOW RECORD 18 REACHES THE SCREEN, which is what the recon left open. Record 18 is the one
-// FUN_80030908 decodes to 0x80080000 and never uploads (SelectScreen.g_UsagiChunk18DecodedTiles).
+// LoadUSAGI_B decodes to 0x80080000 and never uploads (SelectScreen.g_UsagiChunk18DecodedTiles).
 // THIS FUNCTION IS THE UPLOADER. Every time a slot's value changes it runs, for that one slot,
 //     LoadImage(&rect, 0x80080000 | tileIndex * 0x480); DrawSync(0);
 // with rect = { x = 0x3C0 + column * 0xC, y = 0x100 + row * 0x30, w = 0xC, h = 0x30 } — twelve VRAM
@@ -46,12 +46,12 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // BOTH PADS IN ONE FRAME, AND NOT THROUGH THE SAME READER. The loop opens with
 // FUN_80026208(0) and FUN_80026208(1) — the debounced reader in PadInput. Then, in TWO-PLAYER mode
 // only (param_1 == 0) and only while at least one player has not confirmed, pad 2's word is
-// THROWN AWAY and re-read RAW through FUN_800263e4(1), which does no auto-repeat masking at all.
+// THROWN AWAY and re-read RAW through ReadPadButtons(1), which does no auto-repeat masking at all.
 // Verified from the instruction stream, because two Ghidra renderings of this line disagreed:
 //     0x800325d0  addu s5,v0,zero    s5 = FUN_80026208(0)   -> uVar8
 //     0x800325e0  addu t0,v0,zero    t0 = FUN_80026208(1)   -> uVar9
 //     0x8003260c  jal 0x800263e4
-//     0x80032614  addu t0,v0,zero    t0 = FUN_800263e4(1)   -> uVar9, NOT uVar8
+//     0x80032614  addu t0,v0,zero    t0 = ReadPadButtons(1)   -> uVar9, NOT uVar8
 // and 0x80032618 (`andi v0,s5,0xffff`) confirms the uVar8 test still reads s5. Pad 1 therefore
 // keeps its debounced word and pad 2 gets the raw one. Each pad then runs its own repeat cadence
 // out of the three counters below it. Reproduced as measured — rule 12.
@@ -98,9 +98,9 @@ internal static class CharacterSelect
     // 30 00`. Only w and h survive — every LoadImage below overwrites x and y first.
     private static readonly RECT g_UsagiChunk18TileRect12x48 = new RECT { x = 0, y = 0, w = 0x0c, h = 0x30 };
 
-    // GHIDRA: DAT_80055a68 @ 0x80055A68
+    // GHIDRA: g_MaxSelectionIndexTable8 @ 0x80055A68
     // .data, image value 0x130C0A05 — the bytes 05 0A 0C 13.
-    private static readonly uint DAT_80055a68 = 0x130c0a05;
+    private static readonly uint g_MaxSelectionIndexTable8 = 0x130c0a05;
 
     // GHIDRA: DAT_80055a6c @ 0x80055A6C
     // .data, image value 0x22201C16 — the bytes 16 1C 20 22.
@@ -112,7 +112,7 @@ internal static class CharacterSelect
     // and the entry it selects is the HIGHEST SLOT VALUE the roster may hold at that unlock tier —
     // it is the bound both the increment (`> bound` wraps to -1) and the decrement (`< -1` wraps to
     // bound) test against. 34 is the last index of the 35-entry tables, so tier 7 is the full
-    // roster. What advances DAT_801FF002 is FUN_80030af8, outside this slice.
+    // roster. What advances DAT_801FF002 is RunDemoModeScreen, outside this slice.
     private static readonly uint DAT_80055a6c = 0x22201c16;
 
     // GHIDRA: DAT_80055b18 @ 0x80055B18
@@ -122,30 +122,30 @@ internal static class CharacterSelect
     // across visits. Starts at 0 from start's .bss clear, so the first visit never wipes.
     private static uint DAT_80055b18;
 
-    // GHIDRA: DAT_8004f7ec @ 0x8004F7EC .. DAT_8004f800 @ 0x8004F800
+    // GHIDRA: g_SelectionIndexSlots6 @ 0x8004F7EC .. DAT_8004f800 @ 0x8004F800
     // .data, SIX 32-bit slots, 0x8004F7EC..0x8004F803, every one of them 0xFFFFFFFF in the image
     // (read-memory: 24 bytes of FF, then zeros at 0x8004F804 — the extent closes itself).
-    //   [0] DAT_8004f7ec  [1] DAT_8004f7f0  [2] DAT_8004f7f4   row 0 / pad 1
+    //   [0] g_SelectionIndexSlots6  [1] DAT_8004f7f0  [2] DAT_8004f7f4   row 0 / pad 1
     //   [3] DAT_8004f7f8  [4] DAT_8004f7fc  [5] DAT_8004f800   row 1 / pad 2
     // ONE array rather than six globals because the original addresses it as one: it walks
-    // `&DAT_8004f7ec + iVar28 * 3 + iVar24` and `&DAT_8004f7f8 + iVar25` on an `int *`, and the
+    // `&g_SelectionIndexSlots6 + iVar28 * 3 + iVar24` and `&DAT_8004f7f8 + iVar25` on an `int *`, and the
     // duplicate scan below sweeps all six through `piVar17 = piVar17 + 3`. All fourteen references
     // in the image are inside this function.
-    private static readonly int[] DAT_8004f7ec = { -1, -1, -1, -1, -1, -1 };
+    private static readonly int[] g_SelectionIndexSlots6 = { -1, -1, -1, -1, -1, -1 };
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: shorthand for GsSPRITE_ARRAY_800654ec @ 0x800654EC, which this function touches
     // around two hundred times. Same alias, same reason, as MenuIntro.cs.
     private static LibGs.GsSPRITE[] Sprites => SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec;
 
-    // GHIDRA: FUN_80031e98 @ 0x80031E98
+    // GHIDRA: RunVsTeamSelect @ 0x80031E98
     // 6040 bytes. Returns 0 on confirm (with bit 2 of DAT_80055B80 set) and 0xFFFFFFFF on cancel.
     //
-    // param_1 is the VS sub-mode FUN_80030ef8 picked, 0..2, and it is stored in local_88:
+    // param_1 is the VS sub-mode RunVsModeScreen picked, 0..2, and it is stored in local_88:
     //   0  TWO PLAYERS  — pad 1 owns row 0, pad 2 owns row 1, both must confirm
     //   1  and 2        — ONE player, walking row 0 then row 1 alone; they differ only in the u/v
     //                     the two name plates (sprites 7 and 8) are set to.
-    internal static uint FUN_80031e98(int param_1)
+    internal static uint RunVsTeamSelect(int param_1)
     {
         byte uVar2;
         byte uVar3;
@@ -202,7 +202,7 @@ internal static class CharacterSelect
         // plain word copy. Same for the three block copies that follow, where Ghidra prints the
         // alignment test already resolved as `if (true) { ... } else { ... }`: the `true` arm is
         // the aligned copy and the `else` arm is unreachable, so only the taken arm is written.
-        MipsMemory.WriteU32(auStack_e8, 0, DAT_80055a68);
+        MipsMemory.WriteU32(auStack_e8, 0, g_MaxSelectionIndexTable8);
         MipsMemory.WriteU32(auStack_e8, 4, DAT_80055a6c);
 
         // g_UsagiChunk18TileIndexMap35 -> local_e0, thirty-five bytes: two sixteen-byte passes
@@ -263,12 +263,12 @@ internal static class CharacterSelect
         if ((int)(uint)SharedHighRam.DAT_801ff002 < (int)DAT_80055b18)
         {
             // The six slots, wiped in DESCENDING address order, exactly as the original stores them.
-            DAT_8004f7ec[5] = -1;
-            DAT_8004f7ec[4] = -1;
-            DAT_8004f7ec[3] = -1;
-            DAT_8004f7ec[2] = -1;
-            DAT_8004f7ec[1] = -1;
-            DAT_8004f7ec[0] = -1;
+            g_SelectionIndexSlots6[5] = -1;
+            g_SelectionIndexSlots6[4] = -1;
+            g_SelectionIndexSlots6[3] = -1;
+            g_SelectionIndexSlots6[2] = -1;
+            g_SelectionIndexSlots6[1] = -1;
+            g_SelectionIndexSlots6[0] = -1;
         }
 
         DAT_80055b18 = SharedHighRam.DAT_801ff002;
@@ -280,7 +280,7 @@ internal static class CharacterSelect
             Sprites[2].scalex = sVar21;
             Sprites[3].scalex = sVar21;
             Sprites[4].scalex = sVar21;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar24 = iVar24 + -1;
             sVar21 = (short)(sVar21 - 0x199);
         }
@@ -306,7 +306,7 @@ internal static class CharacterSelect
             Sprites[0x11].attribute = 0;
             Sprites[0x11].scalex = sVar21;
             Sprites[0x12].scalex = sVar21;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar24 = iVar24 + 1;
             sVar21 = (short)(sVar21 + 0x199);
         }
@@ -361,7 +361,7 @@ internal static class CharacterSelect
             Sprites[7].b = Sprites[7].r;
             Sprites[8].g = Sprites[8].r;
             Sprites[8].b = Sprites[8].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar24 = iVar24 + 8;
         }
         while (iVar24 < 0x80);
@@ -386,7 +386,7 @@ internal static class CharacterSelect
             piVar17 = piVar26;
             do
             {
-                if (DAT_8004f7ec[piVar17] == -1)
+                if (g_SelectionIndexSlots6[piVar17] == -1)
                 {
                     iVar10 = iVar25 + iVar22 + 9;
                     Sprites[iVar10].u = 0x38;
@@ -407,17 +407,17 @@ internal static class CharacterSelect
                     // n = 7k + r with r < 7 the composite is k + (r >> 1) / 4 = k, so both halves
                     // are floor(n / 7) and the pair yields (tile % 7, tile / 7). Written the way it
                     // is printed rather than folded, because the fold is a proof, not a reading.
-                    bVar4 = local_e0[DAT_8004f7ec[piVar17]];
+                    bVar4 = local_e0[g_SelectionIndexSlots6[piVar17]];
                     uVar27 = bVar4 / 7u;
                     Sprites[iVar10].cx = (short)(((((ushort)bVar4) + ((short)((uVar27 + ((bVar4 - uVar27) >> 1)) >> 2) * -7)) & 0xff) * 0x10 + 0x100);
-                    uVar27 = local_e0[DAT_8004f7ec[piVar17]] / 7u;
-                    Sprites[iVar10].cy = (short)((((ushort)((uVar27 + ((local_e0[DAT_8004f7ec[piVar17]] - uVar27) >> 1)) >> 2)) & 0xff) + 0x1fb);
+                    uVar27 = local_e0[g_SelectionIndexSlots6[piVar17]] / 7u;
+                    Sprites[iVar10].cy = (short)((((ushort)((uVar27 + ((local_e0[g_SelectionIndexSlots6[piVar17]] - uVar27) >> 1)) >> 2)) & 0xff) + 0x1fb);
 
                     // `local_90._2_2_` is RECT.y and `local_90._0_2_` is RECT.x; w and h are still
                     // the 12 x 48 the rect was copied with.
                     local_90.y = (short)local_78;
                     local_90.x = sVar21;
-                    LoadImage(local_90, unchecked((int)((uint)local_e0[DAT_8004f7ec[piVar17]] * 0x480 | 0x80080000u)));
+                    LoadImage(local_90, unchecked((int)((uint)local_e0[g_SelectionIndexSlots6[piVar17]] * 0x480 | 0x80080000u)));
                     DrawSync(0);
                 }
 
@@ -465,7 +465,7 @@ internal static class CharacterSelect
                 Sprites[iVar25 / 0x24].attribute = 0;
                 Sprites[iVar22 / 0x24].attribute = 0;
                 iVar25 = iVar25 + 0x24;
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
                 iVar28 = iVar28 + 1;
                 iVar22 = iVar22 + 0x24;
             }
@@ -491,7 +491,7 @@ internal static class CharacterSelect
             Sprites[0x10].r = Sprites[0xc].r;
             Sprites[0x10].g = Sprites[0xc].r;
             Sprites[0x10].b = Sprites[0xc].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar25 = iVar25 + 1;
             iVar24 = iVar25 * 0x10;
         }
@@ -535,7 +535,7 @@ internal static class CharacterSelect
             {
                 if ((local_40 == 0) || (local_38 == 0))
                 {
-                    uVar9 = PadInput.FUN_800263e4(1);
+                    uVar9 = PadInput.ReadPadButtons(1);
                 }
                 else
                 {
@@ -650,12 +650,12 @@ internal static class CharacterSelect
                         piVar26 = iVar28 * 3 + iVar24;
                         do
                         {
-                            iVar22 = DAT_8004f7ec[piVar26];
-                            DAT_8004f7ec[piVar26] = iVar22 + 1;
+                            iVar22 = g_SelectionIndexSlots6[piVar26];
+                            g_SelectionIndexSlots6[piVar26] = iVar22 + 1;
                             iVar10 = 0;
                             if ((int)(uint)auStack_e8[SharedHighRam.DAT_801ff002] < iVar22 + 1)
                             {
-                                DAT_8004f7ec[piVar26] = -1;
+                                g_SelectionIndexSlots6[piVar26] = -1;
                             }
 
                             iVar22 = 0;
@@ -666,9 +666,9 @@ internal static class CharacterSelect
                                 piVar13 = piVar17;
                                 do
                                 {
-                                    iVar12 = DAT_8004f7ec[piVar13];
+                                    iVar12 = g_SelectionIndexSlots6[piVar13];
                                     piVar13 = piVar13 + 1;
-                                    if ((iVar12 != -1) && (iVar12 == DAT_8004f7ec[piVar26]))
+                                    if ((iVar12 != -1) && (iVar12 == g_SelectionIndexSlots6[piVar26]))
                                     {
                                         iVar10 = iVar10 + 1;
                                     }
@@ -693,12 +693,12 @@ internal static class CharacterSelect
                         puVar19 = iVar28 * 3 + iVar24;
                         do
                         {
-                            uVar11 = (uint)DAT_8004f7ec[puVar19];
-                            DAT_8004f7ec[puVar19] = (int)(uVar11 - 1);
+                            uVar11 = (uint)g_SelectionIndexSlots6[puVar19];
+                            g_SelectionIndexSlots6[puVar19] = (int)(uVar11 - 1);
                             iVar22 = 0;
                             if ((int)(uVar11 - 1) < -1)
                             {
-                                DAT_8004f7ec[puVar19] = (int)(uint)auStack_e8[SharedHighRam.DAT_801ff002];
+                                g_SelectionIndexSlots6[puVar19] = (int)(uint)auStack_e8[SharedHighRam.DAT_801ff002];
                             }
 
                             iVar10 = 0;
@@ -709,9 +709,9 @@ internal static class CharacterSelect
                                 puVar14 = puVar18;
                                 do
                                 {
-                                    uVar11 = (uint)DAT_8004f7ec[puVar14];
+                                    uVar11 = (uint)g_SelectionIndexSlots6[puVar14];
                                     puVar14 = puVar14 + 1;
-                                    if ((uVar11 != 0xffffffff) && (uVar11 == (uint)DAT_8004f7ec[puVar19]))
+                                    if ((uVar11 != 0xffffffff) && (uVar11 == (uint)g_SelectionIndexSlots6[puVar19]))
                                     {
                                         iVar22 = iVar22 + 1;
                                     }
@@ -732,7 +732,7 @@ internal static class CharacterSelect
                     // `-3 < slot0 + slot1 + slot2` rejects a row whose three slots are all -1;
                     // any one filled slot makes the sum greater than -3.
                     if ((((uVar8 & 0x20) != 0) && (iVar24 == 3)) &&
-                        (-3 < DAT_8004f7ec[iVar28 * 3] + DAT_8004f7ec[1 + iVar28 * 3] + DAT_8004f7ec[2 + iVar28 * 3]))
+                        (-3 < g_SelectionIndexSlots6[iVar28 * 3] + g_SelectionIndexSlots6[1 + iVar28 * 3] + g_SelectionIndexSlots6[2 + iVar28 * 3]))
                     {
                         if (iVar28 == 0)
                         {
@@ -917,12 +917,12 @@ internal static class CharacterSelect
                         piVar26 = 3 + iVar25;
                         do
                         {
-                            iVar22 = DAT_8004f7ec[piVar26];
-                            DAT_8004f7ec[piVar26] = iVar22 + 1;
+                            iVar22 = g_SelectionIndexSlots6[piVar26];
+                            g_SelectionIndexSlots6[piVar26] = iVar22 + 1;
                             iVar10 = 0;
                             if ((int)(uint)auStack_e8[SharedHighRam.DAT_801ff002] < iVar22 + 1)
                             {
-                                DAT_8004f7ec[piVar26] = -1;
+                                g_SelectionIndexSlots6[piVar26] = -1;
                             }
 
                             iVar22 = 0;
@@ -933,9 +933,9 @@ internal static class CharacterSelect
                                 piVar13 = piVar17;
                                 do
                                 {
-                                    iVar12 = DAT_8004f7ec[piVar13];
+                                    iVar12 = g_SelectionIndexSlots6[piVar13];
                                     piVar13 = piVar13 + 1;
-                                    if ((iVar12 != -1) && (iVar12 == DAT_8004f7ec[piVar26]))
+                                    if ((iVar12 != -1) && (iVar12 == g_SelectionIndexSlots6[piVar26]))
                                     {
                                         iVar10 = iVar10 + 1;
                                     }
@@ -957,12 +957,12 @@ internal static class CharacterSelect
                         puVar19 = 3 + iVar25;
                         do
                         {
-                            uVar11 = (uint)DAT_8004f7ec[puVar19];
-                            DAT_8004f7ec[puVar19] = (int)(uVar11 - 1);
+                            uVar11 = (uint)g_SelectionIndexSlots6[puVar19];
+                            g_SelectionIndexSlots6[puVar19] = (int)(uVar11 - 1);
                             iVar22 = 0;
                             if ((int)(uVar11 - 1) < -1)
                             {
-                                DAT_8004f7ec[puVar19] = (int)(uint)auStack_e8[SharedHighRam.DAT_801ff002];
+                                g_SelectionIndexSlots6[puVar19] = (int)(uint)auStack_e8[SharedHighRam.DAT_801ff002];
                             }
 
                             iVar10 = 0;
@@ -973,9 +973,9 @@ internal static class CharacterSelect
                                 puVar14 = puVar18;
                                 do
                                 {
-                                    uVar11 = (uint)DAT_8004f7ec[puVar14];
+                                    uVar11 = (uint)g_SelectionIndexSlots6[puVar14];
                                     puVar14 = puVar14 + 1;
-                                    if ((uVar11 != 0xffffffff) && (uVar11 == (uint)DAT_8004f7ec[puVar19]))
+                                    if ((uVar11 != 0xffffffff) && (uVar11 == (uint)g_SelectionIndexSlots6[puVar19]))
                                     {
                                         iVar22 = iVar22 + 1;
                                     }
@@ -993,7 +993,7 @@ internal static class CharacterSelect
                     }
 
                     if ((((uVar9 & 0x20) != 0) && (iVar25 == 3)) &&
-                        (-3 < DAT_8004f7ec[3] + DAT_8004f7ec[4] + DAT_8004f7ec[5]))
+                        (-3 < g_SelectionIndexSlots6[3] + g_SelectionIndexSlots6[4] + g_SelectionIndexSlots6[5]))
                     {
                         uVar27 = uVar27 - 2;
                         local_38 = 1;
@@ -1048,7 +1048,7 @@ internal static class CharacterSelect
                 if (iVar24 != 3)
                 {
                     piVar26 = iVar28 * 3 + iVar24;
-                    if (DAT_8004f7ec[piVar26] == -1)
+                    if (g_SelectionIndexSlots6[piVar26] == -1)
                     {
                         iVar22 = iVar28 * 4 + iVar24 + 9;
                         Sprites[iVar22].tpage = 0xd;
@@ -1063,14 +1063,14 @@ internal static class CharacterSelect
                         Sprites[iVar22].tpage = 0x1f;
                         Sprites[iVar22].u = (byte)((sbyte)iVar24 * 0x30);
                         Sprites[iVar22].v = (byte)(iVar28 * 0x30);
-                        bVar4 = local_e0[DAT_8004f7ec[piVar26]];
+                        bVar4 = local_e0[g_SelectionIndexSlots6[piVar26]];
                         uVar11 = bVar4 / 7u;
                         Sprites[iVar22].cx = (short)(((((ushort)bVar4) + ((short)((uVar11 + ((bVar4 - uVar11) >> 1)) >> 2) * -7)) & 0xff) * 0x10 + 0x100);
-                        uVar11 = local_e0[DAT_8004f7ec[piVar26]] / 7u;
-                        Sprites[iVar22].cy = (short)((((ushort)((uVar11 + ((local_e0[DAT_8004f7ec[piVar26]] - uVar11) >> 1)) >> 2)) & 0xff) + 0x1fb);
+                        uVar11 = local_e0[g_SelectionIndexSlots6[piVar26]] / 7u;
+                        Sprites[iVar22].cy = (short)((((ushort)((uVar11 + ((local_e0[g_SelectionIndexSlots6[piVar26]] - uVar11) >> 1)) >> 2)) & 0xff) + 0x1fb);
                         local_90.y = (short)((short)(iVar28 * 0x30) + 0x100);
                         local_90.x = (short)((short)iVar24 * 0xc + 0x3c0);
-                        LoadImage(local_90, unchecked((int)((uint)local_e0[DAT_8004f7ec[piVar26]] * 0x480 | 0x80080000u)));
+                        LoadImage(local_90, unchecked((int)((uint)local_e0[g_SelectionIndexSlots6[piVar26]] * 0x480 | 0x80080000u)));
                         DrawSync(0);
                     }
                 }
@@ -1097,7 +1097,7 @@ internal static class CharacterSelect
                     {
                         // REPAINT — pad 2's slot. Its v is FIXED at 0x30: pad 2 is always row 1.
                         piVar26 = 3 + iVar25;
-                        if (DAT_8004f7ec[piVar26] == -1)
+                        if (g_SelectionIndexSlots6[piVar26] == -1)
                         {
                             iVar22 = iVar25 + 0xd;
                             Sprites[iVar22].tpage = 0xd;
@@ -1112,14 +1112,14 @@ internal static class CharacterSelect
                             Sprites[iVar22].tpage = 0x1f;
                             Sprites[iVar22].u = (byte)((sbyte)iVar25 * 0x30);
                             Sprites[iVar22].v = 0x30;
-                            bVar4 = local_e0[DAT_8004f7ec[piVar26]];
+                            bVar4 = local_e0[g_SelectionIndexSlots6[piVar26]];
                             uVar11 = bVar4 / 7u;
                             Sprites[iVar22].cx = (short)(((((ushort)bVar4) + ((short)((uVar11 + ((bVar4 - uVar11) >> 1)) >> 2) * -7)) & 0xff) * 0x10 + 0x100);
-                            uVar11 = local_e0[DAT_8004f7ec[piVar26]] / 7u;
-                            Sprites[iVar22].cy = (short)((((ushort)((uVar11 + ((local_e0[DAT_8004f7ec[piVar26]] - uVar11) >> 1)) >> 2)) & 0xff) + 0x1fb);
+                            uVar11 = local_e0[g_SelectionIndexSlots6[piVar26]] / 7u;
+                            Sprites[iVar22].cy = (short)((((ushort)((uVar11 + ((local_e0[g_SelectionIndexSlots6[piVar26]] - uVar11) >> 1)) >> 2)) & 0xff) + 0x1fb);
                             local_90.y = 0x130;
                             local_90.x = (short)((short)iVar25 * 0xc + 0x3c0);
-                            LoadImage(local_90, unchecked((int)((uint)local_e0[DAT_8004f7ec[piVar26]] * 0x480 | 0x80080000u)));
+                            LoadImage(local_90, unchecked((int)((uint)local_e0[g_SelectionIndexSlots6[piVar26]] * 0x480 | 0x80080000u)));
                             DrawSync(0);
                         }
 
@@ -1171,7 +1171,7 @@ internal static class CharacterSelect
                     }
                 }
 
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
             }
 
             if (uVar27 == 0)
@@ -1192,14 +1192,14 @@ internal static class CharacterSelect
                 do
                 {
                     sVar21 = (short)(Sprites[5].scalex + 0xcc);
-                    FrameStep.FUN_800344a4();
+                    FrameStep.DrawFrame();
                     iVar24 = iVar24 + 1;
                     Sprites[5].scalex = sVar21;
                 }
                 while (iVar24 < 0x15);
 
                 Sprites[5].scalex = 0x1000;
-                FrameStep.FUN_800344a4();
+                FrameStep.DrawFrame();
 
                 // THE VS ROSTER BLOCK, 0x801FF100..0x801FF10D, fourteen bytes inside the shared
                 // high-RAM span SharedHighRam models (base 0x801FF000). Short index 0x80 is
@@ -1208,65 +1208,65 @@ internal static class CharacterSelect
                 //
                 // The exported value is the SELECTION map (local_b8), not the tile map, and an
                 // empty slot exports 0 rather than -1.
-                if (DAT_8004f7ec[0] == -1)
+                if (g_SelectionIndexSlots6[0] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x81] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x81] = (short)(ushort)local_b8[DAT_8004f7ec[0]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x81] = (short)(ushort)local_b8[g_SelectionIndexSlots6[0]];
                 }
 
-                if (DAT_8004f7ec[1] == -1)
+                if (g_SelectionIndexSlots6[1] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x82] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x82] = (short)(ushort)local_b8[DAT_8004f7ec[1]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x82] = (short)(ushort)local_b8[g_SelectionIndexSlots6[1]];
                 }
 
-                if (DAT_8004f7ec[2] == -1)
+                if (g_SelectionIndexSlots6[2] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x83] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x83] = (short)(ushort)local_b8[DAT_8004f7ec[2]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x83] = (short)(ushort)local_b8[g_SelectionIndexSlots6[2]];
                 }
 
-                if (DAT_8004f7ec[3] == -1)
+                if (g_SelectionIndexSlots6[3] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x84] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x84] = (short)(ushort)local_b8[DAT_8004f7ec[3]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x84] = (short)(ushort)local_b8[g_SelectionIndexSlots6[3]];
                 }
 
-                if (DAT_8004f7ec[4] == -1)
+                if (g_SelectionIndexSlots6[4] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x85] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x85] = (short)(ushort)local_b8[DAT_8004f7ec[4]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x85] = (short)(ushort)local_b8[g_SelectionIndexSlots6[4]];
                 }
 
-                if (DAT_8004f7ec[5] == -1)
+                if (g_SelectionIndexSlots6[5] == -1)
                 {
                     SharedHighRam.SHORT_ARRAY_801ff000[0x86] = 0;
                 }
                 else
                 {
-                    SharedHighRam.SHORT_ARRAY_801ff000[0x86] = (short)(ushort)local_b8[DAT_8004f7ec[5]];
+                    SharedHighRam.SHORT_ARRAY_801ff000[0x86] = (short)(ushort)local_b8[g_SelectionIndexSlots6[5]];
                 }
 
                 // DAT_801ff100 — the VS sub-mode, straight from param_1.
                 SharedHighRam.SHORT_ARRAY_801ff000[0x80] = (short)local_88;
 
                 // AND THE BIT. 0x80033488, the only `ori` of 4 into DAT_80055B80 in the image, and
-                // the one thing FUN_80030ef8 @ 0x80030EF8 breaks its sub-menu loop on.
+                // the one thing RunVsModeScreen @ 0x80030EF8 breaks its sub-menu loop on.
                 SELECT_EXE_exe.DAT_80055b80 = SELECT_EXE_exe.DAT_80055b80 | 4;
                 return 0;
             }

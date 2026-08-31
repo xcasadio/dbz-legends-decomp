@@ -8,7 +8,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // The "select.c" module of SELECT.EXE — the functions emitted between 0x8002EA8C and 0x800315C0,
 // in that order: FUN_8002ea8c (intro animation), main, FUN_80030698 (graphics + CD bring-up),
-// FUN_80030848 (GsSPRITE array initialiser), FUN_800308bc (ClearVram), FUN_80030908 (the USAGI.B
+// InitializeSpriteArray (GsSPRITE array initialiser), ClearVram (ClearVram), LoadUSAGI_B (the USAGI.B
 // load), FUN_80030a6c (menu wrapper) and the four state handlers.
 //
 // This file carries the four of those that belong to the boot chain, plus the .bss/.data they own.
@@ -16,69 +16,69 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // handlers are BLOCKED there.
 internal static class SelectScreen
 {
-    // GHIDRA: DAT_800b0000 @ 0x800B0000
-    // THE RAW FILE BUFFER. FUN_80030908 reads the whole of \SUB\USAGI.B;1 here in one CdRead of
+    // GHIDRA: g_UsagiBFileBuffer @ 0x800B0000
+    // THE RAW FILE BUFFER. LoadUSAGI_B reads the whole of \SUB\USAGI.B;1 here in one CdRead of
     // ceil(size / 2048) sectors. The file is 301056 bytes = 147 sectors exactly, so the live span
     // is 0x800B0000..0x800F97FF.
     // EXTENT: 0x50000. The lower bound is the address CdRead is given; the upper bound is closed by
     // the next address any SELECT.EXE code uses above it, 0x80100000 — the BGM.B VAB body that
     // FUN_80022994 reads in menu state 3. Nothing is modelled between the two.
-    internal const int DAT_800b0000_Address = unchecked((int)0x800B0000);
+    internal const int g_UsagiBFileBuffer_Address = unchecked((int)0x800B0000);
 
-    internal static readonly byte[] DAT_800b0000 = new byte[0x50000];
+    internal static readonly byte[] g_UsagiBFileBuffer = new byte[0x50000];
 
-    // GHIDRA: DAT_80090000 @ 0x80090000
+    // GHIDRA: g_UsagiBDecodeBuffer @ 0x80090000
     // THE DECOMPRESSION SCRATCH. Records 0..17 are decoded here and immediately uploaded with
     // LoadImage, so only one record is live at a time.
     // EXTENT: 0x20000. The largest record is 160 x 240 VRAM halfwords = 76800 bytes (records 0..3),
-    // and the upper bound is closed by DAT_800b0000 above it.
-    internal const int DAT_80090000_Address = unchecked((int)0x80090000);
+    // and the upper bound is closed by g_UsagiBFileBuffer above it.
+    internal const int g_UsagiBDecodeBuffer_Address = unchecked((int)0x80090000);
 
-    internal static readonly byte[] DAT_80090000 = new byte[0x20000];
+    internal static readonly byte[] g_UsagiBDecodeBuffer = new byte[0x20000];
 
     // GHIDRA: g_UsagiChunk18DecodedTiles @ 0x80080000
     // Record 18 is decoded here and is NOT uploaded to VRAM. Ghidra types the symbol
     // ushort[20160] = 40320 bytes, which is 35 tiles of 12 x 48 words — 48 x 48 pixels at 4bpp —
-    // the form FUN_80031e98 @ 0x80031E98 later consumes as `0x80080000 + tileIndex * 0x480`.
-    // That typing is the extent; the upper bound is also closed by DAT_80090000 above it.
+    // the form RunVsTeamSelect @ 0x80031E98 later consumes as `0x80080000 + tileIndex * 0x480`.
+    // That typing is the extent; the upper bound is also closed by g_UsagiBDecodeBuffer above it.
     internal const int UsagiChunk18DecodedTilesAddress = unchecked((int)0x80080000);
 
     internal static readonly byte[] g_UsagiChunk18DecodedTiles = new byte[40320];
 
-    // GHIDRA: DAT_80059744 @ 0x80059744
+    // GHIDRA: g_UsagiBCdlFile @ 0x80059744
     // The CdlFILE \SUB\USAGI.B;1 is resolved into. Its size field is what Ghidra names
     // DAT_80059748 — CdlFILE is { CdlLOC pos; u_long size; char name[16]; }, so +4 is the size.
     internal static readonly CdlFILE CdlFILE_80059744 = new CdlFILE();
 
-    // GHIDRA: DAT_80058e08 @ 0x80058E08
+    // GHIDRA: g_SpritePointerTable28 @ 0x80058E08
     // The flat backing store of the triangular table FUN_80030698 builds: TWENTY-EIGHT words.
     // The count is closed by the loop itself — seven rows, row i holding i + 1 entries, so the row
     // bases are the triangular numbers 0, 1, 3, 6, 10, 15, 21 and the last entry is word 27. The
     // extent 0x70 also lands exactly on 0x80058E78, which is libgs's own DAT_80058e78.
     // A resolvable region because the loop writes into it THROUGH the pointer it just stored, the
     // way the original does.
-    internal const int DAT_80058e08_Address = unchecked((int)0x80058E08);
+    internal const int g_SpritePointerTable28_Address = unchecked((int)0x80058E08);
 
-    internal static readonly byte[] DAT_80058e08 = new byte[28 * 4];
+    internal static readonly byte[] g_SpritePointerTable28 = new byte[28 * 4];
 
-    // GHIDRA: DAT_800593b8 @ 0x800593B8
+    // GHIDRA: g_SpriteChainTable7 @ 0x800593B8
     // Seven records of twelve bytes, 0x800593B8..0x8005940B. FUN_80030698 writes two of the three
-    // fields per record: +0x00 (Ghidra's DAT_800593b8) and +0x04 (Ghidra's DAT_800593bc, the row
-    // pointer into DAT_80058e08). +0x08 is never written by anything in this slice.
+    // fields per record: +0x00 (Ghidra's g_SpriteChainTable7) and +0x04 (Ghidra's DAT_800593bc, the row
+    // pointer into g_SpritePointerTable28). +0x08 is never written by anything in this slice.
     // The record count is the loop bound (`while (iVar5 < 7)`) and the stride is its own increment
     // (`iVar6 = iVar6 + 0xc`).
-    internal const int DAT_800593b8_Address = unchecked((int)0x800593B8);
+    internal const int g_SpriteChainTable7_Address = unchecked((int)0x800593B8);
 
-    internal static readonly byte[] DAT_800593b8 = new byte[7 * 12];
+    internal static readonly byte[] g_SpriteChainTable7 = new byte[7 * 12];
 
-    // GHIDRA: DAT_80065484 @ 0x80065484
+    // GHIDRA: g_GsLineArray4 @ 0x80065484
     // FOUR GsLINE of sixteen bytes: 0x80065484, 0x80065494, 0x800654A4, 0x800654B4. The count and
-    // the stride are the frame step's own — FUN_800344a4 @ 0x800344A4 sorts exactly these four,
+    // the stride are the frame step's own — DrawFrame @ 0x800344A4 sorts exactly these four,
     // all at priority 1. The array ends at 0x800654C4, which is GsOT[0]'s handle.
     // FUN_80030698 arms all four with attribute 0x80000000; libgs's GsSortLine gates its whole
     // body on `if (-1 < (int)attribute)`, so as armed here all four are SUPPRESSED. That is the
     // original's own state and is reproduced, not corrected — rule 12.
-    internal static readonly LibGs.GsLINE[] GsLINE_ARRAY_80065484 =
+    internal static readonly LibGs.GsLINE[] g_GsLineArray4 =
     {
         new LibGs.GsLINE(),
         new LibGs.GsLINE(),
@@ -119,11 +119,11 @@ internal static class SelectScreen
         0x18, 0x3B, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 18  0x043B18  rect zero — decode only
     };
 
-    // GHIDRA: FUN_800308bc @ 0x800308BC
+    // GHIDRA: ClearVram @ 0x800308BC
     // ClearVram. One of the four routines whose body is identical to TITLE.EXE's — TITLE's
     // ClearVram @ 0x80057508 has the same RECT{0,0,0x400,0x200}, the same ClearImage and the same
     // DrawSync(0). Called from main line 14, in the middle of the shared prologue.
-    internal static void FUN_800308bc()
+    internal static void ClearVram()
     {
         var local_10 = new RECT
         {
@@ -169,8 +169,8 @@ internal static class SelectScreen
             iVar7 = 0;
         } while (pCVar1 == null);
 
-        // THE TRIANGULAR POINTER TABLE. Seven records at DAT_800593b8; record i gets a row pointer
-        // at +4 into DAT_80058e08 at word offset T(i) = i(i+1)/2, the row holds i + 1 entries, and
+        // THE TRIANGULAR POINTER TABLE. Seven records at g_SpriteChainTable7; record i gets a row pointer
+        // at +4 into g_SpritePointerTable28 at word offset T(i) = i(i+1)/2, the row holds i + 1 entries, and
         // the record's own +0 field takes one more. Thirty-five values in all.
         //
         // WHAT THE VALUES ARE: iVar4 starts at 0x80065D5C and advances by 0x24 = sizeof(GsSPRITE)
@@ -186,7 +186,7 @@ internal static class SelectScreen
         do
         {
             iVar7 = iVar7 + iVar5;
-            WriteI32(DAT_800593b8, iVar6 + 4, DAT_80058e08_Address + (iVar7 * 4));
+            WriteI32(g_SpriteChainTable7, iVar6 + 4, g_SpritePointerTable28_Address + (iVar7 * 4));
             int iVar3 = 0;
             if (-1 < iVar5)
             {
@@ -198,12 +198,12 @@ internal static class SelectScreen
                     // The original dereferences the row pointer it just stored. Kept as a write
                     // through that pointer rather than collapsed into an index, so the two levels
                     // of indirection stay visible.
-                    PsxRam.WriteI32(iVar2 + ReadI32(DAT_800593b8, iVar6 + 4), iVar4);
+                    PsxRam.WriteI32(iVar2 + ReadI32(g_SpriteChainTable7, iVar6 + 4), iVar4);
                     iVar4 = iVar4 + 0x24;
                 } while (iVar3 <= iVar5);
             }
 
-            WriteI32(DAT_800593b8, iVar6, iVar4);
+            WriteI32(g_SpriteChainTable7, iVar6, iVar4);
             iVar4 = iVar4 + 0x24;
             iVar5 = iVar5 + 1;
             iVar6 = iVar6 + 0xc;
@@ -211,30 +211,30 @@ internal static class SelectScreen
 
         // The four GsLINE, in the original's own store order. The byte addresses map onto the
         // GsLINE layout LibGs closed from GsSortLine: +0x0C r, +0x0D g, +0x0E b, +0x00 attribute.
-        GsLINE_ARRAY_80065484[1].b = 0xff;                              // DAT_800654a2
-        GsLINE_ARRAY_80065484[0].b = 0xff;                              // DAT_80065492
-        GsLINE_ARRAY_80065484[3].r = 0xff;                              // DAT_800654c0
-        GsLINE_ARRAY_80065484[2].r = 0xff;                              // DAT_800654b0
-        GsLINE_ARRAY_80065484[3].g = 0xff;                              // DAT_800654c1
-        GsLINE_ARRAY_80065484[2].g = 0xff;                              // DAT_800654b1
-        GsLINE_ARRAY_80065484[1].r = 0x80;                              // DAT_800654a0
-        GsLINE_ARRAY_80065484[0].r = 0x80;                              // DAT_80065490
-        GsLINE_ARRAY_80065484[1].g = 0x80;                              // DAT_800654a1
-        GsLINE_ARRAY_80065484[0].g = 0x80;                              // DAT_80065491
-        GsLINE_ARRAY_80065484[3].b = 0x80;                              // DAT_800654c2
-        GsLINE_ARRAY_80065484[2].b = 0x80;                              // DAT_800654b2
-        GsLINE_ARRAY_80065484[3].attribute = 0x80000000;                // DAT_800654b4
-        GsLINE_ARRAY_80065484[2].attribute = 0x80000000;                // DAT_800654a4
-        GsLINE_ARRAY_80065484[1].attribute = 0x80000000;                // DAT_80065494
-        GsLINE_ARRAY_80065484[0].attribute = 0x80000000;                // DAT_80065484
+        g_GsLineArray4[1].b = 0xff;                              // DAT_800654a2
+        g_GsLineArray4[0].b = 0xff;                              // DAT_80065492
+        g_GsLineArray4[3].r = 0xff;                              // DAT_800654c0
+        g_GsLineArray4[2].r = 0xff;                              // DAT_800654b0
+        g_GsLineArray4[3].g = 0xff;                              // DAT_800654c1
+        g_GsLineArray4[2].g = 0xff;                              // DAT_800654b1
+        g_GsLineArray4[1].r = 0x80;                              // DAT_800654a0
+        g_GsLineArray4[0].r = 0x80;                              // DAT_80065490
+        g_GsLineArray4[1].g = 0x80;                              // DAT_800654a1
+        g_GsLineArray4[0].g = 0x80;                              // DAT_80065491
+        g_GsLineArray4[3].b = 0x80;                              // DAT_800654c2
+        g_GsLineArray4[2].b = 0x80;                              // DAT_800654b2
+        g_GsLineArray4[3].attribute = 0x80000000;                // DAT_800654b4
+        g_GsLineArray4[2].attribute = 0x80000000;                // DAT_800654a4
+        g_GsLineArray4[1].attribute = 0x80000000;                // DAT_80065494
+        g_GsLineArray4[0].attribute = 0x80000000;                // g_GsLineArray4
 
-        // FUN_800261a4 @ 0x800261A4 — the pad bring-up. It used to stand here as a BLOCKED stub;
+        // InitializeBiosPad @ 0x800261A4 — the pad bring-up. It used to stand here as a BLOCKED stub;
         // it is now transliterated in PadInput.cs, which is the module it belongs to (0x800261A4,
         // 0x800261E4 and 0x80026208 are one emission block).
-        PadInput.FUN_800261a4();
+        PadInput.InitializeBiosPad();
     }
 
-    // GHIDRA: FUN_80030848 @ 0x80030848
+    // GHIDRA: InitializeSpriteArray @ 0x80030848
     // The GsSPRITE array initialiser, 116 bytes, 16 call sites. Fifteen stores per element, in the
     // original's own order.
     //
@@ -249,7 +249,7 @@ internal static class SelectScreen
     // undefined4 *. Its call sites pass either the base of GsSPRITE_ARRAY_800654ec or an address
     // inside it (main's second call passes 0x80065AB0 = element 41), so the pointer becomes an
     // array plus a start index. No behaviour is added: startIndex + param_2 is the same span.
-    internal static void FUN_80030848(LibGs.GsSPRITE[] param_1, int startIndex, int param_2)
+    internal static void InitializeSpriteArray(LibGs.GsSPRITE[] param_1, int startIndex, int param_2)
     {
         int iVar1 = 0;
         if (0 < param_2)
@@ -277,7 +277,7 @@ internal static class SelectScreen
         }
     }
 
-    // GHIDRA: FUN_80030908 @ 0x80030908
+    // GHIDRA: LoadUSAGI_B @ 0x80030908
     // THE CD LOAD, called from main line 40 whenever bit 2 of DAT_80055b80 is set. It reads the
     // whole of \SUB\USAGI.B;1 in one shot, starts the CD-DA track, then decodes and uploads
     // eighteen chunks and decodes a nineteenth into RAM.
@@ -297,7 +297,7 @@ internal static class SelectScreen
     // DbzLegendsRemaster.csproj now carries `<Content Include="..\..\..\data\SUB\USAGI.B">` with
     // CopyToOutputDirectory=PreserveNewest. So CdSearchFile finds it and FUN_80030698's
     // `do { ... } while (p == NULL)` terminates. The file is data/SUB/USAGI.B, 301056 bytes.
-    internal static void FUN_80030908()
+    internal static void LoadUSAGI_B()
     {
         byte[] local_28 = new byte[8];
         byte[] auStack_20 = new byte[8];
@@ -318,7 +318,7 @@ internal static class SelectScreen
             } while (iVar2 == 0);
         } while ((iVar2 == 5) || (iVar2 != 2));
 
-        CdRead((int)(((uint)CdlFILE_80059744.size + 0x7ffU) >> 0xb), DAT_800b0000_Address, 0x80);
+        CdRead((int)(((uint)CdlFILE_80059744.size + 0x7ffU) >> 0xb), g_UsagiBFileBuffer_Address, 0x80);
         do
         {
             iVar2 = CdReadSync(1, auStack_20);
@@ -339,8 +339,8 @@ internal static class SelectScreen
             iVar3 = iVar3 + 0xc;
             iVar2 = iVar2 + 1;
             Decompressor.DecompressLzss(
-                DAT_800b0000, ReadI32(g_UsagiBChunkTable, piVar1), DAT_80090000, 0);
-            LoadImage(RectAt(rect), DAT_80090000, 0);
+                g_UsagiBFileBuffer, ReadI32(g_UsagiBChunkTable, piVar1), g_UsagiBDecodeBuffer, 0);
+            LoadImage(RectAt(rect), g_UsagiBDecodeBuffer, 0);
             DrawSync(0);
             rect = rect + 0xc;
         } while (iVar2 < 0x12);
@@ -348,7 +348,7 @@ internal static class SelectScreen
         // Record 18, outside the loop: decoded and never uploaded. `(&g_UsagiBChunkTable)[iVar2*3]`
         // is int-indexed, so iVar2 = 0x12 selects byte offset 18 * 12 = 216.
         Decompressor.DecompressLzss(
-            DAT_800b0000, ReadI32(g_UsagiBChunkTable, iVar2 * 0xc), g_UsagiChunk18DecodedTiles, 0);
+            g_UsagiBFileBuffer, ReadI32(g_UsagiBChunkTable, iVar2 * 0xc), g_UsagiChunk18DecodedTiles, 0);
     }
 
     // JUSTIFICATION: C# language bridge only
@@ -383,7 +383,7 @@ internal static class SelectScreen
     // GHIDRA: FUN_800258f0 @ 0x800258F0
     private static void FUN_800258f0(int param_1, int param_2)
     {
-        // BLOCKED: the CD-DA play/seek helper. FUN_80030908 calls it as (10, 3) — mode bit 3 set,
+        // BLOCKED: the CD-DA play/seek helper. LoadUSAGI_B calls it as (10, 3) — mode bit 3 set,
         // track index 3 — which takes the CdlStandby / CdlSetmode / CdlPlay branch against the TOC
         // entry FUN_80025658 would have filled. Depends on that TOC, so it is blocked with it.
         _ = param_1;
@@ -402,16 +402,16 @@ internal static class SelectScreen
     // reach them the way they do on the console.
     internal static (byte[] Buffer, int Offset)? Resolve(int address)
     {
-        int offset = address - DAT_800b0000_Address;
-        if (offset >= 0 && offset < DAT_800b0000.Length)
+        int offset = address - g_UsagiBFileBuffer_Address;
+        if (offset >= 0 && offset < g_UsagiBFileBuffer.Length)
         {
-            return (DAT_800b0000, offset);
+            return (g_UsagiBFileBuffer, offset);
         }
 
-        offset = address - DAT_80090000_Address;
-        if (offset >= 0 && offset < DAT_80090000.Length)
+        offset = address - g_UsagiBDecodeBuffer_Address;
+        if (offset >= 0 && offset < g_UsagiBDecodeBuffer.Length)
         {
-            return (DAT_80090000, offset);
+            return (g_UsagiBDecodeBuffer, offset);
         }
 
         offset = address - UsagiChunk18DecodedTilesAddress;
@@ -420,16 +420,16 @@ internal static class SelectScreen
             return (g_UsagiChunk18DecodedTiles, offset);
         }
 
-        offset = address - DAT_80058e08_Address;
-        if (offset >= 0 && offset < DAT_80058e08.Length)
+        offset = address - g_SpritePointerTable28_Address;
+        if (offset >= 0 && offset < g_SpritePointerTable28.Length)
         {
-            return (DAT_80058e08, offset);
+            return (g_SpritePointerTable28, offset);
         }
 
-        offset = address - DAT_800593b8_Address;
-        if (offset >= 0 && offset < DAT_800593b8.Length)
+        offset = address - g_SpriteChainTable7_Address;
+        if (offset >= 0 && offset < g_SpriteChainTable7.Length)
         {
-            return (DAT_800593b8, offset);
+            return (g_SpriteChainTable7, offset);
         }
 
         return null;

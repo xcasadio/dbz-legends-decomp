@@ -10,7 +10,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // SELECT.EXE — the mode-select overlay. TITLE.EXE hands control here through
 // LoadExec("cdrom:\\SELECT.EXE;1"); this overlay hands control on to DEMO.EXE, VS.EXE or SP.EXE
-// through OverlayExit.FUN_8003472c. There is no fourth exit: the whole program contains exactly
+// through OverlayExit.ShutdownAndLoadExecutable. There is no fourth exit: the whole program contains exactly
 // three "cdrom:" strings and exactly one LoadExec call site.
 //
 // THIS OVERLAY IS NOT BUILT LIKE TITLE.EXE, and none of TITLE.EXE's engine transfers:
@@ -18,7 +18,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     links no libgs at all and hand-rolls DRAWENV/DISPENV/OT over libgpu;
 //   * it has NO task scheduler. There is no CreateTask / ExecuteTaskList and no indirect dispatch
 //     anywhere in the game half of .text (0x800213A8..0x80034FFF);
-//   * it has NO frame loop. It has a frame STEP, FUN_800344a4 @ 0x800344A4 with 61 call sites,
+//   * it has NO frame loop. It has a frame STEP, DrawFrame @ 0x800344A4 with 61 call sites,
 //     which the screen bodies call inline from their own blocking do/while loops;
 //   * its heap is armed once in start and NEVER USED: SELECT.EXE calls neither malloc nor free.
 //     The only allocator that runs is SpuInitMalloc over SPU RAM.
@@ -31,7 +31,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // BLOCKED stubs here, each naming its address.
 internal sealed class SELECT_EXE_exe
 {
-    // GHIDRA: DAT_800692a0 @ 0x800692A0
+    // GHIDRA: g_HeapBase @ 0x800692A0
     // The heap base start hands to InitHeap. It is the first word past the end of .bss
     // (0x8006929C) plus one word.
     private const int HeapBaseAddress = unchecked((int)0x800692A0);
@@ -40,16 +40,16 @@ internal sealed class SELECT_EXE_exe
     // First word start's zero loop clears. It is the first byte of .sbss.
     private const int BssClearFirst = unchecked((int)0x80055A78);
 
-    // GHIDRA: DAT_8006929c @ 0x8006929C
+    // GHIDRA: g_BssEnd @ 0x8006929C
     // The loop's exclusive limit and the value start publishes into DAT_8004f808. It is one past
     // the last byte of .bss (measured: .bss is 0x80055B88..0x8006929B).
     private const int BssClearLimit = unchecked((int)0x8006929C);
 
-    // GHIDRA: DAT_801ff018 @ 0x801FF018
+    // GHIDRA: g_OptionsRecord64 @ 0x801FF018
     // The persistent options word in the cross-overlay block, read by main line 46 for bit 1.
     // Modelled by SharedHighRam, which ResolveAddress chains, so it is read here as the raw PSX
     // address the original reads.
-    private const int DAT_801ff018_Address = unchecked((int)0x801FF018);
+    private const int g_OptionsRecord64_Address = unchecked((int)0x801FF018);
 
     // GHIDRA: DAT_8004f828 @ 0x8004F828
     // .data, image value 0x00008000 — the stack size SNMAIN reserves. Read from the image with
@@ -61,12 +61,12 @@ internal sealed class SELECT_EXE_exe
     // `00 00 80 00` at 0x8004F82C. SP becomes (0x00800000 - 8) | 0x80000000 = 0x807FFFF8.
     private static uint DAT_8004f82c = 0x00800000;
 
-    // GHIDRA: DAT_8004f80c @ 0x8004F80C
+    // GHIDRA: g_HeapSize @ 0x8004F80C
     // .data, image value 0. start computes the heap SIZE into it.
-    private static uint DAT_8004f80c;
+    private static uint g_HeapSize;
 
     // GHIDRA: DAT_8004f808 @ 0x8004F808
-    // .data. start publishes &DAT_8006929c here. PARTIAL: nothing on this slice's path reads it
+    // .data. start publishes &g_BssEnd here. PARTIAL: nothing on this slice's path reads it
     // back, so what the SN runtime uses it for is not closed; it is kept because the store is.
     internal static int DAT_8004f808;
 
@@ -77,18 +77,18 @@ internal sealed class SELECT_EXE_exe
     // value is 0, because nothing in SELECT.EXE reads it back on this slice's path.
     internal static int DAT_80055b1c;
 
-    // GHIDRA: DAT_80055b50 @ 0x80055B50
+    // GHIDRA: g_CurrentMenuState @ 0x80055B50
     // .sbss, SIXTEEN BITS (Ghidra types it undefined2 and main's second store is
     // `(undefined2)iVar2`). main writes 0xFFFF before the memory-card save load and then writes the
     // menu state into it once per outer iteration. MemoryCard.FUN_80021618 reads that 0xFFFF as a
-    // SIGNED short — its state 7 tests `DAT_80055b50 == -1`, which is what makes "no save file on
+    // SIGNED short — its state 7 tests `g_CurrentMenuState == -1`, which is what makes "no save file on
     // the card" return 0 to main instead of putting a message screen up.
-    internal static ushort DAT_80055b50;
+    internal static ushort g_CurrentMenuState;
 
-    // GHIDRA: DAT_80055b6c @ 0x80055B6C
+    // GHIDRA: g_PadButtonWord @ 0x80055B6C
     // .sbss, 32 bits. The recon reads it as the cached pad word; main only zeroes it.
     // PARTIAL: its readers are all in the screen bodies, which are not in this slice.
-    internal static int DAT_80055b6c;
+    internal static int g_PadButtonWord;
 
     // GHIDRA: DAT_80055b80 @ 0x80055B80
     // .sbss, 32 bits. THE RENDER/RELOAD FLAG WORD. Eleven write sites were measured in the whole
@@ -101,23 +101,23 @@ internal sealed class SELECT_EXE_exe
     // is not a pre-loop step.
     internal static int DAT_80055b80;
 
-    // GHIDRA: DAT_80065350 @ 0x80065350
+    // GHIDRA: g_OrderingTableTags0 @ 0x80065350
     // GsOT[0]'s tag array. EIGHT tags of four bytes: main sets GsOT[0].length = 3, and libgs's
     // GsClearOt clears `1 << (length & 0x1f)` entries. The extent is closed independently by the
     // second array's address — 0x80065370 - 0x80065350 = 0x20 = 8 * 4.
     // A LibGpu.RamRegion because GsClearOt hands GsOT.org to LibGpu.ClearOTagR and GsDrawOt hands
     // GsOT.tag to LibGpu.DrawOTag, both of which take PSX addresses and resolve them.
-    internal static readonly byte[] DAT_80065350 = RamRegion(unchecked((int)0x80065350), 32);
+    internal static readonly byte[] g_OrderingTableTags0 = RamRegion(unchecked((int)0x80065350), 32);
 
-    // GHIDRA: DAT_80065370 @ 0x80065370
+    // GHIDRA: g_OrderingTableTags1 @ 0x80065370
     // GsOT[1]'s tag array, same size and same reasoning. 0x80065370 + 0x20 = 0x80065390, four
     // bytes below GsOT[0]'s handle at 0x800654C4 — no named global falls between.
-    internal static readonly byte[] DAT_80065370 = RamRegion(unchecked((int)0x80065370), 32);
+    internal static readonly byte[] g_OrderingTableTags1 = RamRegion(unchecked((int)0x80065370), 32);
 
-    // GHIDRA: DAT_800654c4 @ 0x800654C4
+    // GHIDRA: g_GsOtArray2 @ 0x800654C4
     // The two libgs ordering-table handles, armed BY HAND in main lines 18..21 — this overlay
     // never calls a libgs routine that would build them. Two elements, because the frame step
-    // indexes them as `&DAT_800654c4 + GsGetActiveBuff() * 5` on an int * and 0x800654D8 -
+    // indexes them as `&g_GsOtArray2 + GsGetActiveBuff() * 5` on an int * and 0x800654D8 -
     // 0x800654C4 = 0x14 = sizeof(GsOT).
     internal static readonly LibGs.GsOT[] GsOT_800654c4 =
     {
@@ -127,7 +127,7 @@ internal sealed class SELECT_EXE_exe
 
     // GHIDRA: GsSPRITE_ARRAY_800654ec @ 0x800654EC
     // ONE HUNDRED sprites of 36 bytes, 0x800654EC..0x800662FB. The count is main's own argument to
-    // FUN_80030848 and the frame step's own sort bound; the stride is closed twice — FUN_80030848
+    // InitializeSpriteArray and the frame step's own sort bound; the stride is closed twice — InitializeSpriteArray
     // advances `param_1 + 9` on an undefined4 *, and main's second call passes 0x80065AB0, which is
     // 0x800654EC + 36 * 41.
     // It starts immediately after the two-element GsOT array: 0x800654D8 + 0x14 = 0x800654EC.
@@ -158,14 +158,14 @@ internal sealed class SELECT_EXE_exe
     public void start()
     {
         // The bss clear: `puVar1 = &DAT_80055a78; do { *puVar1 = 0; puVar1 += 1; }
-        // while (puVar1 < &DAT_8006929c);` — 0x13824 bytes of .sbss + .bss, one word at a time.
+        // while (puVar1 < &g_BssEnd);` — 0x13824 bytes of .sbss + .bss, one word at a time.
         //
         // PARTIAL: this port models .sbss/.bss as C# statics and as byte[] regions, every one of
         // which the CLR zero-initialises before first use, so the loop has nothing left to zero.
         // The range is spelled out above (BssClearFirst..BssClearLimit) rather than implied. This
         // is the same treatment __main and _96_init get across the ported overlays.
 
-        DAT_8004f80c = ((DAT_8004f82c - 8U) - DAT_8004f828) - 0x6929c;
+        g_HeapSize = ((DAT_8004f82c - 8U) - DAT_8004f828) - 0x6929c;
         DAT_8004f808 = BssClearLimit;
         DAT_80055b1c = 0;
 
@@ -173,7 +173,7 @@ internal sealed class SELECT_EXE_exe
         // as in TITLE.EXE. IT IS NEVER USED: SELECT.EXE calls neither malloc nor free anywhere
         // (measured: the only malloc/free symbols in the program are SpuInitMalloc / SpuMalloc /
         // SpuFree over SPU RAM). The call is kept because start makes it.
-        InitHeap(HeapBaseAddress, (int)DAT_8004f80c);
+        InitHeap(HeapBaseAddress, (int)g_HeapSize);
 
         main();
 
@@ -186,9 +186,9 @@ internal sealed class SELECT_EXE_exe
     // 572 bytes, 75 lines, 28 callees. Lines 8..17 are TITLE.EXE's main prologue call for call.
     //
     // CASE -1 IS UNREACHABLE, AND IT IS REPRODUCED ANYWAY — rule 12. The switch value comes from
-    // FUN_80030a6c, which tail-calls the menu driver FUN_800283a0 @ 0x800283A0 and returns
-    // DAT_80055a0c. find-cross-references on DAT_80055a0c reports 14 references and every single
-    // one is inside FUN_800283a0, which clamps it to [0, itemCount - 1]. Nothing else can write a
+    // FUN_80030a6c, which tail-calls the menu driver RunModeMenu @ 0x800283A0 and returns
+    // g_ModeMenuCursor. find-cross-references on g_ModeMenuCursor reports 14 references and every single
+    // one is inside RunModeMenu, which clamps it to [0, itemCount - 1]. Nothing else can write a
     // negative value into it. The real exits are the three LoadExec calls inside the state
     // handlers, so the do/while never terminates and the DrawSync/StopPAD/StopCallback/
     // ResetGraph/exit tail below is dead code on the console too.
@@ -203,47 +203,47 @@ internal sealed class SELECT_EXE_exe
         ResetGraph(0);
         InitGeom();
         SetDispMask(0);
-        SelectScreen.FUN_800308bc();
+        SelectScreen.ClearVram();
         PadInit(0);
         CdInit();
         ExitCriticalSection();
 
         // Lines 18..21: the two GsOT handles, armed by hand. Only .org and .length are written;
         // GsClearOt fills .offset, .point and .tag every frame.
-        GsOT_800654c4[0].org = RamAddressOf(DAT_80065350, 0);
+        GsOT_800654c4[0].org = RamAddressOf(g_OrderingTableTags0, 0);
         GsOT_800654c4[0].length = 3;
         GsOT_800654c4[1].length = 3;
-        GsOT_800654c4[1].org = RamAddressOf(DAT_80065370, 0);
+        GsOT_800654c4[1].org = RamAddressOf(g_OrderingTableTags1, 0);
 
         SelectScreen.FUN_80030698();
         OverlayExit.FUN_80034380();
-        MemoryCard.FUN_80021ce4();
-        SharedHighRam.DAT_801ff068 = MemoryCard.FUN_80021e34(0);
+        MemoryCard.InitializeMemoryCard();
+        SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021e34(0);
         bVar1 = false;
-        if (SharedHighRam.DAT_801ff068 == 0)
+        if (SharedHighRam.g_CardProbeResult == 0)
         {
-            DAT_80055b50 = 0xffff;
+            g_CurrentMenuState = 0xffff;
             iVar2 = MemoryCard.FUN_80021618();
             if (iVar2 == 0)
             {
-                SharedHighRam.DAT_801ff068 = 2;
+                SharedHighRam.g_CardProbeResult = 2;
             }
         }
 
-        DAT_80055b6c = 0;
+        g_PadButtonWord = 0;
         DAT_80055b80 = DAT_80055b80 | 4;
         do
         {
             if ((DAT_80055b80 & 4) != 0)
             {
                 DAT_80055b80 = 0;
-                SelectScreen.FUN_80030848(GsSPRITE_ARRAY_800654ec, 0, 100);
-                SelectScreen.FUN_80030908();
+                SelectScreen.InitializeSpriteArray(GsSPRITE_ARRAY_800654ec, 0, 100);
+                SelectScreen.LoadUSAGI_B();
                 MenuIntro.FUN_8002ea8c();
 
                 // 0x80065AB0 = GsSPRITE_ARRAY_800654ec + 36 * 41, i.e. element 41 of the same
                 // array, twelve entries.
-                SelectScreen.FUN_80030848(GsSPRITE_ARRAY_800654ec, 41, 0xc);
+                SelectScreen.InitializeSpriteArray(GsSPRITE_ARRAY_800654ec, 41, 0xc);
                 DAT_80055b80 = DAT_80055b80 & unchecked((int)0xfffffffb);
             }
 
@@ -261,23 +261,23 @@ internal sealed class SELECT_EXE_exe
             // of the 0x80-byte card record over 0x801FF018..0x801FF057 — and FUN_80031c8c, which is
             // not in this slice. On this port's boot path no card record is read (there is no save
             // file to find), so the bit is the 0 start's .bss clear leaves and item 2 is redirected.
-            if (((PsxRam.ReadI32(DAT_801ff018_Address) & 2) == 0) && (iVar2 == 2))
+            if (((PsxRam.ReadI32(g_OptionsRecord64_Address) & 2) == 0) && (iVar2 == 2))
             {
                 iVar2 = 3;
             }
 
-            FrameStep.FUN_800344a4();
-            DAT_80055b50 = (ushort)iVar2;
+            FrameStep.DrawFrame();
+            g_CurrentMenuState = (ushort)iVar2;
             switch (iVar2)
             {
                 case 0:
-                    ModeBranches.FUN_80030af8();
+                    ModeBranches.RunDemoModeScreen();
                     break;
                 case 1:
-                    ModeBranches.FUN_80030ef8();
+                    ModeBranches.RunVsModeScreen();
                     break;
                 case 2:
-                    ModeBranches.FUN_800310a8();
+                    ModeBranches.RunSpModeScreen();
                     break;
                 case 3:
                     FUN_800315c0();
@@ -298,10 +298,10 @@ internal sealed class SELECT_EXE_exe
     // FUN_8002ea8c @ 0x8002EA8C stood here as a BLOCKED stub. It is now transliterated in
     // MenuIntro.cs — the mode menu's build and entry animation, 6608 bytes.
 
-    // FUN_80030a6c @ 0x80030A6C, FUN_80030af8 @ 0x80030AF8, FUN_80030ef8 @ 0x80030EF8 and
-    // FUN_800310a8 @ 0x800310A8 stood here as BLOCKED stubs. All four are now transliterated in
-    // ModeBranches.cs, with the menu driver FUN_800283a0 @ 0x800283A0 in ModeMenu.cs and the shared
-    // list cursor FUN_80033d34 @ 0x80033D34 in ListCursor.cs. main's switch calls them above.
+    // FUN_80030a6c @ 0x80030A6C, RunDemoModeScreen @ 0x80030AF8, RunVsModeScreen @ 0x80030EF8 and
+    // RunSpModeScreen @ 0x800310A8 stood here as BLOCKED stubs. All four are now transliterated in
+    // ModeBranches.cs, with the menu driver RunModeMenu @ 0x800283A0 in ModeMenu.cs and the shared
+    // list cursor RunListSelect @ 0x80033D34 in ListCursor.cs. main's switch calls them above.
 
     // GHIDRA: FUN_800315c0 @ 0x800315C0
     private static void FUN_800315c0()
@@ -309,9 +309,9 @@ internal sealed class SELECT_EXE_exe
         // BLOCKED: state 3, the in-place options sub-screen, 1668 bytes. It does NOT LoadExec — it
         // returns to main's loop.
         //
-        // THE REASON RE-MEASURED, not inherited. Its nine callees are FUN_800261e4, FUN_80031c8c,
-        // FUN_800344a4, FUN_8002bcbc, FUN_80031c44, FUN_80030848, FUN_80026420, FUN_80026208 and
-        // FUN_8002b2dc. Four of those (FUN_800261e4, FUN_800344a4, FUN_80030848, FUN_80026208) are
+        // THE REASON RE-MEASURED, not inherited. Its nine callees are GetPadStatus, FUN_80031c8c,
+        // DrawFrame, FUN_8002bcbc, FUN_80031c44, InitializeSpriteArray, FUN_80026420, FUN_80026208 and
+        // FUN_8002b2dc. Four of those (GetPadStatus, DrawFrame, InitializeSpriteArray, FUN_80026208) are
         // ported; FUN_80031c8c's own card call now lands on CardRecords.FUN_800276d8, which is
         // ported too. THE BLOCKER IS FUN_80026420 @ 0x80026420 — 1788 bytes — which tail-calls
         // FUN_80022994 @ 0x80022994, whose callee list (read today, 36 entries) carries SpuInit,

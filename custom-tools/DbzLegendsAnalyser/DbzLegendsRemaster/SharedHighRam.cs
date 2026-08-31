@@ -10,7 +10,7 @@ namespace DbzLegendsRemaster;
 // This is not a guess. SLPS_003.55 fills the button-remap tables there through FUN_8002165c
 // @ 0x8002165C, writing fourteen masks at index 0x10 and fourteen more at 0x1E. TITLE.EXE then
 // reads those very tables back in ProcessPadInput @ 0x800578A8, which addresses them as
-// DAT_801ff020 and DAT_801ff03c — and 0x801FF000 + 0x10*2 = 0x801FF020, 0x801FF000 + 0x1E*2 =
+// g_PadRemapTable0 and g_PadRemapTable1 — and 0x801FF000 + 0x10*2 = 0x801FF020, 0x801FF000 + 0x1E*2 =
 // 0x801FF03C. The bootstrap configures the pad for the whole game; every later overlay inherits it.
 //
 // Bytes rather than a short array, because the region is read at three widths. The title task
@@ -64,9 +64,9 @@ internal static class SharedHighRam
 
     internal static byte DAT_801ff05d { get => RAM_801ff000[0x5d]; set => RAM_801ff000[0x5d] = value; }
 
-    // GHIDRA: DAT_801ff068 @ 0x801FF068
+    // GHIDRA: g_CardProbeResult @ 0x801FF068
     // The memory card probe's result, stored straight from FUN_80022780's return.
-    internal static int DAT_801ff068
+    internal static int g_CardProbeResult
     {
         get => MipsMemory.ReadI32(RAM_801ff000, 0x68);
         set => MipsMemory.WriteI32(RAM_801ff000, 0x68, value);

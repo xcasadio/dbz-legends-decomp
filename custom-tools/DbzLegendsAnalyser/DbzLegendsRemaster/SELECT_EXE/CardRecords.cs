@@ -10,15 +10,15 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // pickers and the options screen call; everything else here is reached only through it.
 //     0x800213B8  FUN_800213b8   READ  the six records off the card into 0x801FF200 / 0x801FF218
 //     0x800218D4  FUN_800218d4   WRITE the seven blocks back, formatting or creating if needed
-//     0x80022024  FUN_80022024   free blocks on the card = 15 - sum(size >> 13)
-//     0x80022094  FUN_80022094   format the card
-//     0x80022138  FUN_80022138   create "BISLPS-00355DRAGON" and stamp its header
-//     0x800224B0  FUN_800224b0   write the 512-byte icon/title header into blocks 0..3 of the file
-//     0x800226F8  FUN_800226f8   write ONE 128-byte record, with the same checksum FUN_80022810 reads
+//     0x80022024  GetFreeCardBlocks   free blocks on the card = 15 - sum(size >> 13)
+//     0x80022094  FormatMemoryCard   format the card
+//     0x80022138  CreateSaveFile   create "BISLPS-00355DRAGON" and stamp its header
+//     0x800224B0  WriteSaveHeader   write the 512-byte icon/title header into blocks 0..3 of the file
+//     0x800226F8  WriteSaveRecord   write ONE 128-byte record, with the same checksum ReadSaveRecord reads
 // THE SEVEN OTHERS THEY CALL ARE ALREADY PORTED and live in MemoryCard.cs, which owns this module's
-// state (DAT_80055A78/80/84/88/8C): FUN_80021ce4, FUN_80021d34, FUN_80021e34, FUN_80021618,
-// FUN_80021fb4, FUN_800220d4, FUN_80022810 and the message overlay FUN_80027a58 (still BLOCKED
-// there). CdAudio.FUN_80025788 and PadInput.FUN_80026208 are ported too.
+// state (DAT_80055A78/80/84/88/8C): InitializeMemoryCard, ShutdownMemoryCard, FUN_80021e34, FUN_80021618,
+// FUN_80021fb4, IsSaveFileMissing, ReadSaveRecord and the message overlay FUN_80027a58 (still BLOCKED
+// there). CdAudio.UpdateCdAudio and PadInput.FUN_80026208 are ported too.
 //
 // THE ADDRESS RUNS, so the module boundary is visible: 0x800213B8..0x80021617 and
 // 0x800218D4..0x80021CE3 sit inside MemoryCard.cs's own two .text runs, and 0x80022024..0x800220D3,
@@ -30,7 +30,7 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     block 0   the 64-byte options record at 0x801FF018 (read by MemoryCard.FUN_80021618)
 //     block 1,2,3   the three EIGHT-byte DEMO records at 0x801FF200 / 0x801FF208 / 0x801FF210
 //     block 4,5,6   the three SIXTEEN-byte SP records at 0x801FF218 / 0x801FF228 / 0x801FF238
-// FUN_800213b8's read cases 0..2 write `(&DAT_801ff200)[i * 2]` = 0x801FF200 + i * 8 and its cases
+// FUN_800213b8's read cases 0..2 write `(&g_DemoSaveRecords3)[i * 2]` = 0x801FF200 + i * 8 and its cases
 // 3..5 write `(&DAT_801ff1e8)[i * 4]` = 0x801FF1E8 + i * 16, which for i = 3, 4, 5 is exactly
 // 0x801FF218 / 0x801FF228 / 0x801FF238. FUN_800218d4's write cases 1..3 use 0x801FF1F8 + n * 8 and
 // its cases 4..6 use 0x801FF1D8 + n * 16 — the same six addresses from the other direction.
@@ -39,31 +39,31 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // not assumed. Both pickers call FUN_800276d8 with mode 0 or 1, which runs FUN_800213b8.
 // DAT_80055A84 is 0 when they do: main's pre-loop MemoryCard.FUN_80021618 leaves it at 0 on every
 // one of its exits. So FUN_800213b8 goes state 0 -> state 7, and state 7 asks
-// MemoryCard.FUN_800220d4 whether "bu00:BISLPS-00355DRAGON" is in the card directory.
+// MemoryCard.IsSaveFileMissing whether "bu00:BISLPS-00355DRAGON" is in the card directory.
 // PsxSdkMonogame's LibMcrd models each card as a folder of files next to the executable
 // (memorycard1/, created and filled with sixteen blank slotN.bin on first probe — LibMcrd.cs
 // EnsureAllSlotsMaterialized). THE CARD IS PRESENT; THE SAVE FILE IS NOT. firstfile finds no match,
-// FUN_800220d4 returns 1, state 7 takes its `else` arm, sets DAT_80055A84 = 0 and RETURNS 0 without
-// ever reaching MemoryCard.FUN_80022810. The dispatcher then runs its own failure arm — EIGHTEEN
+// IsSaveFileMissing returns 1, state 7 takes its `else` arm, sets DAT_80055A84 = 0 and RETURNS 0 without
+// ever reaching MemoryCard.ReadSaveRecord. The dispatcher then runs its own failure arm — EIGHTEEN
 // words zeroed walking DOWN from 0x801FF244, i.e. 0x801FF200..0x801FF247, which is both lists — and
 // returns. Both pickers therefore see three records with bit 0 clear, mark all three rows absent
 // and preselect the "no card" row.
 // THAT IS THE CONSOLE'S OWN NO-SAVE BEHAVIOUR, produced here by the original's own code rather than
 // by a stub, and it is not a fabricated slot. Drop a real "BISLPS-00355DRAGON" file into
-// memorycard1/ and state 7 answers the other way: state 0xF runs six MemoryCard.FUN_80022810 reads
+// memorycard1/ and state 7 answers the other way: state 0xF runs six MemoryCard.ReadSaveRecord reads
 // against blocks 1..6 and fills both lists from the file.
 //
 // MODE 2 HAS NO CALL SITE ANYWHERE IN THE PROGRAM. find-cross-references on FUN_800276d8 reports
-// six callers: ModeBranches.FUN_80030af8 twice with 0, ModeBranches.FUN_800310a8 twice with 1,
+// six callers: ModeBranches.RunDemoModeScreen twice with 0, ModeBranches.RunSpModeScreen twice with 1,
 // FUN_80031c8c with 3, and FUN_80031c8c's other call at 0x80031CB4 whose a0 is its own param_1,
 // which that arm has already tested as 0. So FUN_800218d4 and the five routines only it reaches are
 // transliterated and unreachable. They are here because the dispatcher's switch is here.
 internal static class CardRecords
 {
-    // GHIDRA: DAT_801ff018 @ 0x801FF018
+    // GHIDRA: g_OptionsRecord64 @ 0x801FF018
     // The 64-byte options record — block 0 of the save file. MemoryCard.cs documents its extent;
-    // this file only ever hands its ADDRESS to FUN_800226f8, which reads 64 bytes from it.
-    private const int DAT_801ff018_Address = unchecked((int)0x801FF018);
+    // this file only ever hands its ADDRESS to WriteSaveRecord, which reads 64 bytes from it.
+    private const int g_OptionsRecord64_Address = unchecked((int)0x801FF018);
 
     // GHIDRA: DAT_801ff1d8 @ 0x801FF1D8
     // Not a record: the BASE FUN_800218d4 adds `DAT_80055a8c << 4` to for cases 4, 5 and 6, giving
@@ -80,9 +80,9 @@ internal static class CardRecords
     // 0x801FF1E8 + i * 16, and the loop only ever reaches it with i = 3, 4, 5.
     private const int DAT_801ff1e8_Address = unchecked((int)0x801FF1E8);
 
-    // GHIDRA: DAT_801ff200 @ 0x801FF200
+    // GHIDRA: g_DemoSaveRecords3 @ 0x801FF200
     // The first of the three eight-byte DEMO records. ModeBranches.cs documents the list.
-    private const int DAT_801ff200_Address = unchecked((int)0x801FF200);
+    private const int g_DemoSaveRecords3_Address = unchecked((int)0x801FF200);
 
     // GHIDRA: DAT_801ff244 @ 0x801FF244
     // The LAST word of the SP list (record 2 at 0x801FF218 + 0x20, field +0x0C). The dispatcher's
@@ -90,14 +90,14 @@ internal static class CardRecords
     // 0x801FF200, so the cleared span is 0x801FF200..0x801FF247 and it is both lists exactly.
     private const int DAT_801ff244_Address = unchecked((int)0x801FF244);
 
-    // GHIDRA: DAT_80020144 @ 0x80020144
+    // GHIDRA: g_SaveFileHeader512 @ 0x80020144
     // FIVE HUNDRED AND TWELVE BYTES of .rdata, 0x80020144..0x80020343, read out of the image with
     // read-memory and reproduced verbatim. It is the PlayStation save file's own header: the "SC"
     // magic at +0x000, the Shift-JIS title that follows it, and then the 16-colour CLUT and the
     // three 16-by-16 4bpp icon frames.
-    // ITS EXTENT IS THE CODE'S OWN: FUN_800224b0 copies 0x80020144..0x800201C3 into its first stack
+    // ITS EXTENT IS THE CODE'S OWN: WriteSaveHeader copies 0x80020144..0x800201C3 into its first stack
     // buffer and 0x800201C4..0x80020343 into the next, and 0x80 + 0x180 = 0x200.
-    private static readonly byte[] DAT_80020144 =
+    private static readonly byte[] g_SaveFileHeader512 =
     {
         0x53, 0x43, 0x13, 0x01, 0x83, 0x68, 0x83, 0x89, 0x83, 0x53, 0x83, 0x93, 0x83, 0x7B, 0x81, 0x5B, // +0x000
         0x83, 0x8B, 0x82, 0x79, 0x88, 0xCC, 0x91, 0xE5, 0x82, 0xC8, 0x82, 0xE9, 0x83, 0x68, 0x83, 0x89, // +0x010
@@ -168,17 +168,17 @@ internal static class CardRecords
             // UNREACHABLE — no call site in the program passes 2. See the header.
             MemoryCard.FUN_80027a58(5);
             iVar6 = 0;
-            MemoryCard.FUN_80021d34();
+            MemoryCard.ShutdownMemoryCard();
             do
             {
                 iVar6 = iVar6 + 1;
-                CdAudio.FUN_80025788();
+                CdAudio.UpdateCdAudio();
                 VSync(0);
             }
             while (iVar6 < 0x1e);
 
-            MemoryCard.FUN_80021ce4();
-            SharedHighRam.DAT_801ff068 = MemoryCard.FUN_80021e34(0);
+            MemoryCard.InitializeMemoryCard();
+            SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021e34(0);
             FUN_800218d4();
         }
         else if (param_1 < 3)
@@ -208,7 +208,7 @@ internal static class CardRecords
             iVar6 = 1;
             do
             {
-                CdAudio.FUN_80025788();
+                CdAudio.UpdateCdAudio();
                 VSync(0);
                 iVar6 = iVar6 + 1;
             }
@@ -241,7 +241,7 @@ internal static class CardRecords
         int iVar6;
         int uVar7;
 
-        // FUN_80022810 fills 0x80 bytes from &uStack_98; Ghidra names only the first four words of
+        // ReadSaveRecord fills 0x80 bytes from &uStack_98; Ghidra names only the first four words of
         // that span (uStack_98, uStack_94, uStack_90, uStack_8c) because those are the only ones
         // read back. The buffer is the record.
         byte[] uStack_98 = new byte[0x80];
@@ -257,23 +257,23 @@ internal static class CardRecords
             (ushort)MemoryCard.FUN_80021fb4(0);
         if ((short)MemoryCard.DAT_80055a78 == 2)
         {
-            MemoryCard.DAT_80055a88 = 1;
-            MemoryCard.DAT_80055a84 = 1;
+            MemoryCard.g_CardReprobeRequest = 1;
+            MemoryCard.g_CardOperationState = 1;
         }
 
         do
         {
-            if (MemoryCard.DAT_80055a88 == 1)
+            if (MemoryCard.g_CardReprobeRequest == 1)
             {
-                MemoryCard.DAT_80055a88 = 0;
+                MemoryCard.g_CardReprobeRequest = 0;
                 sVar5 = (short)MemoryCard.FUN_80021e34(0);
             }
 
             // Ghidra's `if (false) goto switchD_80021458_caseD_2;` sits here and is dead.
-            switch (MemoryCard.DAT_80055a84)
+            switch (MemoryCard.g_CardOperationState)
             {
                 case 0:
-                    MemoryCard.DAT_80055a84 = 7;
+                    MemoryCard.g_CardOperationState = 7;
                     MemoryCard.DAT_80055a8c = 0;
                     bVar4 = true;
                     break;
@@ -281,21 +281,21 @@ internal static class CardRecords
                     MemoryCard.DAT_80055a8c = 0;
                     if ((sVar5 != 0) && (sVar5 != 4))
                     {
-                        MemoryCard.DAT_80055a84 = 0;
+                        MemoryCard.g_CardOperationState = 0;
                         goto LAB_800215e8;
                     }
 
-                    MemoryCard.DAT_80055a84 = 7;
+                    MemoryCard.g_CardOperationState = 7;
                     goto LAB_800214b4;
                 case 7:
-                    iVar6 = MemoryCard.FUN_800220d4(0);
-                    MemoryCard.DAT_80055a84 = 0xf;
+                    iVar6 = MemoryCard.IsSaveFileMissing(0);
+                    MemoryCard.g_CardOperationState = 0xf;
                     if (iVar6 == 0)
                     {
                         goto LAB_800214b4;
                     }
 
-                    MemoryCard.DAT_80055a84 = 0;
+                    MemoryCard.g_CardOperationState = 0;
                     goto LAB_800215e8;
                 case 0xf:
                     bVar4 = true;
@@ -304,20 +304,20 @@ internal static class CardRecords
                         case 0:
                         case 1:
                         case 2:
-                            iVar6 = MemoryCard.FUN_80022810(
+                            iVar6 = MemoryCard.ReadSaveRecord(
                                 0, MemoryCard.DAT_80055a8c + 1, uStack_98);
                             if (iVar6 == 0x80)
                             {
-                                // `(&DAT_801ff200)[iVar6 * 2]` on an undefined4 * — 0x801FF200 +
+                                // `(&g_DemoSaveRecords3)[iVar6 * 2]` on an undefined4 * — 0x801FF200 +
                                 // pass * 8, two words. Ghidra prints each store twice, once as the
                                 // unaligned SWL/SWR pair the compiler emitted and once as the
                                 // aligned store; both write the same four bytes.
                                 iVar6 = (int)MemoryCard.DAT_80055a8c;
                                 PsxRam.WriteI32(
-                                    DAT_801ff200_Address + (iVar6 * 8),
+                                    g_DemoSaveRecords3_Address + (iVar6 * 8),
                                     MipsMemory.ReadI32(uStack_98, 0));
                                 PsxRam.WriteI32(
-                                    DAT_801ff200_Address + (iVar6 * 8) + 4,
+                                    g_DemoSaveRecords3_Address + (iVar6 * 8) + 4,
                                     MipsMemory.ReadI32(uStack_98, 4));
                             }
                             else
@@ -329,7 +329,7 @@ internal static class CardRecords
                         case 3:
                         case 4:
                         case 5:
-                            iVar6 = MemoryCard.FUN_80022810(
+                            iVar6 = MemoryCard.ReadSaveRecord(
                                 0, MemoryCard.DAT_80055a8c + 1, uStack_98);
                             if (iVar6 != 0x80)
                             {
@@ -353,7 +353,7 @@ internal static class CardRecords
                                 MipsMemory.ReadI32(uStack_98, 0xc));
                             break;
                         case 6:
-                            MemoryCard.DAT_80055a84 = 0;
+                            MemoryCard.g_CardOperationState = 0;
                             uVar7 = 1;
                             bVar4 = false;
                             break;
@@ -373,7 +373,7 @@ internal static class CardRecords
             goto LAB_800215f0;
 
         LAB_800215b0:
-            MemoryCard.DAT_80055a84 = 0x10;
+            MemoryCard.g_CardOperationState = 0x10;
             MemoryCard.DAT_80055a8c = (ushort)(MemoryCard.DAT_80055a8c + 1);
             goto LAB_800215f0;
 
@@ -439,33 +439,33 @@ internal static class CardRecords
             (ushort)MemoryCard.FUN_80021fb4(0);
         if ((short)MemoryCard.DAT_80055a78 == 2)
         {
-            MemoryCard.DAT_80055a88 = 1;
-            MemoryCard.DAT_80055a84 = 1;
+            MemoryCard.g_CardReprobeRequest = 1;
+            MemoryCard.g_CardOperationState = 1;
         }
 
         do
         {
-            if (MemoryCard.DAT_80055a88 == 1)
+            if (MemoryCard.g_CardReprobeRequest == 1)
             {
-                MemoryCard.DAT_80055a88 = 0;
+                MemoryCard.g_CardReprobeRequest = 0;
                 sVar2 = (short)MemoryCard.FUN_80021e34(0);
             }
 
-            switch (MemoryCard.DAT_80055a84)
+            switch (MemoryCard.g_CardOperationState)
             {
                 case 0:
-                    MemoryCard.DAT_80055a84 = 3;
+                    MemoryCard.g_CardOperationState = 3;
                     MemoryCard.DAT_80055a8c = 0;
                     break;
                 case 1:
                     MemoryCard.DAT_80055a8c = 0;
                     if ((sVar2 == 0) || (sVar2 == 4))
                     {
-                        MemoryCard.DAT_80055a84 = 3;
+                        MemoryCard.g_CardOperationState = 3;
                     }
                     else
                     {
-                        MemoryCard.DAT_80055a84 = 2;
+                        MemoryCard.g_CardOperationState = 2;
                         MemoryCard.FUN_80027a58(2);
                     }
 
@@ -478,11 +478,11 @@ internal static class CardRecords
                     if (iVar3 == 4)
                     {
                         MemoryCard.FUN_80027a58(6);
-                        MemoryCard.DAT_80055a84 = 4;
+                        MemoryCard.g_CardOperationState = 4;
                     }
                     else
                     {
-                        MemoryCard.DAT_80055a84 = 7;
+                        MemoryCard.g_CardOperationState = 7;
                     }
 
                     break;
@@ -497,31 +497,31 @@ internal static class CardRecords
 
                     if ((uVar4 & 0x20) != 0)
                     {
-                        MemoryCard.DAT_80055a84 = 5;
+                        MemoryCard.g_CardOperationState = 5;
                     }
 
                     goto LAB_80021ca0;
                 case 5:
-                    iVar3 = FUN_80022094(0);
+                    iVar3 = FormatMemoryCard(0);
                     if (iVar3 == 0)
                     {
                         goto LAB_80021b08;
                     }
 
-                    MemoryCard.DAT_80055a84 = 6;
+                    MemoryCard.g_CardOperationState = 6;
                     MemoryCard.FUN_80027a58(7);
                     break;
                 case 6:
                     goto LAB_80021c64;
                 case 7:
-                    iVar3 = MemoryCard.FUN_800220d4(0);
+                    iVar3 = MemoryCard.IsSaveFileMissing(0);
                     if (iVar3 == 0)
                     {
-                        MemoryCard.DAT_80055a84 = 0xd;
+                        MemoryCard.g_CardOperationState = 0xd;
                         iVar3 = 1;
                         do
                         {
-                            CdAudio.FUN_80025788();
+                            CdAudio.UpdateCdAudio();
                             VSync(0);
                             iVar3 = iVar3 + 1;
                         }
@@ -529,31 +529,31 @@ internal static class CardRecords
                     }
                     else
                     {
-                        MemoryCard.DAT_80055a84 = 9;
+                        MemoryCard.g_CardOperationState = 9;
                     }
 
                     break;
                 case 9:
-                    iVar3 = FUN_80022024(0);
+                    iVar3 = GetFreeCardBlocks(0);
                     if (iVar3 != 0)
                     {
                         goto LAB_80021b08;
                     }
 
-                    MemoryCard.DAT_80055a84 = 10;
+                    MemoryCard.g_CardOperationState = 10;
                     MemoryCard.FUN_80027a58(8);
                     break;
                 case 10:
                     goto LAB_80021c64;
                 case 0xb:
-                    iVar3 = FUN_80022138(0);
+                    iVar3 = CreateSaveFile(0);
                     if (iVar3 == 0)
                     {
-                        MemoryCard.DAT_80055a84 = 0xc;
+                        MemoryCard.g_CardOperationState = 0xc;
                         iVar3 = 1;
                         do
                         {
-                            CdAudio.FUN_80025788();
+                            CdAudio.UpdateCdAudio();
                             VSync(0);
                             iVar3 = iVar3 + 1;
                         }
@@ -561,7 +561,7 @@ internal static class CardRecords
                     }
                     else
                     {
-                        MemoryCard.DAT_80055a84 = 0xe;
+                        MemoryCard.g_CardOperationState = 0xe;
                         MemoryCard.FUN_80027a58(9);
                     }
 
@@ -611,12 +611,12 @@ internal static class CardRecords
             goto switchD_8002196c_caseD_8;
 
         LAB_80021b08:
-            MemoryCard.DAT_80055a84 = 0xb;
+            MemoryCard.g_CardOperationState = 0xb;
             goto switchD_8002196c_caseD_8;
 
         switchD_80021ba4_caseD_0:
             iVar5 = 0;
-            puVar7 = DAT_801ff018_Address;
+            puVar7 = g_OptionsRecord64_Address;
             goto LAB_80021c10;
 
         LAB_80021bd8:
@@ -624,17 +624,17 @@ internal static class CardRecords
             puVar7 = puVar6 + iVar3;
 
         LAB_80021c10:
-            iVar3 = FUN_800226f8(0, iVar5, puVar7);
+            iVar3 = WriteSaveRecord(0, iVar5, puVar7);
             if (iVar3 != 0x80)
             {
-                MemoryCard.DAT_80055a84 = 0xe;
+                MemoryCard.g_CardOperationState = 0xe;
                 MemoryCard.FUN_80027a58(9);
             }
 
             goto switchD_80021ba4_default;
 
         switchD_80021ba4_caseD_7:
-            MemoryCard.DAT_80055a84 = 0;
+            MemoryCard.g_CardOperationState = 0;
             unaff_s2 = 1;
             bVar1 = false;
 
@@ -658,12 +658,12 @@ internal static class CardRecords
             goto LAB_80021ca0;
 
         LAB_80021c94:
-            MemoryCard.DAT_80055a84 = 0;
+            MemoryCard.g_CardOperationState = 0;
             unaff_s2 = 2;
             bVar1 = false;
 
         LAB_80021ca0:
-            CdAudio.FUN_80025788();
+            CdAudio.UpdateCdAudio();
             VSync(0);
 
         switchD_8002196c_caseD_8:
@@ -675,7 +675,7 @@ internal static class CardRecords
         while (true);
     }
 
-    // GHIDRA: FUN_80022024 @ 0x80022024
+    // GHIDRA: GetFreeCardBlocks @ 0x80022024
     // 112 bytes. HOW MANY BLOCKS ARE FREE — walk the whole card directory, add up each entry's size
     // in 8 KB blocks (`size >> 13`) and return 15 minus the total. FUN_800218d4's state 9 tests it as
     // `!= 0`, i.e. "there is at least one block free". A full card returns 0.
@@ -684,7 +684,7 @@ internal static class CardRecords
     // PsxSdkMonogame's LibMcrd.DIRENTRY is a different C# shape (status / reserved[3] / name[20] /
     // pad) and LibMcrd.CardFileNext publishes the file's length in reserved[0]. That is the same
     // value the BIOS puts at +0x18; the field name differs, the quantity does not.
-    private static int FUN_80022024(int param_1)
+    private static int GetFreeCardBlocks(int param_1)
     {
         int iVar1;
         string pcVar2;
@@ -711,30 +711,30 @@ internal static class CardRecords
         return 0xf - iVar3;
     }
 
-    // GHIDRA: FUN_80022094 @ 0x80022094
+    // GHIDRA: FormatMemoryCard @ 0x80022094
     // 64 bytes. FORMAT THE CARD. Ghidra types it `bool` because the body is `return iVar1 == 0;`
     // compiled as `sltiu v0, v0, 1` over a format() that answers non-zero on success — so this
     // RETURNS 1 WHEN THE FORMAT FAILED, and FUN_800218d4's state 5 reads `iVar3 == 0` as "it
-    // worked". Kept as an int for the same reason MemoryCard.FUN_800220d4 is.
-    private static int FUN_80022094(int param_1)
+    // worked". Kept as an int for the same reason MemoryCard.IsSaveFileMissing is.
+    private static int FormatMemoryCard(int param_1)
     {
         int iVar1;
         string puVar2;
 
         if (param_1 == 0)
         {
-            puVar2 = MemoryCard.DAT_800559e8;
+            puVar2 = MemoryCard.g_CardDevicePort1;
         }
         else
         {
-            puVar2 = MemoryCard.DAT_800559f0;
+            puVar2 = MemoryCard.g_CardDevicePort2;
         }
 
         iVar1 = format(puVar2);
         return iVar1 == 0 ? 1 : 0;
     }
 
-    // GHIDRA: FUN_80022138 @ 0x80022138
+    // GHIDRA: CreateSaveFile @ 0x80022138
     // 152 bytes. CREATE THE SAVE FILE. `open(name, 0x10200)` is create-one-block: 0x200 is the create
     // flag and the 1 in the high halfword is the block count. -1 means the file already existed, and
     // the original still stamps the header on it but reports 1 (failure) — that asymmetry is the
@@ -742,7 +742,7 @@ internal static class CardRecords
     // The `close()` Ghidra prints with no argument is `close(iVar1)`: the image has
     // `addu a0, v0, zero` at 0x8002218C, right after the open, and nothing rewrites a0 before the
     // `jal 0x8004EB24` at 0x8002219C.
-    private static int FUN_80022138(int param_1)
+    private static int CreateSaveFile(int param_1)
     {
         int iVar1;
         int uVar2;
@@ -750,30 +750,30 @@ internal static class CardRecords
 
         if (param_1 == 0)
         {
-            local_a8 = MemoryCard.DAT_800559e8;
+            local_a8 = MemoryCard.g_CardDevicePort1;
         }
         else
         {
-            local_a8 = MemoryCard.DAT_800559f0;
+            local_a8 = MemoryCard.g_CardDevicePort2;
         }
 
         local_a8 = MemoryCard.strcat(local_a8, "BISLPS-00355DRAGON");
         iVar1 = open(local_a8, 0x10200);
         if (iVar1 == -1)
         {
-            FUN_800224b0(local_a8);
+            WriteSaveHeader(local_a8);
             uVar2 = 1;
         }
         else
         {
             close(iVar1);
-            uVar2 = FUN_800224b0(local_a8);
+            uVar2 = WriteSaveHeader(local_a8);
         }
 
         return uVar2;
     }
 
-    // GHIDRA: FUN_800224b0 @ 0x800224B0
+    // GHIDRA: WriteSaveHeader @ 0x800224B0
     // 584 bytes. STAMP THE 512-BYTE SAVE HEADER into blocks 0..3 of the file — the "SC" record the
     // console's own memory-card browser reads to draw the icon and the title.
     //
@@ -784,7 +784,7 @@ internal static class CardRecords
     // 0x80020344, which is 0x180 bytes — three times local_190's declared size — so it spills through
     // auStack_110 and auStack_90 as well. All 512 bytes are written; the compiler simply lost the
     // array bound. Modelled here as the single 512-byte run the code actually addresses.
-    private static int FUN_800224b0(string param_1)
+    private static int WriteSaveHeader(string param_1)
     {
         int iVar4;
         int iVar5;
@@ -794,22 +794,22 @@ internal static class CardRecords
         int puVar9 = 0;
         do
         {
-            local_210[puVar10 + 0] = DAT_80020144[puVar9 + 0];
-            local_210[puVar10 + 1] = DAT_80020144[puVar9 + 1];
-            local_210[puVar10 + 2] = DAT_80020144[puVar9 + 2];
-            local_210[puVar10 + 3] = DAT_80020144[puVar9 + 3];
-            local_210[puVar10 + 4] = DAT_80020144[puVar9 + 4];
-            local_210[puVar10 + 5] = DAT_80020144[puVar9 + 5];
-            local_210[puVar10 + 6] = DAT_80020144[puVar9 + 6];
-            local_210[puVar10 + 7] = DAT_80020144[puVar9 + 7];
-            local_210[puVar10 + 8] = DAT_80020144[puVar9 + 8];
-            local_210[puVar10 + 9] = DAT_80020144[puVar9 + 9];
-            local_210[puVar10 + 10] = DAT_80020144[puVar9 + 10];
-            local_210[puVar10 + 11] = DAT_80020144[puVar9 + 11];
-            local_210[puVar10 + 12] = DAT_80020144[puVar9 + 12];
-            local_210[puVar10 + 13] = DAT_80020144[puVar9 + 13];
-            local_210[puVar10 + 14] = DAT_80020144[puVar9 + 14];
-            local_210[puVar10 + 15] = DAT_80020144[puVar9 + 15];
+            local_210[puVar10 + 0] = g_SaveFileHeader512[puVar9 + 0];
+            local_210[puVar10 + 1] = g_SaveFileHeader512[puVar9 + 1];
+            local_210[puVar10 + 2] = g_SaveFileHeader512[puVar9 + 2];
+            local_210[puVar10 + 3] = g_SaveFileHeader512[puVar9 + 3];
+            local_210[puVar10 + 4] = g_SaveFileHeader512[puVar9 + 4];
+            local_210[puVar10 + 5] = g_SaveFileHeader512[puVar9 + 5];
+            local_210[puVar10 + 6] = g_SaveFileHeader512[puVar9 + 6];
+            local_210[puVar10 + 7] = g_SaveFileHeader512[puVar9 + 7];
+            local_210[puVar10 + 8] = g_SaveFileHeader512[puVar9 + 8];
+            local_210[puVar10 + 9] = g_SaveFileHeader512[puVar9 + 9];
+            local_210[puVar10 + 10] = g_SaveFileHeader512[puVar9 + 10];
+            local_210[puVar10 + 11] = g_SaveFileHeader512[puVar9 + 11];
+            local_210[puVar10 + 12] = g_SaveFileHeader512[puVar9 + 12];
+            local_210[puVar10 + 13] = g_SaveFileHeader512[puVar9 + 13];
+            local_210[puVar10 + 14] = g_SaveFileHeader512[puVar9 + 14];
+            local_210[puVar10 + 15] = g_SaveFileHeader512[puVar9 + 15];
             puVar9 = puVar9 + 0x10;
             puVar10 = puVar10 + 0x10;
         }
@@ -819,22 +819,22 @@ internal static class CardRecords
         puVar10 = 0x80;
         do
         {
-            local_210[puVar10 + 0] = DAT_80020144[puVar9 + 0];
-            local_210[puVar10 + 1] = DAT_80020144[puVar9 + 1];
-            local_210[puVar10 + 2] = DAT_80020144[puVar9 + 2];
-            local_210[puVar10 + 3] = DAT_80020144[puVar9 + 3];
-            local_210[puVar10 + 4] = DAT_80020144[puVar9 + 4];
-            local_210[puVar10 + 5] = DAT_80020144[puVar9 + 5];
-            local_210[puVar10 + 6] = DAT_80020144[puVar9 + 6];
-            local_210[puVar10 + 7] = DAT_80020144[puVar9 + 7];
-            local_210[puVar10 + 8] = DAT_80020144[puVar9 + 8];
-            local_210[puVar10 + 9] = DAT_80020144[puVar9 + 9];
-            local_210[puVar10 + 10] = DAT_80020144[puVar9 + 10];
-            local_210[puVar10 + 11] = DAT_80020144[puVar9 + 11];
-            local_210[puVar10 + 12] = DAT_80020144[puVar9 + 12];
-            local_210[puVar10 + 13] = DAT_80020144[puVar9 + 13];
-            local_210[puVar10 + 14] = DAT_80020144[puVar9 + 14];
-            local_210[puVar10 + 15] = DAT_80020144[puVar9 + 15];
+            local_210[puVar10 + 0] = g_SaveFileHeader512[puVar9 + 0];
+            local_210[puVar10 + 1] = g_SaveFileHeader512[puVar9 + 1];
+            local_210[puVar10 + 2] = g_SaveFileHeader512[puVar9 + 2];
+            local_210[puVar10 + 3] = g_SaveFileHeader512[puVar9 + 3];
+            local_210[puVar10 + 4] = g_SaveFileHeader512[puVar9 + 4];
+            local_210[puVar10 + 5] = g_SaveFileHeader512[puVar9 + 5];
+            local_210[puVar10 + 6] = g_SaveFileHeader512[puVar9 + 6];
+            local_210[puVar10 + 7] = g_SaveFileHeader512[puVar9 + 7];
+            local_210[puVar10 + 8] = g_SaveFileHeader512[puVar9 + 8];
+            local_210[puVar10 + 9] = g_SaveFileHeader512[puVar9 + 9];
+            local_210[puVar10 + 10] = g_SaveFileHeader512[puVar9 + 10];
+            local_210[puVar10 + 11] = g_SaveFileHeader512[puVar9 + 11];
+            local_210[puVar10 + 12] = g_SaveFileHeader512[puVar9 + 12];
+            local_210[puVar10 + 13] = g_SaveFileHeader512[puVar9 + 13];
+            local_210[puVar10 + 14] = g_SaveFileHeader512[puVar9 + 14];
+            local_210[puVar10 + 15] = g_SaveFileHeader512[puVar9 + 15];
             puVar9 = puVar9 + 0x10;
             puVar10 = puVar10 + 0x10;
         }
@@ -872,8 +872,8 @@ internal static class CardRecords
         return 1;
     }
 
-    // GHIDRA: FUN_800226f8 @ 0x800226F8
-    // 280 bytes. WRITE ONE 128-BYTE RECORD — the exact inverse of MemoryCard.FUN_80022810, and the
+    // GHIDRA: WriteSaveRecord @ 0x800226F8
+    // 280 bytes. WRITE ONE 128-BYTE RECORD — the exact inverse of MemoryCard.ReadSaveRecord, and the
     // two agree field for field:
     //     byte 0        the magic '.', written here as 0x2E
     //     bytes 1..64   the 64-byte payload copied from param_3
@@ -883,7 +883,7 @@ internal static class CardRecords
     // byte 65, which is 64 iterations.
     //
     // PARTIAL: bytes 65..126 are uninitialised stack in the original and are zero here, because a C#
-    // local array is zero-initialised and there is no stack garbage to model. FUN_80022810 never
+    // local array is zero-initialised and there is no stack garbage to model. ReadSaveRecord never
     // reads them and neither does the checksum, so nothing in this program can observe the
     // difference; a save written by the console and one written by this port differ in those 62
     // bytes.
@@ -893,7 +893,7 @@ internal static class CardRecords
     // 0x801FF000..0x801FF247 SharedHighRam models. PsxRam.ReadU8 answers 0 for an address it cannot
     // resolve, so those bytes read as zero here and as whatever followed in RAM on the console. The
     // overread is the original's; only its filling differs.
-    private static int FUN_800226f8(int param_1, int param_2, int param_3)
+    private static int WriteSaveRecord(int param_1, int param_2, int param_3)
     {
         byte bVar1;
         int iVar2;
@@ -905,11 +905,11 @@ internal static class CardRecords
 
         if (param_1 == 0)
         {
-            local_b0 = MemoryCard.DAT_800559e8;
+            local_b0 = MemoryCard.g_CardDevicePort1;
         }
         else
         {
-            local_b0 = MemoryCard.DAT_800559f0;
+            local_b0 = MemoryCard.g_CardDevicePort2;
         }
 
         local_b0 = MemoryCard.strcat(local_b0, "BISLPS-00355DRAGON");

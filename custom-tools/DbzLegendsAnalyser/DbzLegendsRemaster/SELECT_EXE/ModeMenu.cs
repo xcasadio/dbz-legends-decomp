@@ -4,10 +4,10 @@ using static PsxSdkMonogame.MipsMemory;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// THE MODE MENU — FUN_800283a0 @ 0x800283A0 — and the satellite fan-out FUN_80033630 @ 0x80033630
+// THE MODE MENU — RunModeMenu @ 0x800283A0 — and the satellite fan-out FUN_80033630 @ 0x80033630
 // that it drives twice per frame, plus the 451-entry sine table both of them read.
 //
-// FUN_800283a0 is the function main's `switch` value comes from. It owns the cursor DAT_80055A0C
+// RunModeMenu is the function main's `switch` value comes from. It owns the cursor DAT_80055A0C
 // @ 0x80055A0C outright: find-cross-references reports FOURTEEN references to that global and every
 // single one is inside this function. It clamps the cursor to [0, itemCount - 1] on both edges — up
 // wraps to itemCount - 1, down wraps to 0 — so the value it returns is never negative, and THAT is
@@ -31,12 +31,12 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // turns on its side.
 internal static class ModeMenu
 {
-    // GHIDRA: DAT_80055a0c @ 0x80055A0C
+    // GHIDRA: g_ModeMenuCursor @ 0x80055A0C
     // .sdata, undefined4, image value 0 (read with get-data). THE MODE-MENU CURSOR and main's
-    // switch value. Fourteen references, all inside FUN_800283a0 below.
-    internal static int DAT_80055a0c;
+    // switch value. Fourteen references, all inside RunModeMenu below.
+    internal static int g_ModeMenuCursor;
 
-    // GHIDRA: DAT_8004f464 @ 0x8004F464
+    // GHIDRA: g_SineTable451 @ 0x8004F464
     // THE SINE TABLE. 451 signed halfwords, one per degree, scaled by 4096. Read out of the image
     // with read-memory (902 bytes at 0x8004F464) and verified against round(4096 * sin(deg)): the
     // maximum deviation over all 451 entries is 1, and the peak is clamped to 4095 rather than 4096.
@@ -46,10 +46,10 @@ internal static class ModeMenu
     // (0x8004F380 + 19 * 12 = 0x8004F464, and SelectScreen.cs already closes that table there).
     // 0x8004F464 + 902 = 0x8004F7EA, and 0x8004F7EC — two bytes of padding later — is the six-word
     // VS slot array the data pass measured. 451 entries and not 360 because the COSINE base is the
-    // same table 90 entries in: Ghidra names it DAT_8004f518, and 0x8004F518 - 0x8004F464 = 0xB4 =
+    // same table 90 entries in: Ghidra names it g_CosineTableBase, and 0x8004F518 - 0x8004F464 = 0xB4 =
     // 180 bytes = 90 halfwords. cos(359) therefore reads entry 449, which is why the table has to
     // run to 450.
-    internal static readonly short[] DAT_8004f464 =
+    internal static readonly short[] g_SineTable451 =
     {
         0, 71, 142, 214, 285, 356, 428, 499, 570, 640,
         711, 781, 851, 921, 990, 1060, 1128, 1197, 1265, 1333,
@@ -99,9 +99,9 @@ internal static class ModeMenu
         4095,
     };
 
-    // GHIDRA: DAT_800205e4 @ 0x800205E4
+    // GHIDRA: g_StartAngleTable8 @ 0x800205E4
     // .rdata, eight halfwords { 0, 50, 100, 150, 200, 250, 300, 0 }, read out of the image. The
-    // compiler did NOT reference it from FUN_800283a0 — it materialised the first seven entries as
+    // compiler did NOT reference it from RunModeMenu — it materialised the first seven entries as
     // three word immediates plus one halfword and stored them into the function's own 14-byte stack
     // block (Ghidra: local_68 = 0x320000, auStack_64 = 0x960064, auStack_60 = 0xfa00c8,
     // local_5c = 300, each word store rendered as the unaligned SWL/SWR pair the compiler emitted).
@@ -110,7 +110,7 @@ internal static class ModeMenu
     // .rdata block. It is spelled out here so the constant has a name and a provenance; the copy
     // below is still into the function's own local, as in the original.
     // The eighth entry is not used by this function: local_30 walks SEVEN entries.
-    private static readonly ushort[] DAT_800205e4 = { 0, 50, 100, 150, 200, 250, 300, 0 };
+    private static readonly ushort[] g_StartAngleTable8 = { 0, 50, 100, 150, 200, 250, 300, 0 };
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: FUN_80030698 @ 0x80030698 stored raw GsSPRITE PSX ADDRESSES into the tables at
@@ -128,39 +128,39 @@ internal static class ModeMenu
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: field +0x00 of record `row` of the seven twelve-byte records at 0x800593B8 — the
-    // LEADER sprite's address. Ghidra names the seven of them DAT_800593b8, DAT_800593c4,
+    // LEADER sprite's address. Ghidra names the seven of them g_SpriteChainTable7, DAT_800593c4,
     // DAT_800593d0, DAT_800593dc, DAT_800593e8, DAT_800593f4 and DAT_80059400; they are one array
-    // and SelectScreen.DAT_800593b8 is its raw bytes.
+    // and SelectScreen.g_SpriteChainTable7 is its raw bytes.
     // internal rather than private since ScreenDecoration.FUN_8002dec0 @ 0x8002DEC0 walks the same
     // seven records; the table has one home and this is it.
     internal static int LeaderAddress(int row)
     {
-        return ReadI32(SelectScreen.DAT_800593b8, (row * 0xc) + 0);
+        return ReadI32(SelectScreen.g_SpriteChainTable7, (row * 0xc) + 0);
     }
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: field +0x04 of the same record — the pointer to that row's satellite addresses
-    // inside SelectScreen.DAT_80058e08. Ghidra names these DAT_800593bc, DAT_800593c8, DAT_800593d4,
+    // inside SelectScreen.g_SpritePointerTable28. Ghidra names these DAT_800593bc, DAT_800593c8, DAT_800593d4,
     // DAT_800593e0, DAT_800593ec, DAT_800593f8 and DAT_80059404, and dereferences them as
     // `*DAT_800593c8` / `DAT_800593c8[1]` — a pointer to an array of sprite addresses.
     // internal for the same reason as LeaderAddress above.
     internal static LibGs.GsSPRITE SatelliteSprite(int row, int index)
     {
-        int rowBase = ReadI32(SelectScreen.DAT_800593b8, (row * 0xc) + 4);
+        int rowBase = ReadI32(SelectScreen.g_SpriteChainTable7, (row * 0xc) + 4);
         return SpriteAtAddress(PsxRam.ReadI32(rowBase + (index * 4)));
     }
 
     // GHIDRA: FUN_80033630 @ 0x80033630
     // 1796 bytes, no loop of any kind — 28 fully unrolled satellite updates, one per entry of the
     // triangular table, each with its own hard-coded offset pair. Called twice per frame by
-    // FUN_800283a0 (once in the interactive loop, once in the outro).
+    // RunModeMenu (once in the interactive loop, once in the outro).
     //
     // Row 0 has one satellite, row 6 has seven; 1+2+3+4+5+6+7 = 28, which is exactly the word count
-    // of SelectScreen.DAT_80058e08. Every store is `satellite.x = leader.x + dx` /
+    // of SelectScreen.g_SpritePointerTable28. Every store is `satellite.x = leader.x + dx` /
     // `satellite.y = leader.y + dy`, and rows 0..2 leave some of those deltas at zero.
     internal static void FUN_80033630()
     {
-        // row 0 — *DAT_800593bc from DAT_800593b8
+        // row 0 — *DAT_800593bc from g_SpriteChainTable7
         SatelliteSprite(0, 0).x = SpriteAtAddress(LeaderAddress(0)).x;
         SatelliteSprite(0, 0).y = SpriteAtAddress(LeaderAddress(0)).y;
 
@@ -231,9 +231,9 @@ internal static class ModeMenu
         SatelliteSprite(6, 6).y = (short)(SpriteAtAddress(LeaderAddress(6)).y + 0x12);
     }
 
-    // GHIDRA: FUN_800283a0 @ 0x800283A0
+    // GHIDRA: RunModeMenu @ 0x800283A0
     // 1944 bytes. THE MENU DRIVER. Two loops: the interactive one, which runs until Circle is seen,
-    // and a fixed outro that flings the seven chains off-screen. It returns DAT_80055a0c and nothing
+    // and a fixed outro that flings the seven chains off-screen. It returns g_ModeMenuCursor and nothing
     // else — see the header note on why that makes main's `case -1` unreachable.
     //
     // THE CURSOR CADENCE, exactly as written: the highlight moves when EITHER the auto-repeat has
@@ -250,11 +250,11 @@ internal static class ModeMenu
     //
     // JUSTIFICATION: C# language bridge only
     // RELATION: five of the conditions Ghidra prints use C's comma operator inside a short-circuit
-    // `&&` (`(iVar12 = iVar12 + 1, iVar12 == 1)`, `(DAT_80055a0c = iVar11 + 1, ...)`,
+    // `&&` (`(iVar12 = iVar12 + 1, iVar12 == 1)`, `(g_ModeMenuCursor = iVar11 + 1, ...)`,
     // `(uVar5 = 0x104, bVar2)`, and the `while (sVar4 = (short)uVar13, ...)` head). C# has no comma
     // operator, so each assignment stands on its own line inside the arm that already guarded it.
     // The order of the stores and the tests, and the short-circuiting, are unchanged.
-    internal static int FUN_800283a0()
+    internal static int RunModeMenu()
     {
         bool bVar2;
         short sVar4;
@@ -270,17 +270,17 @@ internal static class ModeMenu
         int piVar10;
         int puVar6;
 
-        // The 14-byte stack block, filled with the seven angles. See DAT_800205e4 above for how the
+        // The 14-byte stack block, filled with the seven angles. See g_StartAngleTable8 above for how the
         // compiler spelled this: three unaligned word stores and one halfword store of immediates
         // that reproduce the .rdata block's first seven entries.
         ushort[] local_68 = new ushort[7];
-        local_68[0] = DAT_800205e4[0];
-        local_68[1] = DAT_800205e4[1];
-        local_68[2] = DAT_800205e4[2];
-        local_68[3] = DAT_800205e4[3];
-        local_68[4] = DAT_800205e4[4];
-        local_68[5] = DAT_800205e4[5];
-        local_68[6] = DAT_800205e4[6];
+        local_68[0] = g_StartAngleTable8[0];
+        local_68[1] = g_StartAngleTable8[1];
+        local_68[2] = g_StartAngleTable8[2];
+        local_68[3] = g_StartAngleTable8[3];
+        local_68[4] = g_StartAngleTable8[4];
+        local_68[5] = g_StartAngleTable8[5];
+        local_68[6] = g_StartAngleTable8[6];
 
         uVar13 = 0xfa;
         bVar2 = false;
@@ -301,8 +301,8 @@ internal static class ModeMenu
         do
         {
             uVar5 = PadInput.FUN_80026208(4);
-            SELECT_EXE_exe.DAT_80055b6c = (int)(uVar5 & 0xffff);
-            if (SELECT_EXE_exe.DAT_80055b6c == 0)
+            SELECT_EXE_exe.g_PadButtonWord = (int)(uVar5 & 0xffff);
+            if (SELECT_EXE_exe.g_PadButtonWord == 0)
             {
                 iVar12 = 0;
                 local_48 = 1;
@@ -327,7 +327,7 @@ internal static class ModeMenu
 
             if (!bMove)
             {
-                bMove = local_48 != 0 && SELECT_EXE_exe.DAT_80055b6c != 0;
+                bMove = local_48 != 0 && SELECT_EXE_exe.g_PadButtonWord != 0;
             }
 
             if (bMove)
@@ -337,31 +337,31 @@ internal static class ModeMenu
                     local_48 = 0;
                 }
 
-                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].r = 0x40;
-                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].g = 0x40;
-                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].b = 0x40;
-                iVar11 = DAT_80055a0c;
-                uVar5 = (uint)(SELECT_EXE_exe.DAT_80055b6c & 0x4000);
-                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x19].attribute = 0x80000000;
+                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].r = 0x40;
+                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].g = 0x40;
+                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].b = 0x40;
+                iVar11 = g_ModeMenuCursor;
+                uVar5 = (uint)(SELECT_EXE_exe.g_PadButtonWord & 0x4000);
+                SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x19].attribute = 0x80000000;
                 if (uVar5 != 0)
                 {
-                    DAT_80055a0c = iVar11 + 1;
+                    g_ModeMenuCursor = iVar11 + 1;
                     if (local_58 + -1 < iVar11 + 1)
                     {
-                        DAT_80055a0c = 0;
+                        g_ModeMenuCursor = 0;
                     }
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x1000) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x1000) != 0)
                 {
-                    DAT_80055a0c = DAT_80055a0c + -1;
-                    if (DAT_80055a0c < 0)
+                    g_ModeMenuCursor = g_ModeMenuCursor + -1;
+                    if (g_ModeMenuCursor < 0)
                     {
-                        DAT_80055a0c = local_58 + -1;
+                        g_ModeMenuCursor = local_58 + -1;
                     }
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x20) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x20) != 0)
                 {
                     local_50 = 0;
                 }
@@ -380,10 +380,10 @@ internal static class ModeMenu
             do
             {
                 // -sin(angle) * radius / 4096 * (bVar2 ? 0.8 : 1.2) -> leader.x
-                uVar15 = __floatsidf(-DAT_8004f464[local_68[(iVar11 + local_30) >> 1]]);
+                uVar15 = __floatsidf(-g_SineTable451[local_68[(iVar11 + local_30) >> 1]]);
                 uVar15 = __muldf3(uVar15, uVar14);
                 uVar15 = __divdf3(uVar15, 4096.0);
-                iVar9 = ReadI32(SelectScreen.DAT_800593b8, piVar10);
+                iVar9 = ReadI32(SelectScreen.g_SpriteChainTable7, piVar10);
                 uVar7 = 1.2;
                 if (bVar2)
                 {
@@ -393,12 +393,12 @@ internal static class ModeMenu
                 uVar15 = __muldf3(uVar15, uVar7);
                 SpriteAtAddress(iVar9).x = (short)__fixdfsi(uVar15);
 
-                // &DAT_8004f518 is the same table ninety entries in, i.e. cos(angle).
-                uVar15 = __floatsidf(DAT_8004f464[90 + local_68[(iVar11 + local_30) >> 1]]);
+                // &g_CosineTableBase is the same table ninety entries in, i.e. cos(angle).
+                uVar15 = __floatsidf(g_SineTable451[90 + local_68[(iVar11 + local_30) >> 1]]);
                 uVar16 = __floatsidf(local_38);
                 uVar15 = __muldf3(uVar15, uVar16);
                 uVar15 = __divdf3(uVar15, 4096.0);
-                iVar9 = ReadI32(SelectScreen.DAT_800593b8, piVar10);
+                iVar9 = ReadI32(SelectScreen.g_SpriteChainTable7, piVar10);
                 uVar7 = 0.8;
                 if (bVar2)
                 {
@@ -458,11 +458,11 @@ internal static class ModeMenu
 
             uVar13 = uVar5 - 1;
             FUN_80033630();
-            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].r = 0x80;
-            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].g = 0x80;
-            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x15].b = 0x80;
-            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[DAT_80055a0c + 0x19].attribute = 0x1000000;
-            FrameStep.FUN_800344a4();
+            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].r = 0x80;
+            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].g = 0x80;
+            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x15].b = 0x80;
+            SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[g_ModeMenuCursor + 0x19].attribute = 0x1000000;
+            FrameStep.DrawFrame();
             uVar5 = uVar5 + 0x102;
         }
         while (local_50 != 0);
@@ -483,10 +483,10 @@ internal static class ModeMenu
             iVar12 = 0;
             do
             {
-                uVar15 = __floatsidf(-DAT_8004f464[local_68[iVar12 >> 1]]);
+                uVar15 = __floatsidf(-g_SineTable451[local_68[iVar12 >> 1]]);
                 uVar15 = __muldf3(uVar15, uVar14);
                 uVar15 = __divdf3(uVar15, 4096.0);
-                iVar11 = ReadI32(SelectScreen.DAT_800593b8, piVar10);
+                iVar11 = ReadI32(SelectScreen.g_SpriteChainTable7, piVar10);
                 uVar7 = 1.2;
                 if (bVar2)
                 {
@@ -495,11 +495,11 @@ internal static class ModeMenu
 
                 uVar15 = __muldf3(uVar15, uVar7);
                 SpriteAtAddress(iVar11).x = (short)__fixdfsi(uVar15);
-                uVar15 = __floatsidf(DAT_8004f464[90 + local_68[iVar12 >> 1]]);
+                uVar15 = __floatsidf(g_SineTable451[90 + local_68[iVar12 >> 1]]);
                 uVar16 = __floatsidf(sVar4);
                 uVar15 = __muldf3(uVar15, uVar16);
                 uVar15 = __divdf3(uVar15, 4096.0);
-                iVar11 = ReadI32(SelectScreen.DAT_800593b8, piVar10);
+                iVar11 = ReadI32(SelectScreen.g_SpriteChainTable7, piVar10);
                 uVar7 = 0.8;
                 if (bVar2)
                 {
@@ -521,10 +521,10 @@ internal static class ModeMenu
             }
 
             FUN_80033630();
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             uVar5 = uVar13 + 0x103;
         }
 
-        return DAT_80055a0c;
+        return g_ModeMenuCursor;
     }
 }

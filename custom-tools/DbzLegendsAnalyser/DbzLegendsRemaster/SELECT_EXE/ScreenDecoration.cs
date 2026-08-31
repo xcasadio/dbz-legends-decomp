@@ -18,17 +18,17 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     0x8002CC04  FUN_8002cc04   the hand-off transition, plus its satellite pass FUN_8002dec0
 //                                @ 0x8002DEC0
 //
-// NOTHING HERE TOUCHES libsnd. Every callee of all seven is accounted for: FrameStep.FUN_800344a4,
-// SelectScreen.FUN_80030848, LibGpu.MoveImage, LibGpu.DrawSync, the four LibGcc soft-float entry
+// NOTHING HERE TOUCHES libsnd. Every callee of all seven is accounted for: FrameStep.DrawFrame,
+// SelectScreen.InitializeSpriteArray, LibGpu.MoveImage, LibGpu.DrawSync, the four LibGcc soft-float entry
 // points and FUN_8002dec0 below. FUN_8002cc04's callee list in Ghidra is exactly
-// { FUN_8002dec0, DrawSync, __floatsidf, __muldf3, __divdf3, FUN_800344a4, FUN_80030848,
+// { FUN_8002dec0, DrawSync, __floatsidf, __muldf3, __divdf3, DrawFrame, InitializeSpriteArray,
 //   __fixdfsi, MoveImage } — no SsUtil, no SpuSet, no Vab anything. So none of this slice is
 // blocked on LibSnd.cs.
 //
 // THE SPRITE INDICES ARE ARITHMETIC, NOT GUESSES, and the table is the one ModeBranches.cs states:
 //     &GsSPRITE_ARRAY_800654ec = 0x800654EC, stride 36 (0x24)
 //     &DAT_80065480 + n  ->  element (n - 0x6C) / 36, field +0x00 (attribute)
-//     &DAT_80065484 + n  ->  ... +0x04 (x)      &DAT_80065484 + n + 2 -> +0x06 (y)
+//     &g_GsLineArray4 + n  ->  ... +0x04 (x)      &g_GsLineArray4 + n + 2 -> +0x06 (y)
 //     &DAT_80065488 + n  ->  ... +0x08 (w)      &DAT_8006548a + n     -> +0x0A (h)
 //     &DAT_8006548c + n  ->  ... +0x0C (tpage)  &DAT_8006548e + n     -> +0x0E (u), +1 -> v
 //     &DAT_80065490 + n  ->  ... +0x10 (cx)     &DAT_80065492 + n     -> +0x12 (cy)
@@ -44,29 +44,29 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // the way out) with `g` and `b` copied from it, which is how the whole picture dims.
 internal static class ScreenDecoration
 {
-    // GHIDRA: DAT_80055a10 @ 0x80055A10
+    // GHIDRA: g_SpBuildDigitCellRect @ 0x80055A10
     // .sdata, undefined4, image value 0x00DD0000 (the bytes at 0x80055A10 are 00 00 DD 00, read with
     // read-memory). The FIRST half of the RECT constant FUN_8002a7f4 copies into its stack frame:
-    // x = 0x0000, y = 0x00DD. It is the same four-by-sixteen digit cell as ModeBranches.DAT_80055a48,
-    // which is the copy FUN_800310a8 makes of the same source RECT.
-    private static readonly uint DAT_80055a10 = 0x00DD0000;
+    // x = 0x0000, y = 0x00DD. It is the same four-by-sixteen digit cell as ModeBranches.g_SpBranchDigitCellRect,
+    // which is the copy RunSpModeScreen makes of the same source RECT.
+    private static readonly uint g_SpBuildDigitCellRect = 0x00DD0000;
 
     // GHIDRA: DAT_80055a14 @ 0x80055A14
     // .sdata, undefined4, image value 0x00100004 (bytes 04 00 10 00). The SECOND half: w = 0x0004,
     // h = 0x0010.
     private static readonly uint DAT_80055a14 = 0x00100004;
 
-    // GHIDRA: DAT_80055a30 @ 0x80055A30
+    // GHIDRA: g_FullFrameRect320x240 @ 0x80055A30
     // .sdata, undefined4, image value 0x00000000 (bytes 00 00 00 00). First half of the RECT
     // FUN_8002cc04 hands MoveImage: x = 0, y = 0.
-    private static readonly uint DAT_80055a30 = 0x00000000;
+    private static readonly uint g_FullFrameRect320x240 = 0x00000000;
 
     // GHIDRA: DAT_80055a34 @ 0x80055A34
     // .sdata, undefined4, image value 0x00F00140 (bytes 40 01 F0 00). Second half: w = 0x0140,
     // h = 0x00F0 — the whole 320x240 frame, which FUN_8002cc04 copies to VRAM (0x280, 0).
     private static readonly uint DAT_80055a34 = 0x00F00140;
 
-    // GHIDRA: DAT_80055a38 @ 0x80055A38
+    // GHIDRA: g_ChainLastIndexTable8 @ 0x80055A38
     // .sdata, undefined4, image bytes FF 01 04 08.
     // GHIDRA: DAT_80055a3c @ 0x80055A3C
     // .sdata, undefined4, image bytes 0D 13 1A 22.
@@ -77,13 +77,13 @@ internal static class ScreenDecoration
     // totals are 2, 5, 9, 14, 20, 27, 35 and the last indices are 1, 4, 8, 13, 19, 26, 34 — which is
     // 01 04 08 0D 13 1A 22 exactly. The leading 0xFF is the "one before the first" sentinel; the
     // only loop that indexes this table starts at 1, so 0xFF is never read there.
-    private static readonly byte[] DAT_80055a38 =
+    private static readonly byte[] g_ChainLastIndexTable8 =
     {
         0xFF, 0x01, 0x04, 0x08, 0x0D, 0x13, 0x1A, 0x22,
     };
 
     // GHIDRA: FUN_80029684 @ 0x80029684
-    // 2328 bytes. THE DEMO SAVE-SLOT PICKER'S BUILD, called by ModeBranches.FUN_80030af8 with the
+    // 2328 bytes. THE DEMO SAVE-SLOT PICKER'S BUILD, called by ModeBranches.RunDemoModeScreen with the
     // preselected cursor and the base of the three eight-byte records at 0x801FF200.
     //
     // Shape: arm the two background sprites, re-initialise elements 1..19, arm the panel (1), the
@@ -121,8 +121,8 @@ internal static class ScreenDecoration
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].cx = 0;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].attribute = 0x1000000;
 
-        // `FUN_80030848(0x80065510, 0x13)` — 0x80065510 is 0x800654EC + 0x24, i.e. element 1.
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        // `InitializeSpriteArray(0x80065510, 0x13)` — 0x80065510 is 0x800654EC + 0x24, i.e. element 1.
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
         iVar3 = 1;
         do
         {
@@ -408,7 +408,7 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar3 = iVar3 + 4;
         }
         while (iVar3 < 0x80);
@@ -452,7 +452,7 @@ internal static class ScreenDecoration
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[5].scalex = 0x1000;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[1].scaley = 0x1000;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[1].scalex = 0x1000;
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
     }
 
     // GHIDRA: FUN_80029f9c @ 0x80029F9C
@@ -591,19 +591,19 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar3 = iVar3 + -4;
         }
         while (0 < iVar3);
 
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
     }
 
     // GHIDRA: FUN_8002a178 @ 0x8002A178
     // 1408 bytes. THE VS SUB-MENU'S BUILD.
     //
-    // NOTE ON param_1 — THE ORIGINAL IGNORES IT. ModeBranches.FUN_80030ef8 passes DAT_80055a40 in
-    // a0, but the first thing this function does is `jal FUN_80030848` with a0 = 0x80065510, and
+    // NOTE ON param_1 — THE ORIGINAL IGNORES IT. ModeBranches.RunVsModeScreen passes g_VsSubMenuCursor in
+    // a0, but the first thing this function does is `jal InitializeSpriteArray` with a0 = 0x80065510, and
     // Ghidra recovers the signature as `void FUN_8002a178(void)` with no `unaff_` register read.
     // The parameter is kept on this side because the CALL SITE passes it; it is not read, and that
     // is the original's behaviour, not a simplification.
@@ -623,7 +623,7 @@ internal static class ScreenDecoration
 
         _ = param_1;
 
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
         iVar5 = 0;
         uVar4 = 0xb8;
         sVar3 = -0x14;
@@ -736,7 +736,7 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar2 = iVar2 + 4;
         }
         while (iVar2 < 0x80);
@@ -860,22 +860,22 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
         }
         while (0 < iVar1);
 
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
     }
 
     // GHIDRA: FUN_8002a7f4 @ 0x8002A7F4
-    // 2432 bytes. THE SP SAVE-SLOT PICKER'S BUILD, called by ModeBranches.FUN_800310a8 with the
+    // 2432 bytes. THE SP SAVE-SLOT PICKER'S BUILD, called by ModeBranches.RunSpModeScreen with the
     // preselected cursor and the base of the three sixteen-byte records at 0x801FF218.
     //
-    // It opens with the SAME digit blit ModeBranches.FUN_800310a8 does on every rebuild: decode the
+    // It opens with the SAME digit blit ModeBranches.RunSpModeScreen does on every rebuild: decode the
     // halfword at +2 of each record as a decimal number and MoveImage its two digits out of the
     // 4-by-16 strip at (0x300 + digit * 4, 0xDD) to (0x3E4 + row * 8, 0x100) and
-    // (0x3E8 + row * 8, 0x100). The RECT constant is DAT_80055a10/DAT_80055a14, which is the same
-    // pair of words as ModeBranches.DAT_80055a48/DAT_80055a4c.
+    // (0x3E8 + row * 8, 0x100). The RECT constant is g_SpBuildDigitCellRect/DAT_80055a14, which is the same
+    // pair of words as ModeBranches.g_SpBranchDigitCellRect/DAT_80055a4c.
     //
     // The rest is the picker's own layout — six panel strips (1..6) sliding in from off-screen, the
     // three row icons (7, 8, 9), the three row labels (10, 11, 12), the two caption strips (14, 15)
@@ -896,11 +896,11 @@ internal static class ScreenDecoration
         ushort puVar2;
         RECT local_58 = new RECT();
 
-        // `local_58._0_4_ = DAT_80055a10; local_58._4_4_ = DAT_80055a14;` — Ghidra renders each word
+        // `local_58._0_4_ = g_SpBuildDigitCellRect; local_58._4_4_ = DAT_80055a14;` — Ghidra renders each word
         // twice, once as the unaligned SWL/SWR pair the compiler emitted for the struct copy and
         // once as the aligned store. Both write the same four bytes.
-        local_58.x = (short)(DAT_80055a10 & 0xffff);
-        local_58.y = (short)(DAT_80055a10 >> 16);
+        local_58.x = (short)(g_SpBuildDigitCellRect & 0xffff);
+        local_58.y = (short)(g_SpBuildDigitCellRect >> 16);
         local_58.w = (short)(DAT_80055a14 & 0xffff);
         local_58.h = (short)(DAT_80055a14 >> 16);
 
@@ -946,7 +946,7 @@ internal static class ScreenDecoration
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].cx = 0;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].cy = 499;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].attribute = 0x1000000;
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
         iVar9 = 1;
         iVar11 = 0;
         do
@@ -1204,7 +1204,7 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
         }
         while (iVar9 < 0x80);
     }
@@ -1279,23 +1279,23 @@ internal static class ScreenDecoration
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
             SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[99].b =
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].r;
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             iVar1 = iVar1 + -4;
         }
         while (0 < iVar1);
 
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 1, 0x13);
     }
 
     // GHIDRA: FUN_8002cc04 @ 0x8002CC04
     // 1836 bytes. THE HAND-OFF TRANSITION. All three branches call it immediately before
     // ModeBranches.FUN_80025894 and the LoadExec, so it is the last thing SELECT.EXE draws.
     //
-    // NO ARGUMENT IS READ. The two card pickers write a0 (0 and 1) and FUN_80030ef8 leaves whatever
+    // NO ARGUMENT IS READ. The two card pickers write a0 (0 and 1) and RunVsModeScreen leaves whatever
     // was in the register, but Ghidra recovers `void FUN_8002cc04(void)` — the first instruction
-    // that touches a0 is the `jal FUN_80030848` at the top, and there is no `unaff_` read anywhere
+    // that touches a0 is the `jal InitializeSpriteArray` at the top, and there is no `unaff_` read anywhere
     // in the body. THAT CLOSES THE OPEN POINT ModeBranches.cs RECORDED at its FUN_8002cc04 call in
-    // FUN_80030ef8: the leaked register cannot reach anything, because nothing reads it.
+    // RunVsModeScreen: the leaked register cannot reach anything, because nothing reads it.
     // The C# signature keeps param_1 because two of the three call sites pass it.
     //
     // WHAT IT DOES, in two phases over the same 35 sprites (elements 60..94) the mode-menu orbit
@@ -1354,19 +1354,19 @@ internal static class ScreenDecoration
         ushort[] local_58 = { 0x0000, 0x0032, 0x0064, 0x0096, 0x00c8, 0x00fa, 300 };
         short[] asStack_48 = new short[7];
         RECT auStack_38 = new RECT();
-        byte[] auStack_30 = (byte[])DAT_80055a38.Clone();
+        byte[] auStack_30 = (byte[])g_ChainLastIndexTable8.Clone();
 
-        auStack_38.x = (short)(DAT_80055a30 & 0xffff);
-        auStack_38.y = (short)(DAT_80055a30 >> 16);
+        auStack_38.x = (short)(g_FullFrameRect320x240 & 0xffff);
+        auStack_38.y = (short)(g_FullFrameRect320x240 >> 16);
         auStack_38.w = (short)(DAT_80055a34 & 0xffff);
         auStack_38.h = (short)(DAT_80055a34 >> 16);
 
         iVar14 = 0x104;
         uVar4 = 0x104;
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
         MoveImage(auStack_38, 0x280, 0);
         DrawSync(0);
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 0, 0x3c);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 0, 0x3c);
         iVar13 = 0;
         iVar10 = 0x870;
         SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x62].tpage = 10;
@@ -1404,18 +1404,18 @@ internal static class ScreenDecoration
             do
             {
                 // -sin(angle) * radius / 4096 -> leader.x, cos(angle) * radius / 4096 -> leader.y.
-                // &DAT_8004f518 is ModeMenu.DAT_8004f464 ninety entries in, i.e. cos.
+                // &g_CosineTableBase is ModeMenu.g_SineTable451 ninety entries in, i.e. cos.
                 // 0x40B00000_00000000 is 4096.0.
-                uVar16 = __floatsidf(-ModeMenu.DAT_8004f464[local_58[iVar10 >> 1]]);
+                uVar16 = __floatsidf(-ModeMenu.g_SineTable451[local_58[iVar10 >> 1]]);
                 uVar16 = __muldf3(uVar16, uVar15);
                 uVar16 = __divdf3(uVar16, 4096.0);
                 uVar4 = (short)__fixdfsi(uVar16);
                 iVar13 = iVar13 + 1;
                 ModeMenu.SpriteAtAddress(
-                    MipsMemory.ReadI32(SelectScreen.DAT_800593b8, piVar12)).x = uVar4;
-                iVar11 = MipsMemory.ReadI32(SelectScreen.DAT_800593b8, piVar12);
+                    MipsMemory.ReadI32(SelectScreen.g_SpriteChainTable7, piVar12)).x = uVar4;
+                iVar11 = MipsMemory.ReadI32(SelectScreen.g_SpriteChainTable7, piVar12);
                 piVar12 = piVar12 + 0xc;
-                uVar16 = __floatsidf(ModeMenu.DAT_8004f464[90 + local_58[iVar10 >> 1]]);
+                uVar16 = __floatsidf(ModeMenu.g_SineTable451[90 + local_58[iVar10 >> 1]]);
                 uVar16 = __muldf3(uVar16, uVar15);
                 uVar16 = __divdf3(uVar16, 4096.0);
                 uVar4 = (short)__fixdfsi(uVar16);
@@ -1455,7 +1455,7 @@ internal static class ScreenDecoration
             }
             while (iVar13 < 0x23);
 
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
         }
         while (0x14 < (short)iVar14);
 
@@ -1471,12 +1471,12 @@ internal static class ScreenDecoration
         while (-1 < iVar13);
 
         iVar10 = 6;
-        FrameStep.FUN_800344a4();
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
         SELECT_EXE_exe.DAT_80055b80 = SELECT_EXE_exe.DAT_80055b80 | 1;
-        FrameStep.FUN_800344a4();
+        FrameStep.DrawFrame();
         SELECT_EXE_exe.DAT_80055b80 = SELECT_EXE_exe.DAT_80055b80 | 2;
-        SelectScreen.FUN_80030848(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 0, 0x3c);
+        SelectScreen.InitializeSpriteArray(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec, 0, 0x3c);
 
         // `local_54 = 0x78003c; local_50 = 0xf000b4; local_58 &= 0xffff; local_4c[0] = 300;` — the
         // angle array re-seeded to { unchanged, 0, 60, 120, 180, 240, 300 }. The `& 0xffff` keeps
@@ -1521,20 +1521,20 @@ internal static class ScreenDecoration
                     break;
                 }
 
-                uVar15 = __floatsidf(-ModeMenu.DAT_8004f464[local_58[iVar13 >> 1]]);
+                uVar15 = __floatsidf(-ModeMenu.g_SineTable451[local_58[iVar13 >> 1]]);
                 uVar16 = __floatsidf(asStack_48[iVar13 >> 1]);
                 uVar15 = __muldf3(uVar15, uVar16);
                 uVar15 = __divdf3(uVar15, 4096.0);
                 uVar4 = (short)__fixdfsi(uVar15);
                 ModeMenu.SpriteAtAddress(
-                    MipsMemory.ReadI32(SelectScreen.DAT_800593b8, piVar12)).x = uVar4;
-                uVar15 = __floatsidf(ModeMenu.DAT_8004f464[90 + local_58[iVar13 >> 1]]);
+                    MipsMemory.ReadI32(SelectScreen.g_SpriteChainTable7, piVar12)).x = uVar4;
+                uVar15 = __floatsidf(ModeMenu.g_SineTable451[90 + local_58[iVar13 >> 1]]);
                 uVar16 = __floatsidf(asStack_48[iVar13 >> 1]);
                 uVar15 = __muldf3(uVar15, uVar16);
                 uVar15 = __divdf3(uVar15, 4096.0);
                 uVar4 = (short)__fixdfsi(uVar15);
                 ModeMenu.SpriteAtAddress(
-                    MipsMemory.ReadI32(SelectScreen.DAT_800593b8, piVar12)).y = uVar4;
+                    MipsMemory.ReadI32(SelectScreen.g_SpriteChainTable7, piVar12)).y = uVar4;
 
                 // Un-hide chain iVar14's sprites: elements 60 + auStack_30[iVar14] + 1 through
                 // 60 + auStack_30[iVar14 + 1].
@@ -1580,10 +1580,10 @@ internal static class ScreenDecoration
             iVar10 = iVar10 + 1;
             if (0x2f < (short)iVar10)
             {
-                // `*(undefined2 *)(DAT_800593b8 + 4)` is chain 0's LEADER, dereferenced through the
+                // `*(undefined2 *)(g_SpriteChainTable7 + 4)` is chain 0's LEADER, dereferenced through the
                 // pointer stored at 0x800593B8 — element 60. It is pinned at the centre and its own
                 // pair (60, 61) is what the loop's exit test watches.
-                int leader0 = MipsMemory.ReadI32(SelectScreen.DAT_800593b8, 0);
+                int leader0 = MipsMemory.ReadI32(SelectScreen.g_SpriteChainTable7, 0);
                 ModeMenu.SpriteAtAddress(leader0).x = 0;
                 ModeMenu.SpriteAtAddress(leader0).y = 0;
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x3d].attribute = 0x1000000;
@@ -1598,7 +1598,7 @@ internal static class ScreenDecoration
                     SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0x3c].scalex;
             }
 
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
         }
         while (true);
     }
@@ -1621,7 +1621,7 @@ internal static class ScreenDecoration
     //   never gets an my. The second store is at +0x18 in the image, not +0x1A.
     private static void FUN_8002dec0()
     {
-        // row 0 — *DAT_800593bc from DAT_800593b8
+        // row 0 — *DAT_800593bc from g_SpriteChainTable7
         ModeMenu.SatelliteSprite(0, 0).x = ModeMenu.SpriteAtAddress(ModeMenu.LeaderAddress(0)).x;
         ModeMenu.SatelliteSprite(0, 0).y = ModeMenu.SpriteAtAddress(ModeMenu.LeaderAddress(0)).y;
 

@@ -1,9 +1,9 @@
 ﻿namespace DbzLegendsRemaster.SELECT_EXE;
 
-// THE SHARED LIST CURSOR — FUN_80033d34 @ 0x80033D34, 1612 bytes, three call sites:
-//     FUN_80030af8 @ 0x80030AF8 (DEMO)  FUN_80033d34(&DAT_80055b08, 0x10, 4, 2)
-//     FUN_80030ef8 @ 0x80030EF8 (VS)    FUN_80033d34(&DAT_80055a40, 2,    3, 1)
-//     FUN_800310a8 @ 0x800310A8 (SP)    FUN_80033d34(&DAT_80055a44, 0x10, 4, 3)
+// THE SHARED LIST CURSOR — RunListSelect @ 0x80033D34, 1612 bytes, three call sites:
+//     RunDemoModeScreen @ 0x80030AF8 (DEMO)  RunListSelect(&g_DemoListCursor, 0x10, 4, 2)
+//     RunVsModeScreen @ 0x80030EF8 (VS)    RunListSelect(&g_VsSubMenuCursor, 2,    3, 1)
+//     RunSpModeScreen @ 0x800310A8 (SP)    RunListSelect(&g_SpListCursor, 0x10, 4, 3)
 // It owns a blocking frame loop of its own and returns only three kinds of answer:
 //     the cursor value   Circle was pressed
 //     -1                 Cross was pressed
@@ -17,15 +17,15 @@
 // picks the auto-repeat cadence (four frames on 0/2, eight on 1).
 internal static class ListCursor
 {
-    // GHIDRA: DAT_80055b4c @ 0x80055B4C
+    // GHIDRA: g_PrevCardProbeResult @ 0x80055B4C
     // .sbss, undefined4. The PREVIOUS memory-card status, latched each pass before the re-poll so
     // the two "-2" tests can spot a transition rather than a level.
-    private static int DAT_80055b4c;
+    private static int g_PrevCardProbeResult;
 
-    // GHIDRA: DAT_80055b84 @ 0x80055B84
+    // GHIDRA: g_ListRowAvailable4 @ 0x80055B84
     // .sbss, undefined1. Row 0's availability — both card pickers set it to 1 unconditionally, so
     // the "no card" row is always selectable.
-    internal static byte DAT_80055b84;
+    internal static byte g_ListRowAvailable4;
 
     // GHIDRA: DAT_80055b85 @ 0x80055B85
     // .sbss, undefined1. Row 1's availability: bit 0 of the first save record.
@@ -40,8 +40,8 @@ internal static class ListCursor
     internal static byte DAT_80055b87;
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: FUN_80033d34 addresses the four bytes above as an array from two different bases —
-    // `(&DAT_80055b84)[*param_1]` when the cursor moves UP, and `(&DAT_80055b85)[iVar6]` when it
+    // RELATION: RunListSelect addresses the four bytes above as an array from two different bases —
+    // `(&g_ListRowAvailable4)[*param_1]` when the cursor moves UP, and `(&DAT_80055b85)[iVar6]` when it
     // moves DOWN (moving down from row c lands on row c + 1, whose byte is 0x80055B84 + c + 1).
     // A third spelling, `*(char *)((int)&DAT_80055b80 + iVar6 + 3)`, is the same 0x80055B84 + iVar6.
     // This helper is that indexing and nothing else; the four globals keep their own names at every
@@ -60,7 +60,7 @@ internal static class ListCursor
     {
         switch (indexFromDAT_80055b84)
         {
-            case 0: return DAT_80055b84;
+            case 0: return g_ListRowAvailable4;
             case 1: return DAT_80055b85;
             case 2: return DAT_80055b86;
             case 3: return DAT_80055b87;
@@ -68,7 +68,7 @@ internal static class ListCursor
         }
     }
 
-    // GHIDRA: FUN_80033d34 @ 0x80033D34
+    // GHIDRA: RunListSelect @ 0x80033D34
     //
     // BLOCKED, AND THE ONE THING IN THIS FUNCTION THAT IS NOT CLOSED: `unaff_s4` and `unaff_s5` are
     // read before they are written. The prologue at 0x80033D34 saves s4 and s5 to the stack
@@ -77,10 +77,10 @@ internal static class ListCursor
     // frame counter and phase from whatever the caller happened to leave in those two registers.
     // A C# local cannot carry a leftover machine register, so both start at 0 here.
     // THE DIVERGENCE IS BOUNDED: the very first pass through the loop resets both to 0 as soon as
-    // FUN_80026208 reports an empty pad (`if (DAT_80055b6c == 0) { unaff_s5 = 0; unaff_s4 = 0; }`),
+    // FUN_80026208 reports an empty pad (`if (g_PadButtonWord == 0) { unaff_s5 = 0; unaff_s4 = 0; }`),
     // so the only frames that can differ are those between entry and the first release of every
     // button. All three callers reach this after a Circle press that has already been consumed
-    // (FUN_80030af8 runs eight frame steps first; FUN_800283a0's outro runs a further 0x207).
+    // (RunDemoModeScreen runs eight frame steps first; RunModeMenu's outro runs a further 0x207).
     //
     // JUSTIFICATION: C# language bridge only
     // RELATION: three shapes could not be spelled literally. (1) `*param_1` is a pointer to one of
@@ -90,7 +90,7 @@ internal static class ListCursor
     // written as `break`, which is exactly equivalent: the loop's own guard has just assigned
     // iVar6 = *param_1, the statement after the loop assigns the same value again, and the shared
     // `if (param_3 <= iVar6)` immediately below then fires on the same test that produced the jump.
-    internal static int FUN_80033d34(ref int param_1, int param_2, int param_3, int param_4)
+    internal static int RunListSelect(ref int param_1, int param_2, int param_3, int param_4)
     {
         byte cVar1;
         bool bVar2;
@@ -112,37 +112,37 @@ internal static class ListCursor
 
         do
         {
-            if ((SELECT_EXE_exe.DAT_80055b50 == 0) || (SELECT_EXE_exe.DAT_80055b50 == 2))
+            if ((SELECT_EXE_exe.g_CurrentMenuState == 0) || (SELECT_EXE_exe.g_CurrentMenuState == 2))
             {
                 // Ghidra prints the call as FUN_80021f0c() with no argument, but the register is set:
-                // `lui a0,0x8020 / lw a0,-0x0f98(a0)` at 0x80033DAC-0x80033DB0 loads DAT_801ff068
-                // into a0, `sw a0,0x164(gp)` at 0x80033DB8 is this very store into DAT_80055b4c, and
+                // `lui a0,0x8020 / lw a0,-0x0f98(a0)` at 0x80033DAC-0x80033DB0 loads g_CardProbeResult
+                // into a0, `sw a0,0x164(gp)` at 0x80033DB8 is this very store into g_PrevCardProbeResult, and
                 // the jal at 0x80033DBC has a nop delay slot. So the argument is the OLD status —
                 // which is what FUN_80021f0c's own `param_1 != 2` / `param_1 == 4` tests need.
-                DAT_80055b4c = SharedHighRam.DAT_801ff068;
-                SharedHighRam.DAT_801ff068 = MemoryCard.FUN_80021f0c(DAT_80055b4c);
-                if ((SharedHighRam.DAT_801ff068 == 4) && (DAT_80055b4c != 4))
+                g_PrevCardProbeResult = SharedHighRam.g_CardProbeResult;
+                SharedHighRam.g_CardProbeResult = MemoryCard.FUN_80021f0c(g_PrevCardProbeResult);
+                if ((SharedHighRam.g_CardProbeResult == 4) && (g_PrevCardProbeResult != 4))
                 {
                     return -2;
                 }
 
-                if ((SharedHighRam.DAT_801ff068 != 0) && (DAT_80055b4c == 0))
+                if ((SharedHighRam.g_CardProbeResult != 0) && (g_PrevCardProbeResult == 0))
                 {
                     return -2;
                 }
             }
 
             uVar5 = PadInput.FUN_80026208(3);
-            SELECT_EXE_exe.DAT_80055b6c = (int)(uVar5 & 0xffff);
+            SELECT_EXE_exe.g_PadButtonWord = (int)(uVar5 & 0xffff);
             unaff_s4 = unaff_s4 + 1;
-            if (SELECT_EXE_exe.DAT_80055b6c == 0)
+            if (SELECT_EXE_exe.g_PadButtonWord == 0)
             {
                 bVar3 = true;
                 unaff_s5 = 0;
                 unaff_s4 = 0;
             }
 
-            if ((SELECT_EXE_exe.DAT_80055b50 == 0) || (SELECT_EXE_exe.DAT_80055b50 == 2))
+            if ((SELECT_EXE_exe.g_CurrentMenuState == 0) || (SELECT_EXE_exe.g_CurrentMenuState == 2))
             {
                 if ((uVar5 & 0x60) == 0)
                 {
@@ -160,7 +160,7 @@ internal static class ListCursor
                     bVar3 = true;
                 }
             }
-            else if (SELECT_EXE_exe.DAT_80055b50 == 1)
+            else if (SELECT_EXE_exe.g_CurrentMenuState == 1)
             {
                 if ((uVar5 & 0x60) != 0)
                 {
@@ -175,7 +175,7 @@ internal static class ListCursor
                 }
             }
 
-            if (bVar3 && (SELECT_EXE_exe.DAT_80055b6c != 0))
+            if (bVar3 && (SELECT_EXE_exe.g_PadButtonWord != 0))
             {
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[param_2 + param_1].r = 0x40;
                 SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[param_2 + param_1].g = 0x40;
@@ -197,7 +197,7 @@ internal static class ListCursor
                     }
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x4000) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x4000) != 0)
                 {
                     if (bVar2)
                     {
@@ -231,7 +231,7 @@ internal static class ListCursor
                     }
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x1000) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x1000) != 0)
                 {
                     if (bVar2)
                     {
@@ -252,7 +252,7 @@ internal static class ListCursor
                         }
 
                         // This walk has NO lower guard in the original. It terminates only because
-                        // DAT_80055b84 — index 0 — is set to 1 unconditionally by both card pickers
+                        // g_ListRowAvailable4 — index 0 — is set to 1 unconditionally by both card pickers
                         // before they call in. Reproduced as written.
                         cVar1 = AvailabilityByte(param_1);
                         iVar6 = param_1;
@@ -265,18 +265,18 @@ internal static class ListCursor
                     }
                 }
 
-                if (((SELECT_EXE_exe.DAT_80055b50 == 0) || (SELECT_EXE_exe.DAT_80055b50 == 2)) &&
-                    (SharedHighRam.DAT_801ff068 != 0))
+                if (((SELECT_EXE_exe.g_CurrentMenuState == 0) || (SELECT_EXE_exe.g_CurrentMenuState == 2)) &&
+                    (SharedHighRam.g_CardProbeResult != 0))
                 {
                     param_1 = 0;
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x20) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x20) != 0)
                 {
                     bVar4 = false;
                 }
 
-                if ((SELECT_EXE_exe.DAT_80055b6c & 0x40) != 0)
+                if ((SELECT_EXE_exe.g_PadButtonWord & 0x40) != 0)
                 {
                     SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[param_2 + param_1].r = 0x80;
                     SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[param_2 + param_1].g = 0x80;
@@ -320,7 +320,7 @@ internal static class ListCursor
                 }
             }
 
-            FrameStep.FUN_800344a4();
+            FrameStep.DrawFrame();
             if (!bVar4)
             {
                 return param_1;

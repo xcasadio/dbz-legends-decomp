@@ -7,25 +7,25 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // THE MEMORY CARD MODULE of SELECT.EXE — the bring-up, the kernel-event handshake, the probe, the
 // boot-time save load and the teardown. main calls three of them on its pre-loop path
-// (FUN_80021ce4, FUN_80021e34, FUN_80021618) and the exit path FUN_8003472c calls the fourth
-// (FUN_80021d34), so nothing downstream of main's `switch` is right without this file.
+// (InitializeMemoryCard, FUN_80021e34, FUN_80021618) and the exit path ShutdownAndLoadExecutable calls the fourth
+// (ShutdownMemoryCard), so nothing downstream of main's `switch` is right without this file.
 //
 // WHERE THE FUNCTIONS LIVE IN THE IMAGE: two runs of .text.
 //   0x800213A8..0x800213B7   FUN_800213a8, the two-store state reset
 //   0x80021618..0x800218D3   FUN_80021618, the boot-time save load
-//   0x80021CE4..0x80021D33   FUN_80021ce4, the bring-up
-//   0x80021D34..0x80021E33   FUN_80021d34, the teardown
+//   0x80021CE4..0x80021D33   InitializeMemoryCard, the bring-up
+//   0x80021D34..0x80021E33   ShutdownMemoryCard, the teardown
 //   0x80021E34..0x80021F0B   FUN_80021e34, the probe
 //   0x80021FB4..0x80022023   FUN_80021fb4, the single-shot _card_info wrapper
-//   0x800220D4..0x80022137   FUN_800220d4, "does the save file exist"
+//   0x800220D4..0x80022137   IsSaveFileMissing, "does the save file exist"
 //   0x800221D0..0x80022243   FUN_800221d0, the 0xF4000001 poll
 //   0x80022244..0x800222B7   FUN_80022244, the 0xF0000011 poll
 //   0x800222B8..0x800222FF   FUN_800222b8, the 0xF4000001 drain
 //   0x80022300..0x80022347   FUN_80022300, the 0xF0000011 drain
-//   0x80022348..0x800224AF   FUN_80022348, the eight OpenEvent calls
-//   0x80022810..0x80022943   FUN_80022810, the record read + checksum
+//   0x80022348..0x800224AF   OpenMemoryCardEvents, the eight OpenEvent calls
+//   0x80022810..0x80022943   ReadSaveRecord, the record read + checksum
 //
-// HOW THE HANDSHAKE WORKS, AND WHY IT TERMINATES IN THIS PORT. FUN_80022348 opens eight kernel
+// HOW THE HANDSHAKE WORKS, AND WHY IT TERMINATES IN THIS PORT. OpenMemoryCardEvents opens eight kernel
 // events with a NULL callback — four on class 0xF4000001 (the card driver) and four on class
 // 0xF0000011 (the "card write/clear" side), each on spec 0x0004 / 0x8000 / 0x0100 / 0x2000 — and
 // enables all eight. Every card command is then issued as: drain (FUN_800222b8 / FUN_80022300,
@@ -47,19 +47,19 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // unexecuted branches are not read as wrong.
 internal static class MemoryCard
 {
-    // GHIDRA: DAT_800559e8 @ 0x800559E8
+    // GHIDRA: g_CardDevicePort1 @ 0x800559E8
     // .sdata, six bytes: 62 75 30 30 3A 00 = "bu00:" — the BIOS device name for memory card port 1.
-    // Read out of the image with read-memory. FUN_800220d4 and FUN_80022810 copy it into a stack
-    // buffer as `undefined4 + undefined2` (DAT_800559e8 + DAT_800559ec) and strcat the file name on.
+    // Read out of the image with read-memory. IsSaveFileMissing and ReadSaveRecord copy it into a stack
+    // buffer as `undefined4 + undefined2` (g_CardDevicePort1 + DAT_800559ec) and strcat the file name on.
     // The port models that scratch buffer as a C# string, which is the convention LibApi's
     // open(string, int) / firstfile(string, ...) overloads were added for (LibApi.cs lines 188-194).
-    internal const string DAT_800559e8 = "bu00:";
+    internal const string g_CardDevicePort1 = "bu00:";
 
-    // GHIDRA: DAT_800559f0 @ 0x800559F0
+    // GHIDRA: g_CardDevicePort2 @ 0x800559F0
     // .sdata, six bytes: 62 75 31 30 3A 00 = "bu10:" — port 2. Neither of this module's two callers
     // ever passes a non-zero port on main's path, so this string is loaded by no reachable branch
     // here; it is kept because the two `if (param_1 == 0) ... else ...` are kept.
-    internal const string DAT_800559f0 = "bu10:";
+    internal const string g_CardDevicePort2 = "bu10:";
 
     // GHIDRA: DAT_80055a78 @ 0x80055A78
     // .sbss, undefined4. FUN_80021618 writes only its LOW HALFWORD (`sh`, which Ghidra spells
@@ -74,23 +74,23 @@ internal static class MemoryCard
     // PARTIAL: WRITE-ONLY IN THE WHOLE OVERLAY. find-cross-references reports exactly two references
     // and both are writes (FUN_80021618 @ 0x8002163C and FUN_800213b8 @ 0x800213DC). Nothing reads
     // it, so what it means is not closed; the store is kept because the original makes it.
-    // The C# compiler flags it CS0414, "assigned but never used", and unlike CdAudio.DAT_80055abc
+    // The C# compiler flags it CS0414, "assigned but never used", and unlike CdAudio.g_CdPlayTocIndex
     // that is a property OF THE ORIGINAL and not of this port — there is no reader to port.
     // Suppressed for this one field so the build stays clean.
 #pragma warning disable CS0414
     internal static ushort DAT_80055a80;
 #pragma warning restore CS0414
 
-    // GHIDRA: DAT_80055a84 @ 0x80055A84
+    // GHIDRA: g_CardOperationState @ 0x80055A84
     // .sbss, undefined2. THE SAVE-LOAD STATE. FUN_800213a8 zeroes it during bring-up; FUN_80021618's
     // switch drives it. The states this slice sees: 0 (start) -> 7 (does the file exist) -> 0xF
     // (read the record) or 8 / 0x10 (the two failure screens) or 2 (the "wrong card" screen).
-    internal static ushort DAT_80055a84;
+    internal static ushort g_CardOperationState;
 
-    // GHIDRA: DAT_80055a88 @ 0x80055A88
+    // GHIDRA: g_CardReprobeRequest @ 0x80055A88
     // .sbss, undefined2. "Re-probe the card on the next pass" — FUN_80021618's loop head consumes it
     // and calls FUN_80021e34. FUN_800213a8 zeroes it during bring-up.
-    internal static ushort DAT_80055a88;
+    internal static ushort g_CardReprobeRequest;
 
     // GHIDRA: DAT_80055a8c @ 0x80055A8C
     // .sbss, undefined2. The pass counter inside state 0xF: pass 0 reads the record, pass 1 returns
@@ -140,7 +140,7 @@ internal static class MemoryCard
     // .sbss, undefined4. OpenEvent(0xF0000011, 0x2000, 0x2000, NULL).
     private static int DAT_80055b7c;
 
-    // GHIDRA: DAT_801ff018 @ 0x801FF018
+    // GHIDRA: g_OptionsRecord64 @ 0x801FF018
     // The destination FUN_80021618 copies the 64-byte save record to, inside the cross-overlay block
     // SharedHighRam models. The write goes through the raw PSX address the original writes, which
     // SELECT_EXE_exe.ResolveAddress answers for by chaining SharedHighRam — the same route main's own
@@ -148,11 +148,11 @@ internal static class MemoryCard
     // THE RECORD'S EXTENT IS CLOSED BY ITS NEIGHBOURS: 0x801FF018 + 0x40 = 0x801FF058, and
     // SharedHighRam.DAT_801ff058 is the next named byte. The 64 bytes therefore cover the options
     // word at +0x00 (whose bit 1 main tests to gate menu item 2) and both button-remap tables,
-    // OverlayExit.DAT_801ff020 at +0x08 and OverlayExit.DAT_801ff03c at +0x24.
-    private const int DAT_801ff018_Address = unchecked((int)0x801FF018);
+    // OverlayExit.g_PadRemapTable0 at +0x08 and OverlayExit.g_PadRemapTable1 at +0x24.
+    private const int g_OptionsRecord64_Address = unchecked((int)0x801FF018);
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: stands in for the BIOS/libc strcat that FUN_800220d4 and FUN_80022810 call through
+    // RELATION: stands in for the BIOS/libc strcat that IsSaveFileMissing and ReadSaveRecord call through
     // the jump stub at 0x8004EA74. PsxSdkMonogame provides no strcat, and per rule 13 an SDK routine
     // is NOT transliterated into a game file — this is only the language bridge that lets the two
     // call sites keep their original shape, because the fixed stack buffer they strcat into is
@@ -163,23 +163,23 @@ internal static class MemoryCard
         return param_1 + param_2;
     }
 
-    // GHIDRA: FUN_80021ce4 @ 0x80021CE4
+    // GHIDRA: InitializeMemoryCard @ 0x80021CE4
     // Eighty bytes, seven calls, no locals — the memory-card bring-up. main calls it once, between
     // OverlayExit.FUN_80034380 and the probe FUN_80021e34; FUN_800276d8 @ 0x800276D8 is the other
     // call site and is not on this slice's path.
     // It is the same seven calls in the same order as TITLE.EXE's InitializeMemoryCard @ 0x80022630.
-    internal static void FUN_80021ce4()
+    internal static void InitializeMemoryCard()
     {
         InitCARD(1);
         StartCARD();
         _bu_init();
-        FUN_80022348();
+        OpenMemoryCardEvents();
         _card_auto(0);
         ChangeClearPAD(0);
         FUN_800213a8();
     }
 
-    // GHIDRA: FUN_80022348 @ 0x80022348
+    // GHIDRA: OpenMemoryCardEvents @ 0x80022348
     // Three hundred and sixty bytes. Eight OpenEvent calls inside a critical section, then eight
     // EnableEvent calls outside it — the split is load-bearing on the console (the table is built
     // with the ISR masked, and only armed once it is safe for a delivery to land) and LibApi's
@@ -189,7 +189,7 @@ internal static class MemoryCard
     // the foot of LibApi.cs. They are empty on desktop because every DeliverEvent in this port is
     // issued synchronously by the game thread, so there is no ISR to mask.
     // THE CALLBACK IS NULL FOR ALL EIGHT, which is what makes these poll-only events.
-    private static void FUN_80022348()
+    private static void OpenMemoryCardEvents()
     {
         EnterCriticalSection();
         DAT_80055b54 = (int)OpenEvent(0xf4000001, 4, 0x2000, null);
@@ -213,15 +213,15 @@ internal static class MemoryCard
 
     // GHIDRA: FUN_800213a8 @ 0x800213A8
     // Sixteen bytes and the whole of it is two halfword stores — read with read-memory:
-    //     A7 80 00 9C   sh zero, 0x9C(gp)   -> DAT_80055a84 (gp = 0x800559E8)
-    //     A7 80 00 A0   sh zero, 0xA0(gp)   -> DAT_80055a88
+    //     A7 80 00 9C   sh zero, 0x9C(gp)   -> g_CardOperationState (gp = 0x800559E8)
+    //     A7 80 00 A0   sh zero, 0xA0(gp)   -> g_CardReprobeRequest
     //     03 E0 00 08   jr ra
     // It resets the save-load state machine that FUN_80021618 (and its two siblings FUN_800213b8 and
     // FUN_800218d4, neither on this slice's path) drive.
     private static void FUN_800213a8()
     {
-        DAT_80055a84 = 0;
-        DAT_80055a88 = 0;
+        g_CardOperationState = 0;
+        g_CardReprobeRequest = 0;
     }
 
     // GHIDRA: FUN_800222b8 @ 0x800222B8
@@ -333,7 +333,7 @@ internal static class MemoryCard
     // WHAT IT RETURNS IN THIS PORT: 0. LibMcrd.CardIsPresent is unconditionally true, so _card_info
     // delivers (0xF4000001, 0x0004) and the first poll returns 0 on its first pass; the _card_clear
     // arm is skipped (the code is 0, not 4); _card_load delivers the same pair and the second poll
-    // returns 0 too. main then takes its `DAT_801ff068 == 0` arm and calls FUN_80021618.
+    // returns 0 too. main then takes its `g_CardProbeResult == 0` arm and calls FUN_80021618.
     internal static int FUN_80021e34(int param_1)
     {
         int iVar1;
@@ -381,13 +381,13 @@ internal static class MemoryCard
         return 1;
     }
 
-    // GHIDRA: FUN_80021d34 @ 0x80021D34
-    // Two hundred and fifty-six bytes — the mirror image of FUN_80021ce4 + FUN_80022348. Eight
+    // GHIDRA: ShutdownMemoryCard @ 0x80021D34
+    // Two hundred and fifty-six bytes — the mirror image of InitializeMemoryCard + OpenMemoryCardEvents. Eight
     // DisableEvent OUTSIDE the critical section, eight CloseEvent inside it, then StopCARD and the
     // pad handed back to the BIOS driver.
-    // Its two call sites are the exit path OverlayExit.FUN_8003472c @ 0x8003472C, which is on this
+    // Its two call sites are the exit path OverlayExit.ShutdownAndLoadExecutable @ 0x8003472C, which is on this
     // slice's path, and FUN_800276d8 @ 0x800276D8, which is not.
-    internal static void FUN_80021d34()
+    internal static void ShutdownMemoryCard()
     {
         DisableEvent(DAT_80055b54);
         DisableEvent(DAT_80055b58);
@@ -414,12 +414,12 @@ internal static class MemoryCard
 
     // GHIDRA: FUN_80021f0c @ 0x80021F0C
     // One hundred and sixty-eight bytes. THE RE-POLL: a cut-down FUN_80021e34 with no retry loops,
-    // issued once per frame by ListCursor.FUN_80033d34 @ 0x80033D34 while either card picker is up,
+    // issued once per frame by ListCursor.RunListSelect @ 0x80033D34 while either card picker is up,
     // so that inserting or removing a card is noticed.
     //
-    // param_1 IS PASSED, and it is the PREVIOUS status. Its only caller loads DAT_801ff068 into a0
+    // param_1 IS PASSED, and it is the PREVIOUS status. Its only caller loads g_CardProbeResult into a0
     // (`lui a0,0x8020 / lw a0,-0x0f98(a0)` at 0x80033DAC-0x80033DB0), stores that same register into
-    // DAT_80055b4c, and jals here with a nop in the delay slot. Ghidra drops the argument from the
+    // g_PrevCardProbeResult, and jals here with a nop in the delay slot. Ghidra drops the argument from the
     // call site; the register does not.
     // The two arms it gates: a code-4 answer is only cleared when the caller was ALREADY at 4 (so a
     // card that has just gone unformatted is reported once before being formatted), and a code-2
@@ -480,14 +480,14 @@ internal static class MemoryCard
         return iVar1;
     }
 
-    // GHIDRA: FUN_800220d4 @ 0x800220D4
+    // GHIDRA: IsSaveFileMissing @ 0x800220D4
     // One hundred bytes. Builds "bu00:BISLPS-00355DRAGON" in a 32-byte stack buffer and asks the
     // BIOS card directory whether it is there. RETURNS 1 WHEN THE FILE IS ABSENT: the original is
     // `return iVar1 == 0;`, compiled as `sltiu v0, v0, 1`, over a firstfile that answers NULL/0 when
     // the directory has no match. FUN_80021618's state 7 reads it as `if (iVar6 == 0)` = "the save
     // exists, go read it".
     // The DIRENTRY it fills (`undefined1 auStack_30[40]`) is never looked at.
-    internal static int FUN_800220d4(int param_1)
+    internal static int IsSaveFileMissing(int param_1)
     {
         int iVar1;
         string local_50;
@@ -495,11 +495,11 @@ internal static class MemoryCard
 
         if (param_1 == 0)
         {
-            local_50 = DAT_800559e8;
+            local_50 = g_CardDevicePort1;
         }
         else
         {
-            local_50 = DAT_800559f0;
+            local_50 = g_CardDevicePort2;
         }
 
         local_50 = strcat(local_50, "BISLPS-00355DRAGON");
@@ -507,7 +507,7 @@ internal static class MemoryCard
         return iVar1 == 0 ? 1 : 0;
     }
 
-    // GHIDRA: FUN_80022810 @ 0x80022810
+    // GHIDRA: ReadSaveRecord @ 0x80022810
     // Three hundred and eight bytes, three call sites. Opens the same "bu00:BISLPS-00355DRAGON",
     // seeks to 0x200 + param_2 * 0x80, reads ONE 128-byte record, and validates it.
     //
@@ -526,7 +526,7 @@ internal static class MemoryCard
     //
     // NOTE THE ORDER: close(fd) happens BEFORE the magic/checksum test on the success path, and again
     // in the short-read arm. Both are kept where the original puts them.
-    internal static int FUN_80022810(int param_1, int param_2, byte[] param_3)
+    internal static int ReadSaveRecord(int param_1, int param_2, byte[] param_3)
     {
         byte bVar1;
         int iVar2;
@@ -540,11 +540,11 @@ internal static class MemoryCard
 
         if (param_1 == 0)
         {
-            local_b0 = DAT_800559e8;
+            local_b0 = g_CardDevicePort1;
         }
         else
         {
-            local_b0 = DAT_800559f0;
+            local_b0 = g_CardDevicePort2;
         }
 
         local_b0 = strcat(local_b0, "BISLPS-00355DRAGON");
@@ -598,28 +598,28 @@ internal static class MemoryCard
 
     // GHIDRA: FUN_80021618 @ 0x80021618
     // Seven hundred bytes — THE BOOT-TIME SAVE LOAD, and what main calls it for. main only reaches it
-    // when the probe returned 0, and it arms DAT_80055b50 = 0xFFFF first, which is the flag this
+    // when the probe returned 0, and it arms g_CurrentMenuState = 0xFFFF first, which is the flag this
     // function reads as "there is no menu to fall back to, just report".
     //
-    // IT IS A STATE MACHINE OVER DAT_80055a84, run to completion inside its own blocking do/while:
+    // IT IS A STATE MACHINE OVER g_CardOperationState, run to completion inside its own blocking do/while:
     //   state 0     -> 7, reset the pass counter
     //   state 1     -> 7 when the probe said 0 or 4, otherwise -> 2 (the "wrong card" screen)
-    //   state 7     file exists -> 0xF; no file and DAT_80055b50 == -1 -> RETURN 0; otherwise -> 8
+    //   state 7     file exists -> 0xF; no file and g_CurrentMenuState == -1 -> RETURN 0; otherwise -> 8
     //   state 0xF   pass 0 reads the record and copies it; pass 1 -> RETURN 1
     //   state 2/8/0x10  the message screens: poll the pad, service CD-DA, VSync, until O is pressed
     //   -> RETURN 2
     //
-    // THE THREE RETURN VALUES, and what main does with them: 0 -> main sets DAT_801ff068 = 2;
-    // 1 and 2 -> main leaves DAT_801ff068 at the probe's own result.
+    // THE THREE RETURN VALUES, and what main does with them: 0 -> main sets g_CardProbeResult = 2;
+    // 1 and 2 -> main leaves g_CardProbeResult at the probe's own result.
     //
     // WHICH PATH THIS PORT TAKES, and why it is correct rather than a defect: with no card image on
     // disk there is no "BISLPS-00355DRAGON" file, so state 7's firstfile finds nothing,
-    // FUN_800220d4 returns 1, DAT_80055b50 is the 0xFFFF main just wrote, and this returns 0 on its
-    // second loop pass without ever reaching FUN_80022810. main then sets DAT_801ff068 = 2 and
+    // IsSaveFileMissing returns 1, g_CurrentMenuState is the 0xFFFF main just wrote, and this returns 0 on its
+    // second loop pass without ever reaching ReadSaveRecord. main then sets g_CardProbeResult = 2 and
     // 0x801FF018 keeps the zeros start's .bss clear left, so bit 1 is clear and main redirects menu
     // item 2 to state 3. That IS the console's no-save behaviour on a blank card.
     // A save file placed in the backend's card folder takes the other branch: state 0xF, one
-    // FUN_80022810, and the 64-byte record lands at 0x801FF018.
+    // ReadSaveRecord, and the 64-byte record lands at 0x801FF018.
     internal static int FUN_80021618()
     {
         uint uVar7;
@@ -643,34 +643,34 @@ internal static class MemoryCard
         DAT_80055a78 = (DAT_80055a78 & unchecked((int)0xffff0000)) | (ushort)FUN_80021fb4(0);
         if ((short)DAT_80055a78 == 2)
         {
-            DAT_80055a88 = 1;
-            DAT_80055a84 = 1;
+            g_CardReprobeRequest = 1;
+            g_CardOperationState = 1;
         }
 
         do
         {
-            if (DAT_80055a88 == 1)
+            if (g_CardReprobeRequest == 1)
             {
-                DAT_80055a88 = 0;
+                g_CardReprobeRequest = 0;
                 sVar5 = (short)FUN_80021e34(0);
             }
 
             // Ghidra's `if (false) goto switchD_800216b0_caseD_3;` sits here and is dead.
-            switch (DAT_80055a84)
+            switch (g_CardOperationState)
             {
                 case 0:
-                    DAT_80055a84 = 7;
+                    g_CardOperationState = 7;
                     DAT_80055a8c = 0;
                     break;
                 case 1:
                     DAT_80055a8c = 0;
                     if ((sVar5 == 0) || (sVar5 == 4))
                     {
-                        DAT_80055a84 = 7;
+                        g_CardOperationState = 7;
                     }
                     else
                     {
-                        DAT_80055a84 = 2;
+                        g_CardOperationState = 2;
                         FUN_80027a58(2);
                     }
 
@@ -683,25 +683,25 @@ internal static class MemoryCard
                     uVar7 = PadInput.FUN_80026208(3);
                     if ((uVar7 & 0x40) != 0)
                     {
-                        DAT_80055a84 = 0;
+                        g_CardOperationState = 0;
                         uVar12 = 2;
                         bVar4 = false;
                     }
 
-                    CdAudio.FUN_80025788();
+                    CdAudio.UpdateCdAudio();
                     VSync(0);
                     break;
                 case 7:
-                    iVar6 = FUN_800220d4(0);
+                    iVar6 = IsSaveFileMissing(0);
                     if (iVar6 == 0)
                     {
-                        DAT_80055a84 = 0xf;
+                        g_CardOperationState = 0xf;
                     }
                     else
                     {
-                        if ((short)SELECT_EXE_exe.DAT_80055b50 == -1)
+                        if ((short)SELECT_EXE_exe.g_CurrentMenuState == -1)
                         {
-                            DAT_80055a84 = 0;
+                            g_CardOperationState = 0;
                             uVar12 = 0;
                             bVar4 = false;
 
@@ -710,7 +710,7 @@ internal static class MemoryCard
                             break;
                         }
 
-                        DAT_80055a84 = 8;
+                        g_CardOperationState = 8;
                         FUN_80027a58(3);
                     }
 
@@ -719,7 +719,7 @@ internal static class MemoryCard
                     bVar4 = true;
                     if (DAT_80055a8c == 0)
                     {
-                        iVar6 = FUN_80022810(0, 0, local_98);
+                        iVar6 = ReadSaveRecord(0, 0, local_98);
                         if (iVar6 == 0x80)
                         {
                             // FOUR PASSES OF FOUR WORDS = 64 BYTES, from the stack record to
@@ -729,7 +729,7 @@ internal static class MemoryCard
                             // unaligned twin of the same copy; the else arm is unreachable and is not
                             // transliterated.
                             puVar10 = 0;
-                            puVar11 = DAT_801ff018_Address;
+                            puVar11 = g_OptionsRecord64_Address;
                             do
                             {
                                 uVar7 = MipsMemory.ReadU32(local_98, puVar10 + 4);
@@ -746,13 +746,13 @@ internal static class MemoryCard
                         }
                         else
                         {
-                            DAT_80055a84 = 0x10;
+                            g_CardOperationState = 0x10;
                             FUN_80027a58(3);
                         }
                     }
                     else if (DAT_80055a8c == 1)
                     {
-                        DAT_80055a84 = 0;
+                        g_CardOperationState = 0;
                         uVar12 = 1;
                         bVar4 = false;
                     }
@@ -772,7 +772,7 @@ internal static class MemoryCard
     }
 
     // FUN_80026208 @ 0x80026208 used to stand here as a BLOCKED stub returning 0. It is now
-    // transliterated in PadInput.cs together with the bring-up FUN_800261a4 @ 0x800261A4 it depends
+    // transliterated in PadInput.cs together with the bring-up InitializeBiosPad @ 0x800261A4 it depends
     // on, which is the module it actually belongs to; the call above goes there. The reason the
     // stub gave for blocking — that InitPAD / StartPAD never filled the two BIOS buffers — no longer
     // holds: LibApi.RefreshBiosPadBuffers publishes the real backend into them every V-BLANK.
@@ -784,10 +784,10 @@ internal static class MemoryCard
     internal static void FUN_80027a58(int param_1)
     {
         // BLOCKED: the memory-card message overlay, 2376 bytes / 288 lines, ending at 0x8002839F
-        // immediately before the mode menu FUN_800283a0. It saves the 320x240 frame to VRAM at
+        // immediately before the mode menu RunModeMenu. It saves the 320x240 frame to VRAM at
         // (0x280, 0) with StoreImage, MoveImage's it back, builds five transient GsSPRITE overlays on
         // tpage 0x1F at cx = 0x170 / cy = 0x1F6 out of GsSPRITE_ARRAY_800654ec, and drives the frame
-        // step FUN_800344a4 four times inline. Eleven call sites across the four card screens; its
+        // step DrawFrame four times inline. Eleven call sites across the four card screens; its
         // argument selects which message.
         // Not this module and not this slice: it is a screen body, it owns the boxfill element
         // FrameStep.cs already documents as "only ever written by FUN_80027a58", and it needs the

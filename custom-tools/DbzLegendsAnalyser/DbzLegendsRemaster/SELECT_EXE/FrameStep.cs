@@ -6,20 +6,20 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 
 // THE FRAME STEP of SELECT.EXE, and the GsBOXF array only it and FUN_80027a58 touch.
 //
-// FUN_800344a4 @ 0x800344A4 is the ONLY place SELECT.EXE draws. Sixty-one call sites, and NOT ONE
+// DrawFrame @ 0x800344A4 is the ONLY place SELECT.EXE draws. Sixty-one call sites, and NOT ONE
 // of them is a frame loop: this overlay has no scheduler and no dispatcher, so every screen body
 // sits in its own blocking do/while and calls this once per frame to present. main @ 0x8003045C
 // calls it once per outer iteration; FUN_8002ea8c @ 0x8002EA8C (the intro animation) calls it
-// fourteen times inline; the menu driver FUN_800283a0 @ 0x800283A0 twice inside its loop.
+// fourteen times inline; the menu driver RunModeMenu @ 0x800283A0 twice inside its loop.
 //
 // It sits in SELECT.EXE's frame/shutdown module, the four functions emitted at 0x800344A4
-// (this one), 0x8003472C (OverlayExit.FUN_8003472c), 0x800347C4 (start) and 0x8003486C (__main).
+// (this one), 0x8003472C (OverlayExit.ShutdownAndLoadExecutable), 0x800347C4 (start) and 0x8003486C (__main).
 //
 // WHAT IT DOES, in order. Twelve calls: nine are libgs, in PsxSdkMonogame/LibGs.cs,
 // which was transliterated from this overlay for exactly this function:
 //   GsGetActiveBuff -> GsSetWorkBase(active * 24000 + 0x800597CC) -> GsClearOt -> four GsSortLine
 //   -> the sprite pass OR the boxfill pass -> DrawSync(0) -> VSync(0) -> ResetGraph(1)
-//   -> GsSwapDispBuff -> GsSortClear (unless bit 0) -> GsDrawOt -> FUN_80025788.
+//   -> GsSwapDispBuff -> GsSortClear (unless bit 0) -> GsDrawOt -> UpdateCdAudio.
 //
 // TWO THINGS ABOUT THE COORDINATES THAT ARE SET UP ELSEWHERE AND APPLY TO EVERY SPRITE SORTED HERE:
 //   * FUN_80030698 @ 0x80030698 calls GsInit3D, which sets libgs's sort origin to the screen centre
@@ -32,9 +32,9 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     offset it publishes is consumed by the NEXT frame's sort, and by then the two agree.
 internal static class FrameStep
 {
-    // GHIDRA: DAT_80067b68 @ 0x80067B68
+    // GHIDRA: g_GsBoxfArray5 @ 0x80067B68
     // FIVE GsBOXF of sixteen bytes, 0x80067B68..0x80067BB7. The count and the stride are this
-    // function's own — the boxfill pass below walks `bp = (GsBOXF *)&DAT_80067b68` five times with
+    // function's own — the boxfill pass below walks `bp = (GsBOXF *)&g_GsBoxfArray5` five times with
     // `bp = bp + 1`. Both ends are closed: 0x80067B68 is the address the pass starts from, and
     // 0x80067B68 + 5 * 16 = 0x80067BB8 is DAT_80067bb8, a libsnd global written by FUN_80039ee4
     // @ 0x80039EE4 and FUN_8003a250 @ 0x8003A250 and read by FUN_8003b05c @ 0x8003B05C.
@@ -45,7 +45,7 @@ internal static class FrameStep
     //     DAT_80067b6e = 0xff88;     // [0].y  = -120
     //     DAT_80067b72 = 0xf0;       // [0].h  = 240
     //     DAT_80067b74/75/76 = 0,0,1 // [0].r/g/b
-    //     DAT_80067b68 = 0x40000000; // [0].attribute, then 0x80000000 when sprite[0].attribute != 0
+    //     g_GsBoxfArray5 = 0x40000000; // [0].attribute, then 0x80000000 when sprite[0].attribute != 0
     // Elements 1..4 have NO writer anywhere in the program, so they stay zero — and zero is a
     // POSITIVE attribute, which LibGs.GsSortBoxFill does not reject (unlike GsSortSprite it has no
     // w == 0 early-out). Four zero-area tiles are therefore spliced into the ordering table every
@@ -63,7 +63,7 @@ internal static class FrameStep
         new LibGs.GsBOXF(),
     };
 
-    // GHIDRA: FUN_800344a4 @ 0x800344A4
+    // GHIDRA: DrawFrame @ 0x800344A4
     // 648 bytes, 61 call sites, no loop of its own.
     //
     // ON THE MEMORY MODEL, because it is the thing that decides whether anything reaches the screen:
@@ -73,8 +73,8 @@ internal static class FrameStep
     // cursor DAT_80059430 and the ordering-table bucket GsOT.org + index * 4. Both of those are
     // already LibGpu.RamRegion declarations —
     //     the 48000-byte work area          LibGs.DAT_800597cc  @ 0x800597CC
-    //     GsOT[0]'s tag array               SELECT_EXE_exe.DAT_80065350 @ 0x80065350
-    //     GsOT[1]'s tag array               SELECT_EXE_exe.DAT_80065370 @ 0x80065370
+    //     GsOT[0]'s tag array               SELECT_EXE_exe.g_OrderingTableTags0 @ 0x80065350
+    //     GsOT[1]'s tag array               SELECT_EXE_exe.g_OrderingTableTags1 @ 0x80065370
     // and the two block-fill packets GsSortClear links are LibGs.DAT_80058c90 / DAT_80058ca0.
     // The four sprite/line/box/OT structures are passed BY REFERENCE to routines that read their
     // fields; nothing in the frame step, in libgs or in the rasterizer ever turns 0x800654EC,
@@ -84,7 +84,7 @@ internal static class FrameStep
     // FUN_80030698 @ 0x80030698 writes thirty-five GsSPRITE ADDRESSES (0x80065D5C stepping by 0x24,
     // i.e. elements 60..94) into the table at 0x80058E08, and whichever screen body reads that
     // table back will need an address-to-element bridge that does not exist yet.
-    internal static void FUN_800344a4()
+    internal static void DrawFrame()
     {
         int iVar1 = LibGs.GsGetActiveBuff();
 
@@ -92,15 +92,15 @@ internal static class FrameStep
         // packet areas, one per display buffer. LibGs registers the whole 48000 bytes.
         LibGs.GsSetWorkBase(iVar1 * 24000 + unchecked((int)0x800597CC));
 
-        // `otp = (GsOT *)(&DAT_800654c4 + iVar1 * 5)` — five words is sizeof(GsOT), so this is
+        // `otp = (GsOT *)(&g_GsOtArray2 + iVar1 * 5)` — five words is sizeof(GsOT), so this is
         // GsOT[activeBuf] of the two-element array main @ 0x8003045C armed by hand.
         LibGs.GsOT otp = SELECT_EXE_exe.GsOT_800654c4[iVar1];
 
         LibGs.GsClearOt(0, 0, otp);
-        LibGs.GsSortLine(SelectScreen.GsLINE_ARRAY_80065484[0], otp, 1);   // &DAT_80065484
-        LibGs.GsSortLine(SelectScreen.GsLINE_ARRAY_80065484[1], otp, 1);   // &DAT_80065494
-        LibGs.GsSortLine(SelectScreen.GsLINE_ARRAY_80065484[2], otp, 1);   // &DAT_800654a4
-        LibGs.GsSortLine(SelectScreen.GsLINE_ARRAY_80065484[3], otp, 1);   // &DAT_800654b4
+        LibGs.GsSortLine(SelectScreen.g_GsLineArray4[0], otp, 1);   // &g_GsLineArray4
+        LibGs.GsSortLine(SelectScreen.g_GsLineArray4[1], otp, 1);   // &DAT_80065494
+        LibGs.GsSortLine(SelectScreen.g_GsLineArray4[2], otp, 1);   // &DAT_800654a4
+        LibGs.GsSortLine(SelectScreen.g_GsLineArray4[3], otp, 1);   // &DAT_800654b4
 
         // FUN_80030698 arms all four GsLINE with attribute 0x80000000, and LibGs.GsSortLine gates
         // its whole body on `if (-1 < (int)attribute)`. As armed, all four are SUPPRESSED every
@@ -205,6 +205,6 @@ internal static class FrameStep
         }
 
         LibGs.GsDrawOt(SELECT_EXE_exe.GsOT_800654c4[iVar1]);
-        CdAudio.FUN_80025788();
+        CdAudio.UpdateCdAudio();
     }
 }
