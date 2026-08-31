@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "ReVa": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp/message"
+    },
+    "pcsx-redux": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["D:/development/repo/pcsx-redux/tools/mcp-server/dist/index.js"],
+      "env": {
+        "PCSX_HOST": "localhost",
+        "PCSX_PORT": "8081"
+      }
+    }
+  }
+}
