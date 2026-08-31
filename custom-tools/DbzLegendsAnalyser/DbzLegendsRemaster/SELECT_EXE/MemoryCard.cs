@@ -53,13 +53,13 @@ internal static class MemoryCard
     // buffer as `undefined4 + undefined2` (DAT_800559e8 + DAT_800559ec) and strcat the file name on.
     // The port models that scratch buffer as a C# string, which is the convention LibApi's
     // open(string, int) / firstfile(string, ...) overloads were added for (LibApi.cs lines 188-194).
-    private const string DAT_800559e8 = "bu00:";
+    internal const string DAT_800559e8 = "bu00:";
 
     // GHIDRA: DAT_800559f0 @ 0x800559F0
     // .sdata, six bytes: 62 75 31 30 3A 00 = "bu10:" — port 2. Neither of this module's two callers
     // ever passes a non-zero port on main's path, so this string is loaded by no reachable branch
     // here; it is kept because the two `if (param_1 == 0) ... else ...` are kept.
-    private const string DAT_800559f0 = "bu10:";
+    internal const string DAT_800559f0 = "bu10:";
 
     // GHIDRA: DAT_80055a78 @ 0x80055A78
     // .sbss, undefined4. FUN_80021618 writes only its LOW HALFWORD (`sh`, which Ghidra spells
@@ -67,7 +67,7 @@ internal static class MemoryCard
     // masked store below is that `sh`, not a widening.
     // This is also the first word start's .bss clear loop covers — SELECT_EXE_exe.BssClearFirst
     // names the same address as the start of the range.
-    private static int DAT_80055a78;
+    internal static int DAT_80055a78;
 
     // GHIDRA: DAT_80055a80 @ 0x80055A80
     // .sbss, undefined2. FUN_80021618 sets it to 1 on entry.
@@ -78,24 +78,24 @@ internal static class MemoryCard
     // that is a property OF THE ORIGINAL and not of this port — there is no reader to port.
     // Suppressed for this one field so the build stays clean.
 #pragma warning disable CS0414
-    private static ushort DAT_80055a80;
+    internal static ushort DAT_80055a80;
 #pragma warning restore CS0414
 
     // GHIDRA: DAT_80055a84 @ 0x80055A84
     // .sbss, undefined2. THE SAVE-LOAD STATE. FUN_800213a8 zeroes it during bring-up; FUN_80021618's
     // switch drives it. The states this slice sees: 0 (start) -> 7 (does the file exist) -> 0xF
     // (read the record) or 8 / 0x10 (the two failure screens) or 2 (the "wrong card" screen).
-    private static ushort DAT_80055a84;
+    internal static ushort DAT_80055a84;
 
     // GHIDRA: DAT_80055a88 @ 0x80055A88
     // .sbss, undefined2. "Re-probe the card on the next pass" — FUN_80021618's loop head consumes it
     // and calls FUN_80021e34. FUN_800213a8 zeroes it during bring-up.
-    private static ushort DAT_80055a88;
+    internal static ushort DAT_80055a88;
 
     // GHIDRA: DAT_80055a8c @ 0x80055A8C
     // .sbss, undefined2. The pass counter inside state 0xF: pass 0 reads the record, pass 1 returns
     // 1 to the caller. It is reset to 0 by states 0 and 1.
-    private static ushort DAT_80055a8c;
+    internal static ushort DAT_80055a8c;
 
     // GHIDRA: DAT_80055b54 @ 0x80055B54
     // .sbss, undefined4. OpenEvent(0xF4000001, 0x0004, 0x2000, NULL) — card command completed.
@@ -158,7 +158,7 @@ internal static class MemoryCard
     // call sites keep their original shape, because the fixed stack buffer they strcat into is
     // modelled as a C# string exactly as LibApi's open(string, int) overload already assumes.
     // Reported as a missing SDK routine rather than hidden here.
-    private static string strcat(string param_1, string param_2)
+    internal static string strcat(string param_1, string param_2)
     {
         return param_1 + param_2;
     }
@@ -463,7 +463,7 @@ internal static class MemoryCard
     // path and its leaked a0 has not been traced. It cannot change anything reachable here: param_1
     // is read only inside `if ((iVar1 == 2) && (param_1 != 2))`, and code 2 means spec 0x0100, which
     // nothing in this port ever delivers.
-    private static int FUN_80021fb4(int param_1)
+    internal static int FUN_80021fb4(int param_1)
     {
         int iVar1;
 
@@ -487,7 +487,7 @@ internal static class MemoryCard
     // the directory has no match. FUN_80021618's state 7 reads it as `if (iVar6 == 0)` = "the save
     // exists, go read it".
     // The DIRENTRY it fills (`undefined1 auStack_30[40]`) is never looked at.
-    private static int FUN_800220d4(int param_1)
+    internal static int FUN_800220d4(int param_1)
     {
         int iVar1;
         string local_50;
@@ -526,7 +526,7 @@ internal static class MemoryCard
     //
     // NOTE THE ORDER: close(fd) happens BEFORE the magic/checksum test on the success path, and again
     // in the short-read arm. Both are kept where the original puts them.
-    private static int FUN_80022810(int param_1, int param_2, byte[] param_3)
+    internal static int FUN_80022810(int param_1, int param_2, byte[] param_3)
     {
         byte bVar1;
         int iVar2;
@@ -781,7 +781,7 @@ internal static class MemoryCard
     // that function's own remarks.
 
     // GHIDRA: FUN_80027a58 @ 0x80027A58
-    private static void FUN_80027a58(int param_1)
+    internal static void FUN_80027a58(int param_1)
     {
         // BLOCKED: the memory-card message overlay, 2376 bytes / 288 lines, ending at 0x8002839F
         // immediately before the mode menu FUN_800283a0. It saves the 320x240 frame to VRAM at

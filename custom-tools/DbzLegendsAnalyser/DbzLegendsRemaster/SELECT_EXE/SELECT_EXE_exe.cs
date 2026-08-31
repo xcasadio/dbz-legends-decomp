@@ -307,9 +307,22 @@ internal sealed class SELECT_EXE_exe
     private static void FUN_800315c0()
     {
         // BLOCKED: state 3, the in-place options sub-screen, 1668 bytes. It does NOT LoadExec — it
-        // returns to main's loop. It is the only path that reaches the sound-bank loader chain
-        // FUN_80026420 -> FUN_80022994, i.e. the five \SOUND\*.B files, and PsxSdkMonogame's
-        // LibSnd is entirely unimplemented.
+        // returns to main's loop.
+        //
+        // THE REASON RE-MEASURED, not inherited. Its nine callees are FUN_800261e4, FUN_80031c8c,
+        // FUN_800344a4, FUN_8002bcbc, FUN_80031c44, FUN_80030848, FUN_80026420, FUN_80026208 and
+        // FUN_8002b2dc. Four of those (FUN_800261e4, FUN_800344a4, FUN_80030848, FUN_80026208) are
+        // ported; FUN_80031c8c's own card call now lands on CardRecords.FUN_800276d8, which is
+        // ported too. THE BLOCKER IS FUN_80026420 @ 0x80026420 — 1788 bytes — which tail-calls
+        // FUN_80022994 @ 0x80022994, whose callee list (read today, 36 entries) carries SpuInit,
+        // SpuStInit, SpuSetVoiceAttr, SpuMallocWithStartAddr, SpuSetTransferMode,
+        // SpuSetTransferStartAddr, SpuWrite0, SpuIsTransferCompleted, SsSetReservedVoice,
+        // SsUtGetVBaddrInSB and the three SpuSt* callback registrations, alongside six
+        // CdSearchFile / CdRead / CdReadSync groups — the \SOUND\*.B VAB loads.
+        // PsxSdkMonogame/LibSnd.cs is 161 methods and all 161 bodies are `// Do nothing PSX SDK`
+        // (counted in the file: 163 declarations, two of which are delegates, and 161 stub markers).
+        // Three of its screen functions — FUN_8002bcbc, FUN_80031c44 and FUN_8002b2dc — are also
+        // still unported.
     }
 
     // GHIDRA: __main @ 0x8003486C

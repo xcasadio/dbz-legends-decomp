@@ -125,7 +125,7 @@ internal static class ModeBranches
         int iVar10;
         int iVar11;
 
-        FUN_800276d8(0, DAT_801ff200_Address);
+        CardRecords.FUN_800276d8(0, DAT_801ff200_Address);
         iVar10 = 0;
         ListCursor.DAT_80055b84 = 1;
         puVar4 = DAT_801ff200_Address;
@@ -149,7 +149,7 @@ internal static class ModeBranches
         while (iVar10 < 3);
 
         iVar10 = 0;
-        FUN_80029684(DAT_80055b08, DAT_801ff200_Address);
+        ScreenDecoration.FUN_80029684(DAT_80055b08, DAT_801ff200_Address);
         do
         {
             iVar10 = iVar10 + 1;
@@ -162,7 +162,7 @@ internal static class ModeBranches
             iVar10 = ListCursor.FUN_80033d34(ref DAT_80055b08, 0x10, 4, 2);
             if (iVar10 == -1)
             {
-                FUN_80029f9c();
+                ScreenDecoration.FUN_80029f9c();
                 return;
             }
 
@@ -171,7 +171,7 @@ internal static class ModeBranches
                 break;
             }
 
-            FUN_800276d8(0, DAT_801ff200_Address);
+            CardRecords.FUN_800276d8(0, DAT_801ff200_Address);
             iVar10 = 0;
             ListCursor.DAT_80055b84 = 1;
             puVar4 = DAT_801ff200_Address;
@@ -282,7 +282,7 @@ internal static class ModeBranches
                 DAT_801ff000_Address + 6, PsxRam.ReadU16(DAT_801ff200_Address + (iVar10 * 8) + 6));
         }
 
-        FUN_8002cc04(0);
+        ScreenDecoration.FUN_8002cc04(0);
         FUN_80025894();
         OverlayExit.FUN_8003472c("cdrom:\\DEMO.EXE;1");
     }
@@ -311,7 +311,7 @@ internal static class ModeBranches
             }
         }
 
-        FUN_8002a178(DAT_80055a40);
+        ScreenDecoration.FUN_8002a178(DAT_80055a40);
         while (true)
         {
             uVar2 = (uint)ListCursor.FUN_80033d34(ref DAT_80055a40, 2, 3, 1);
@@ -321,7 +321,7 @@ internal static class ModeBranches
             if ((uVar2 < 2) || (uVar2 == 2))
             {
                 DAT_80055a40 = (int)uVar2;
-                FUN_80031e98((int)uVar2);
+                CharacterSelect.FUN_80031e98((int)uVar2);
                 iVar1 = 0xb;
                 if ((SELECT_EXE_exe.DAT_80055b80 & 4) != 0)
                 {
@@ -377,17 +377,19 @@ internal static class ModeBranches
 
             if (uVar2 == 0xffffffff)
             {
-                FUN_8002a6f8();
+                ScreenDecoration.FUN_8002a6f8();
                 return;
             }
         }
 
-        // BLOCKED: `jal 0x8002CC04` at 0x80031064 has a NOP in its delay slot and nothing in this
-        // function writes a0 before it, so the argument here is whatever the preceding code left in
-        // the register — the same leaked-argument shape MemoryCard.cs records for FUN_80021618, and
-        // it is NOT traced. The two card pickers pass 0 and 1 explicitly. FUN_8002cc04 is itself a
-        // BLOCKED stub below, so the value reaches nothing; the 0 satisfies C# and is not a claim.
-        FUN_8002cc04(0);
+        // `jal 0x8002CC04` at 0x80031064 has a NOP in its delay slot and nothing in this function
+        // writes a0 before it, so the argument here is whatever the preceding code left in the
+        // register — the same leaked-argument shape MemoryCard.cs records for FUN_80021618. IT
+        // CANNOT MATTER, and that is now closed rather than assumed: Ghidra recovers FUN_8002cc04's
+        // signature as `void FUN_8002cc04(void)` and its body never reads a0 — the first instruction
+        // to touch that register is the `jal FUN_80030848` at the top. The two card pickers pass 0
+        // and 1 explicitly; the 0 here satisfies C# and is not a claim.
+        ScreenDecoration.FUN_8002cc04(0);
         FUN_80025894();
         OverlayExit.FUN_8003472c("cdrom:\\VS.EXE;1");
     }
@@ -423,7 +425,7 @@ internal static class ModeBranches
         local_20.w = (short)(DAT_80055a4c & 0xffff);
         local_20.h = (short)(DAT_80055a4c >> 16);
 
-        FUN_800276d8(1, DAT_801ff218_Address);
+        CardRecords.FUN_800276d8(1, DAT_801ff218_Address);
         iVar10 = 0;
         ListCursor.DAT_80055b84 = 1;
         iVar7 = 0;
@@ -444,13 +446,13 @@ internal static class ModeBranches
         }
         while (iVar10 < 3);
 
-        FUN_8002a7f4(DAT_80055a44, DAT_801ff218_Address);
+        ScreenDecoration.FUN_8002a7f4(DAT_80055a44, DAT_801ff218_Address);
         while (true)
         {
             iVar7 = ListCursor.FUN_80033d34(ref DAT_80055a44, 0x10, 4, 3);
             if (iVar7 == -1)
             {
-                FUN_8002b174();
+                ScreenDecoration.FUN_8002b174();
                 return;
             }
 
@@ -459,7 +461,7 @@ internal static class ModeBranches
                 break;
             }
 
-            FUN_800276d8(1, DAT_801ff218_Address);
+            CardRecords.FUN_800276d8(1, DAT_801ff218_Address);
             iVar10 = 0;
             ListCursor.DAT_80055b84 = 1;
             iVar7 = 0;
@@ -591,84 +593,16 @@ internal static class ModeBranches
                 DAT_801ff000_Address + 0x16, PsxRam.ReadU16(iVar10 + unchecked((int)0x801FF226)));
         }
 
-        FUN_8002cc04(1);
+        ScreenDecoration.FUN_8002cc04(1);
         FUN_80025894();
         OverlayExit.FUN_8003472c("cdrom:\\SP.EXE;1");
     }
 
-    // GHIDRA: FUN_800276d8 @ 0x800276D8
-    private static void FUN_800276d8(int param_1, int param_2)
-    {
-        // BLOCKED: the memory-card save-record dispatcher, 352 bytes. Modes 0 and 1 read the three
-        // records of the requested list out of the card through FUN_800213b8 @ 0x800213B8, mode 2
-        // writes them back through FUN_800218d4 @ 0x800218D4 and mode 3 creates the file; on a failed
-        // read it zeroes nineteen words walking down from 0x801FF244. It belongs to the memory-card
-        // module (MemoryCard.cs), not to the screen module, and neither FUN_800213b8 nor
-        // FUN_800218d4 is transliterated.
-        // CONSEQUENCE: the three records at param_2 keep whatever SharedHighRam already holds, which
-        // on this port's boot path is zero — so both pickers see three absent slots and preselect the
-        // "no card" row. That is also what the console does with no card in the slot.
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_80029684 @ 0x80029684
-    private static void FUN_80029684(int param_1, int param_2)
-    {
-        // BLOCKED: the DEMO picker's background build. It arms the list sprites out of USAGI.B
-        // record 2 and is one of the four screen-decoration builders in the 0x80029000..0x8002D000
-        // module (with FUN_8002a178, FUN_8002a7f4 and their three unwind twins). None of that module
-        // is in this slice, and none of it is on the path between a confirm and a LoadExec.
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_80029f9c @ 0x80029F9C
-    private static void FUN_80029f9c()
-    {
-        // BLOCKED: the DEMO picker's cancel unwind — the animation that takes the list back off the
-        // screen before main's loop redraws the mode menu. Same module as FUN_80029684.
-    }
-
-    // GHIDRA: FUN_8002a178 @ 0x8002A178
-    private static void FUN_8002a178(int param_1)
-    {
-        // BLOCKED: the VS sub-menu's background build. Same module as FUN_80029684.
-        _ = param_1;
-    }
-
-    // GHIDRA: FUN_8002a6f8 @ 0x8002A6F8
-    private static void FUN_8002a6f8()
-    {
-        // BLOCKED: the VS sub-menu's cancel unwind. Same module as FUN_80029684.
-    }
-
-    // GHIDRA: FUN_8002a7f4 @ 0x8002A7F4
-    private static void FUN_8002a7f4(int param_1, int param_2)
-    {
-        // BLOCKED: the SP picker's background build. Same module as FUN_80029684.
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_8002b174 @ 0x8002B174
-    private static void FUN_8002b174()
-    {
-        // BLOCKED: the SP picker's cancel unwind. Same module as FUN_80029684.
-    }
-
-    // GHIDRA: FUN_8002cc04 @ 0x8002CC04
-    private static void FUN_8002cc04(int param_1)
-    {
-        // BLOCKED: the hand-off transition, 1836 bytes. It is one of the eleven writers of
-        // DAT_80055B80 — line 92 sets bit 2 (rebuild), line 159 sets bit 0 (suppress the background
-        // clear) and line 161 sets bit 1 (sort 0x62 sprites instead of 100) — and it reads the sine
-        // table through the same soft-float chain the mode menu uses. Its three call sites are the
-        // three branches here, each immediately before FUN_80025894 and the LoadExec.
-        // It runs AFTER the choice is made and only animates the screen out, so blocking it does not
-        // stop the hand-off.
-        _ = param_1;
-    }
+    // THE EIGHT STUBS THAT USED TO STAND HERE ARE GONE. FUN_800276d8 @ 0x800276D8 is transliterated
+    // in CardRecords.cs, the module it belongs to; FUN_80029684, FUN_80029f9c, FUN_8002a178,
+    // FUN_8002a6f8, FUN_8002a7f4, FUN_8002b174 and FUN_8002cc04 are transliterated in
+    // ScreenDecoration.cs, which is their own emission block (0x80029684..0x8002EA8B). The call
+    // sites above now name those classes.
 
     // GHIDRA: FUN_80025894 @ 0x80025894
     private static void FUN_80025894()
@@ -678,18 +612,4 @@ internal static class ModeBranches
         // whose TOC-dependent half is already blocked there because the drive's response FIFO is not modelled, so CdGetToc yields an all-zero table.
     }
 
-    // GHIDRA: FUN_80031e98 @ 0x80031E98
-    private static void FUN_80031e98(int param_1)
-    {
-        // BLOCKED, and explicitly out of this slice: the 3-on-3 character select, 6040 bytes. Six
-        // slots in two rows of three, thirty-five 48x48 4bpp portraits loaded on demand out of
-        // USAGI.B record 18 at 0x80080000, both pads read in the same frame, and on confirm it
-        // exports seven halfwords to 0x801FF100..0x801FF10D and sets bit 2 of DAT_80055B80 to tell
-        // this function to leave.
-        // CONSEQUENCE, AND IT IS THE ONE THAT MATTERS: bit 2 is what FUN_80030ef8 breaks on. With
-        // this blocked, nothing sets it, so the VS branch can only leave through the sub-menu's
-        // cancel arm and NEVER reaches LoadExec("cdrom:\\VS.EXE;1"). The DEMO and SP branches do not
-        // depend on it.
-        _ = param_1;
-    }
 }

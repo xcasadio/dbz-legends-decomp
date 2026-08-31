@@ -2,8 +2,10 @@
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
-// SELECT.EXE'S INPUT MODULE — the three functions emitted at 0x800261A4, 0x800261E4 and 0x80026208,
-// plus the two BIOS status buffers they share and the four auto-repeat counters.
+// SELECT.EXE'S INPUT MODULE — the FOUR functions emitted at 0x800261A4, 0x800261E4, 0x80026208 and
+// 0x800263E4, plus the two BIOS status buffers they share and the four auto-repeat counters.
+// (The fourth was added when the 3-on-3 character select turned out to be its only caller; the
+// module's extent is contiguous — 0x80026208 + 476 = 0x800263E4.)
 //
 // THIS OVERLAY DOES NOT USE libetc PadRead. PadRead has zero callers in the whole image. main
 // @ 0x8003045C calls libetc's PadInit(0), but the word every screen actually reads comes from the
@@ -67,6 +69,21 @@ internal static class PadInput
     internal static byte FUN_800261e4(int param_1)
     {
         return DAT_80055d6c[param_1 * 0x22];
+    }
+
+    // GHIDRA: FUN_800263e4 @ 0x800263E4
+    // Sixty bytes, no callees, ONE call site: FUN_80031e98 @ 0x80031E98, the 3-on-3 character
+    // select, at 0x8003260C.
+    //
+    // `return ~CONCAT11((&DAT_80055d6e)[param_1 * 0x22], (&DAT_80055d6f)[param_1 * 0x22]);` — the
+    // SAME two bytes and the SAME inversion FUN_80026208 opens with, on the SAME contiguous 68-byte
+    // region, but with none of the auto-repeat masking. It is the RAW held state of pad param_1.
+    // The character select uses it for pad 2 while running its own repeat cadence out of three
+    // counters of its own; every other screen in the overlay goes through FUN_80026208 instead.
+    internal static ushort FUN_800263e4(int param_1)
+    {
+        return (ushort)~(ushort)((DAT_80055d6c[(param_1 * 0x22) + 0x02] << 8) |
+                                  DAT_80055d6c[(param_1 * 0x22) + 0x03]);
     }
 
     // GHIDRA: FUN_80026208 @ 0x80026208

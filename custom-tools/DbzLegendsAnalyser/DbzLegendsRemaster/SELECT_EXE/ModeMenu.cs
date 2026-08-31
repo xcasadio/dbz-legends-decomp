@@ -131,7 +131,9 @@ internal static class ModeMenu
     // LEADER sprite's address. Ghidra names the seven of them DAT_800593b8, DAT_800593c4,
     // DAT_800593d0, DAT_800593dc, DAT_800593e8, DAT_800593f4 and DAT_80059400; they are one array
     // and SelectScreen.DAT_800593b8 is its raw bytes.
-    private static int LeaderAddress(int row)
+    // internal rather than private since ScreenDecoration.FUN_8002dec0 @ 0x8002DEC0 walks the same
+    // seven records; the table has one home and this is it.
+    internal static int LeaderAddress(int row)
     {
         return ReadI32(SelectScreen.DAT_800593b8, (row * 0xc) + 0);
     }
@@ -141,7 +143,8 @@ internal static class ModeMenu
     // inside SelectScreen.DAT_80058e08. Ghidra names these DAT_800593bc, DAT_800593c8, DAT_800593d4,
     // DAT_800593e0, DAT_800593ec, DAT_800593f8 and DAT_80059404, and dereferences them as
     // `*DAT_800593c8` / `DAT_800593c8[1]` — a pointer to an array of sprite addresses.
-    private static LibGs.GsSPRITE SatelliteSprite(int row, int index)
+    // internal for the same reason as LeaderAddress above.
+    internal static LibGs.GsSPRITE SatelliteSprite(int row, int index)
     {
         int rowBase = ReadI32(SelectScreen.DAT_800593b8, (row * 0xc) + 4);
         return SpriteAtAddress(PsxRam.ReadI32(rowBase + (index * 4)));
