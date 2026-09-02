@@ -515,9 +515,13 @@ internal static class AnimCmdSound
     // of all six of 0x11..0x16 when the channel is 0. Four call sites, only one of which is in this
     // file; ExecuteAnimStreamBatch and FUN_8003ecfc are two of the others. Its result is discarded
     // at every one of them.
-    private static int FUN_8005fcec(uint param_1, short param_2)
+    // Le type de retour est `void`, et ce fichier le declarait `int`. Les octets tranchent par les
+    // appelants: les QUATRE sites (0x80035120, 0x800369F8, 0x8003ECDC, 0x8003ED6C) ignorent $v0, ce
+    // que le commentaire ci-dessus disait deja. Deux des trois copies C# disaient `void`.
+    internal static void FUN_8005fcec(uint param_1, short param_2)
     {
-        return 0;
+        _ = param_1;
+        _ = param_2;
     }
 
     // GHIDRA: FUN_8005fd9c @ 0x8005FD9C (VS.EXE)

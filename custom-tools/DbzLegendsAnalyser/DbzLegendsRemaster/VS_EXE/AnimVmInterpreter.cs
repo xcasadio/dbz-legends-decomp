@@ -213,10 +213,10 @@ internal static class AnimVmInterpreter
         if (((AnimVm.DAT_800b305a & 1) == 0) && (sVar8 == 0))
         {
             PsxRam.WriteU16(iVar9 + 0x78, 0);
-            FUN_8005fcec(0, 0);
-            if ((PsxRam.ReadI32(DAT_8008d320 + 0x10) & 8) != 0)
+            AnimCmdSound.FUN_8005fcec(0, 0);
+            if ((PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 8) != 0)
             {
-                FUN_8005ee5c(0, 0, 0x30);
+                BattleManager.FUN_8005ee5c(0, 0, 0x30);
             }
 
             PsxRam.WriteU16(iVar9 + 0x76, 4);
@@ -242,9 +242,6 @@ internal static class AnimVmInterpreter
     // GHIDRA: DAT_800990d4 @ 0x800990D4 (VS.EXE)
     private static byte DAT_800990d4;
 
-    // GHIDRA: DAT_8008d320 @ 0x8008D320 (VS.EXE)
-    private static int DAT_8008d320;
-
     // GHIDRA: FUN_8003ecfc @ 0x8003ECFC (VS.EXE)
     // BLOCKED: called only when the render-state reset above runs.
     private static void FUN_8003ecfc()
@@ -256,24 +253,5 @@ internal static class AnimVmInterpreter
     private static void FUN_80061f1c(int param_1)
     {
         _ = param_1;
-    }
-
-    // GHIDRA: FUN_8005fcec @ 0x8005FCEC (VS.EXE)
-    // BLOCKED: tranche 2. AnimCmdSound.cs carries a private transliteration of the same address for
-    // its own call sites; this one is left as a stub rather than reaching into another family's
-    // private member.
-    private static void FUN_8005fcec(uint param_1, short param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_8005ee5c @ 0x8005EE5C (VS.EXE)
-    // BLOCKED: tranche 2.
-    private static void FUN_8005ee5c(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
     }
 }

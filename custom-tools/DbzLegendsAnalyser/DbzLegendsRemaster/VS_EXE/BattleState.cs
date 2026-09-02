@@ -28,6 +28,37 @@ internal static class BattleState
 
     internal const int BattleContextSize = 0x3034;
 
+    // =====================================================================================
+    // LA TETE DU CONTEXTE — ferme apres coup, par deux surfaces ecrites en parallele
+    // =====================================================================================
+    // Ces quatre champs n'etaient pas dans ce fichier quand les tranches 2 ont ete lancees, et
+    // TROIS fichiers ont fini par les epeler en hexadecimal brut. BattleManager et BattleScene les
+    // ont tous deux signales vers le haut plutot que de les nommer chacun de son cote, ce qui est
+    // exactement ce que la regle de propriete demande a une tranche qui ne possede pas ce fichier.
+
+    // GHIDRA: battleContext + 0x00 (VS.EXE)
+    // LE MOT D'ETAT du gestionnaire, valeurs 0..3. Le repartiteur entier de LAB_80055e3c est
+    // `**(ushort **)(DAT_8008d16c + 8)`; `sh v1,0x0(s0)` @ 0x80055F38 y ecrit 1 et `sh v0,0x0(s1)`
+    // @ 0x80057A24 y ecrit 3. AUCUN des quatre corps n'y ecrit 2 — voir la note de BattleManager.
+    internal const int CtxState = 0x00;
+
+    // GHIDRA: battleContext + 0x10 (VS.EXE)
+    // LE MOT DE DRAPEAUX, dix-huit bits utilises, et le mot le plus partage du contexte: quatre
+    // fonctions de trois fichiers le lisent. FighterTask le lit deja (sa phase 8 teste 0x100000),
+    // AnimVmInterpreter aussi (bit 3), et BattleScene en fait un selecteur de mode entier.
+    internal const int CtxFlags = 0x10;
+
+    // GHIDRA: battleContext + 0x14, + 0x16 (VS.EXE)
+    // LES DEUX CURSEURS DE CRENEAU ACTIF, UN PAR EQUIPE — et c'est une correction.
+    // FighterTask.cs disait en PARTIAL que « le role que nomment ctx+0x14 et ctx+0x16 n'est pas
+    // ferme par cette fonction », ce qui etait vrai de cette fonction-la. BattleManager le ferme:
+    // 0x80057064..0x8005769C ne deplace +0x14 que dans les creneaux 0..5 et +0x16 que dans 6..11,
+    // et 0x8005769C balaye les cibles mortes de l'equipe 0..2 vers +0x16 et celles de 6..8 vers
+    // +0x14. Ce ne sont pas deux roles d'une meme chose: c'est un curseur par equipe.
+    internal const int CtxActingSlotTeamA = 0x14;
+
+    internal const int CtxActingSlotTeamB = 0x16;
+
     // GHIDRA: battleContext + 0x1520 (VS.EXE)
     // TWELVE fighter slots, four bytes each — but only six ever hold a fighter. FUN_800511A8
     // @ 0x800511A8 fills them in one straight run and the pattern is the whole match format:

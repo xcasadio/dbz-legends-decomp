@@ -409,8 +409,8 @@ internal static class AnimCmdControl
         {
             if (iVar10 == 1)
             {
-                psVar8 = FUN_8003f228((uint)((int)((uint)uStack_cc << 0x10) >> 0x18), uVar15);
-                puVar3 = FUN_8003f2b0((uint)(uStack_cc & 0xff), uVar15);
+                psVar8 = AnimCmdTransform.FUN_8003f228((uint)((int)((uint)uStack_cc << 0x10) >> 0x18), uVar15);
+                puVar3 = AnimCmdTransform.FUN_8003f2b0((uint)(uStack_cc & 0xff), uVar15);
                 if (psVar8 != 0 && puVar3 != 0)
                 {
                     ReadRotMatrix(MStack_60);
@@ -440,7 +440,7 @@ internal static class AnimCmdControl
             }
             else if (iVar10 < 2)
             {
-                if (iVar10 == 0 && (iVar10 = FUN_8003f2b0((uint)(short)uStack_cc, uVar15)) != 0)
+                if (iVar10 == 0 && (iVar10 = AnimCmdTransform.FUN_8003f2b0((uint)(short)uStack_cc, uVar15)) != 0)
                 {
                     // GHIDRA: DAT_1f80007e @ 0x1F80007E (VS.EXE)
                     // The second halfword of the scratchpad SVECTOR at 0x1F80007C, which FileIo
@@ -461,9 +461,9 @@ internal static class AnimCmdControl
             {
                 uVar2 = PsxRam.ReadU16(puVar9);
                 puVar9 = param_1 + 6;
-                psVar8 = FUN_8003f228((uint)(uStack_cc & 0xff), uVar15);
-                psVar5 = FUN_8003f228((uint)(short)(sbyte)(uStack_cc >> 8), uVar15);
-                iVar10 = FUN_8003f2b0((uint)(uVar2 & 0x1f), uVar15);
+                psVar8 = AnimCmdTransform.FUN_8003f228((uint)(uStack_cc & 0xff), uVar15);
+                psVar5 = AnimCmdTransform.FUN_8003f228((uint)(short)(sbyte)(uStack_cc >> 8), uVar15);
+                iVar10 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar2 & 0x1f), uVar15);
                 if (psVar8 != 0 && psVar5 != 0 && iVar10 != 0)
                 {
                     sVar12 = (short)PsxRam.ReadU16(psVar5 + 2);
@@ -482,8 +482,8 @@ internal static class AnimCmdControl
             }
             else if (iVar10 == 3)
             {
-                iVar10 = FUN_8003f228(0, uVar15);
-                iVar7 = FUN_8003f2b0(0, uVar15);
+                iVar10 = AnimCmdTransform.FUN_8003f228((uint)(0), uVar15);
+                iVar7 = AnimCmdTransform.FUN_8003f2b0((uint)(0), uVar15);
                 if (iVar10 != 0 && iVar7 != 0)
                 {
                     iVar14 = 1;
@@ -500,8 +500,8 @@ internal static class AnimCmdControl
                             }
                             else
                             {
-                                psVar8 = FUN_8003f228(uVar13, uVar15);
-                                if (psVar8 != 0 && (iVar10 = FUN_8003f2b0(uVar13, uVar15)) != 0)
+                                psVar8 = AnimCmdTransform.FUN_8003f228((uint)(uVar13), uVar15);
+                                if (psVar8 != 0 && (iVar10 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar13), uVar15)) != 0)
                                 {
                                     uVar13 = (uint)(PsxRam.ReadU16(iVar10 + 2) & 0xfff);
                                     sVar12 = 0x800;
@@ -632,7 +632,7 @@ internal static class AnimCmdControl
             do
             {
                 sVar4 = (short)iVar5;
-                psVar1 = FUN_8003f228((uint)asStack_30[sVar4], uVar6);
+                psVar1 = AnimCmdTransform.FUN_8003f228((uint)asStack_30[sVar4], uVar6);
                 iVar5 = iVar5 + 1;
                 apsStack_20[sVar4] = psVar1;
             }
@@ -843,7 +843,7 @@ internal static class AnimCmdControl
             // offset of (short)param_1[1] * 2. Halved, that is the element index, carried here in
             // the same single local the original keeps the pointer in.
             psVar5 = (int)((uint)PsxRam.ReadU16(param_1 + 2) << 0x10) >> 0x10;
-            sVar3 = (short)FUN_8003f540(
+            sVar3 = (short)AnimCmdTransform.FUN_8003f540(
                 (uint)(short)PsxRam.ReadU16(AnimVm.g_animSharedVarTable + (psVar5) * 2), (short)uVar4, (uint)(short)uVar1);
             PsxRam.WriteU16(AnimVm.g_animSharedVarTable + (psVar5) * 2, (ushort)sVar3);
             if ((short)uVar4 == 8)
@@ -972,38 +972,14 @@ internal static class AnimCmdControl
     // slice must write. They are declared with their Ghidra address and left empty; the bodies
     // above are complete around them.
 
-    // GHIDRA: FUN_8003f228 @ 0x8003F228 (VS.EXE)
-    // BLOCKED: resolves an object id to the address of its coordinate triple. Twenty callers.
-    // Three sources depending on bits 4 and 5 of the id: the eight-byte records at
-    // UNK_801f2080 @ 0x801F2080, the pointer table at DAT_801faaac @ 0x801FAAAC (+0x3C), or the
-    // task-context slots at contextPtr + 0x18 + id*4 (+0x114).
-    private static int FUN_8003f228(uint param_1, int param_2)
-    {
-        return 0;
-    }
-
-    // GHIDRA: FUN_8003f2b0 @ 0x8003F2B0 (VS.EXE)
-    // BLOCKED: the rotation counterpart of FUN_8003f228 — same three sources, offsets +0x11C and
-    // the eight-byte records at DAT_801f2000 @ 0x801F2000, falling back to
-    // DAT_1f800084 @ 0x1F800084.
-    private static int FUN_8003f2b0(uint param_1, int param_2)
-    {
-        return 0;
-    }
-
-    // GHIDRA: FUN_8003f540 @ 0x8003F540 (VS.EXE)
-    // BLOCKED: the VM's arithmetic/logic unit, 384 bytes, FORTY-TWO callers. One switch over the
-    // operation selector: 0 assign, 1 add, 2 subtract, 3 or, 4 and, 5 xor, 6 multiply, 7 divide,
-    // 9 reverse-subtract, 10 store-through, and more past the window read here.
-    private static int FUN_8003f540(uint param_1, short param_2, uint param_3)
-    {
-        return 0;
-    }
-
     // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
     // BLOCKED: 312 bytes. Called by AnimCmd_Utility's sub-command 3 with a rotation pointer, an
     // output VECTOR, 0, an angle and 0x10; it fills the vector, which the caller then adds to a
     // part's x and z. The prototype is not printed by Ghidra and is taken from the call site.
+    // DOUBLON ASSUME: AnimCmdMesh.cs porte la meme adresse avec (int, int, uint, ushort, int),
+    // parce que son site d'appel passe l'ADRESSE PSX 0x801FAA84 la ou celui-ci passe `VStack_80`,
+    // un VECTOR managé sans adresse. Les octets confirment que `a1` est un pointeur aux deux sites.
+    // Voir la note complete dans AnimCmdMesh.cs. Corps vides des deux cotes: rien ne diverge encore.
     private static void FUN_80047550(int param_1, VECTOR param_2, int param_3, short param_4, int param_5)
     {
     }

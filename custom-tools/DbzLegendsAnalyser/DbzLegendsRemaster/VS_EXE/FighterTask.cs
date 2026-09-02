@@ -170,9 +170,16 @@ internal static class FighterTask
                                 // the first halfword or bit 29 for the second in the fighter's own
                                 // +0x138. Anything else clears both (& 0xCFFFFFFF).
                                 //
-                                // PARTIAL: which of the two roles ctx+0x14 and ctx+0x16 name is not
-                                // closed by this function. It sees only that they are slot indices
-                                // and that at most one of the two bits can be up at a time.
+                                // CE PARTIAL EST LEVE, ET PAS PAR CETTE FONCTION. Il disait que le
+                                // role de ctx+0x14 et ctx+0x16 n'etait pas ferme, ce qui restait
+                                // vrai d'ici: cette fonction ne voit que deux index de creneau dont
+                                // au plus un peut lever son bit. La transliteration du gestionnaire
+                                // de combat l'a ferme depuis — 0x80057064..0x8005769C ne deplace
+                                // +0x14 que dans les creneaux 0..5 et +0x16 que dans 6..11. Ce sont
+                                // LES DEUX CURSEURS DE CRENEAU ACTIF, UN PAR EQUIPE, et ils sont
+                                // nommes CtxActingSlotTeamA / CtxActingSlotTeamB dans BattleState.
+                                // Les acces bruts ci-dessous sont laisses tels quels: les reecrire
+                                // toucherait une transliteration deja verifiee pour un gain nul.
                                 if (PsxRam.ReadU16(PsxRam.ReadI32(iVar3 + BattleState.FighterBattleContext) + 0x14)
                                         == (ushort)PsxRam.ReadU8(iVar3 + BattleState.FighterSlotIndex)
                                     && ((uint)PsxRam.ReadI32(

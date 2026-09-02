@@ -169,7 +169,7 @@ internal static class AnimCmdTransform
                     puVar6 = puVar6 + 2;
                     if (psVar3 != 0)
                     {
-                        sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar3), uVar7,
+                        sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar3), (short)(uVar7),
                             (uint)(int)(short)uVar1);
                         PsxRam.WriteU16(psVar3, (ushort)sVar2);
                         if (uVar7 == 8)
@@ -262,7 +262,7 @@ internal static class AnimCmdTransform
                     }
 
                     puVar6 = puVar6 + 2;
-                    sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar3), uVar7,
+                    sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar3), (short)(uVar7),
                         (uint)(int)(short)uVar1);
                     PsxRam.WriteU16(psVar3, (ushort)sVar2);
                     if (uVar7 == 8)
@@ -362,7 +362,7 @@ internal static class AnimCmdTransform
                     }
 
                     streamPtr = streamPtr + 2;
-                    sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(unaff_s4), uVar3,
+                    sVar2 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(unaff_s4), (short)(uVar3),
                         (uint)(int)(short)uVar1);
                     PsxRam.WriteU16(unaff_s4, (ushort)sVar2);
                     if (uVar3 == 8)
@@ -501,7 +501,7 @@ internal static class AnimCmdTransform
                                 do
                                 {
                                     sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar10),
-                                        (ushort)(uStack_3e & 0xf), (uint)(int)(short)auStack_38[iVar8]);
+                                        (short)((ushort)(uStack_3e & 0xf)), (uint)(int)(short)auStack_38[iVar8]);
                                     PsxRam.WriteU16(psVar10, (ushort)sVar3);
                                     psVar10 = psVar10 + 8;
                                     iVar8 = iVar8 + 1;
@@ -531,7 +531,7 @@ internal static class AnimCmdTransform
                             do
                             {
                                 sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar10),
-                                    (ushort)(uStack_3e & 0xf), (uint)(int)(short)auStack_38[iVar7]);
+                                    (short)((ushort)(uStack_3e & 0xf)), (uint)(int)(short)auStack_38[iVar7]);
                                 PsxRam.WriteU16(psVar10, (ushort)sVar3);
                                 psVar10 = psVar10 + 8;
                                 iVar7 = iVar7 + 1;
@@ -567,7 +567,7 @@ internal static class AnimCmdTransform
                                     do
                                     {
                                         sVar4 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar10),
-                                            (ushort)(uStack_3e & 0xf), (uint)(int)(short)auStack_38[iVar9]);
+                                            (short)((ushort)(uStack_3e & 0xf)), (uint)(int)(short)auStack_38[iVar9]);
                                         PsxRam.WriteU16(psVar10, (ushort)sVar4);
                                         psVar10 = psVar10 + 8;
                                         iVar9 = iVar9 + 1;
@@ -676,7 +676,7 @@ internal static class AnimCmdTransform
                                 {
                                     puVar11 = puVar11 + 8;
                                     sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                        (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar9]);
+                                        (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar9]);
                                     PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                     psVar8 = psVar8 + 8;
                                     iVar9 = iVar9 + 1;
@@ -708,7 +708,7 @@ internal static class AnimCmdTransform
                             {
                                 puVar11 = puVar11 + 8;
                                 sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                    (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar6]);
+                                    (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar6]);
                                 PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                 psVar8 = psVar8 + 8;
                                 iVar6 = iVar6 + 1;
@@ -746,7 +746,7 @@ internal static class AnimCmdTransform
                                     {
                                         puVar11 = puVar11 + 8;
                                         sVar4 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                            (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar10]);
+                                            (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar10]);
                                         PsxRam.WriteU16(psVar8, (ushort)sVar4);
                                         psVar8 = psVar8 + 8;
                                         iVar10 = iVar10 + 1;
@@ -853,7 +853,7 @@ internal static class AnimCmdTransform
                                 {
                                     puVar11 = puVar11 + 8;
                                     sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                        (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar9]);
+                                        (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar9]);
                                     PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                     psVar8 = psVar8 + 8;
                                     iVar9 = iVar9 + 1;
@@ -885,7 +885,7 @@ internal static class AnimCmdTransform
                             {
                                 puVar11 = puVar11 + 8;
                                 sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                    (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar6]);
+                                    (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar6]);
                                 PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                 psVar8 = psVar8 + 8;
                                 iVar6 = iVar6 + 1;
@@ -923,7 +923,7 @@ internal static class AnimCmdTransform
                                     {
                                         puVar11 = puVar11 + 8;
                                         sVar4 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                            (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar10]);
+                                            (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar10]);
                                         PsxRam.WriteU16(psVar8, (ushort)sVar4);
                                         psVar8 = psVar8 + 8;
                                         iVar10 = iVar10 + 1;
@@ -1033,7 +1033,7 @@ internal static class AnimCmdTransform
                                 {
                                     puVar11 = puVar11 + 8;
                                     sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                        (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar9]);
+                                        (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar9]);
                                     PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                     psVar8 = psVar8 + 8;
                                     iVar9 = iVar9 + 1;
@@ -1065,7 +1065,7 @@ internal static class AnimCmdTransform
                             {
                                 puVar11 = puVar11 + 8;
                                 sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                    (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar6]);
+                                    (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar6]);
                                 PsxRam.WriteU16(psVar8, (ushort)sVar3);
                                 psVar8 = psVar8 + 8;
                                 iVar6 = iVar6 + 1;
@@ -1103,7 +1103,7 @@ internal static class AnimCmdTransform
                                     {
                                         puVar11 = puVar11 + 8;
                                         sVar4 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar8),
-                                            (ushort)(uStack_46 & 0xf), (uint)(int)(short)auStack_40[iVar10]);
+                                            (short)((ushort)(uStack_46 & 0xf)), (uint)(int)(short)auStack_40[iVar10]);
                                         PsxRam.WriteU16(psVar8, (ushort)sVar4);
                                         psVar8 = psVar8 + 8;
                                         iVar10 = iVar10 + 1;
@@ -1240,7 +1240,24 @@ internal static class AnimCmdTransform
     //
     // The `goto LAB_8003f6a4` shape is the original's and is kept literally: case 6 reaches the
     // common tail with a DIFFERENT value in iVar3 than the fall-through path computes.
-    internal static int FUN_8003f540(uint param_1, ushort param_2, uint param_3)
+    // LE SELECTEUR EST UN `short`, ET NI L'UNE NI L'AUTRE DES DEUX TRANSLITERATIONS NE L'AVAIT.
+    // Cette fonction avait ete portee DEUX FOIS, independamment: ici avec `ushort param_2` et dans
+    // AnimCmdAppearance.cs avec `int param_2`. Les octets tranchent contre les deux:
+    //     0x8003F554  sll   a1,a1,16
+    //     0x8003F558  sra   a1,a1,16      <- extension de SIGNE d'un demi-mot
+    //     0x8003F55C  sltiu v0,a1,13
+    // L'original tronque donc son deuxieme argument a 16 bits AVANT de tester la plage du switch.
+    // Ce n'est pas cosmetique: avec `int`, une valeur comme 0x10005 sort du switch et ne fait rien,
+    // alors que l'original la tronque a 5 et prend le cas 5. Avec `ushort`, 0xFFFF vaut 65535 au
+    // lieu de -1 — meme sortie ici, par chance, puisque le sltiu est non signe.
+    //
+    // Les deux corps ont ete compares ligne a ligne avant d'en garder un: hors ce type, ils ne
+    // divergeaient que par des parentheses et par `rand()` contre `Kernel.rand()`, qui sont le meme
+    // symbole via `using static PsxSdkMonogame.Kernel;`. Le calcul du cas 6 differait de place de
+    // cast (`(int)(a*b*0x10000)` contre `(int)(a*b)*0x10000`) et rend les memes 32 bits de poids
+    // faible en contexte unchecked. Aucune des deux versions n'etait fausse sur le fond; c'est le
+    // fait qu'il y en ait deux qui l'etait.
+    internal static int FUN_8003f540(uint param_1, short param_2, uint param_3)
     {
         short sVar1;
         uint uVar2;

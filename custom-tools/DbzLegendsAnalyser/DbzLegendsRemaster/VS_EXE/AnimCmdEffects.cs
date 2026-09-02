@@ -417,8 +417,8 @@ internal static class AnimCmdEffects
             if ((uVar1 & 0x8000) == 0)
             {
                 ushort uVar2 = PsxRam.ReadU16(puVar3);
-                DAT_80099058 = FUN_8003f228((uint)(uVar2 & 0xff), uVar4);
-                DAT_8009905c = FUN_8003f2b0((short)(sbyte)(uVar2 >> 8), uVar4);
+                DAT_80099058 = AnimCmdTransform.FUN_8003f228((uint)(uVar2 & 0xff), uVar4);
+                DAT_8009905c = AnimCmdTransform.FUN_8003f2b0((uint)((short)(sbyte)(uVar2 >> 8)), uVar4);
 
                 if (DAT_80099058 == 0 || DAT_8009905c == 0)
                 {
@@ -508,7 +508,7 @@ internal static class AnimCmdEffects
 
                 if (PsxRam.ReadI32(AnimStreamBlockBase + (piVar10)) == 0)
                 {
-                    int iVar4 = FUN_8003f228((uint)(uVar1 >> 8), PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
+                    int iVar4 = AnimCmdTransform.FUN_8003f228((uint)(uVar1 >> 8), PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
                     if (iVar4 == 0)
                     {
                         return puVar5;
@@ -605,7 +605,7 @@ internal static class AnimCmdEffects
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            int puVar3 = FUN_8003f228((uint)(PsxRam.ReadU16(streamPtr + 2) & 0xff), iVar7);
+            int puVar3 = AnimCmdTransform.FUN_8003f228((uint)(PsxRam.ReadU16(streamPtr + 2) & 0xff), iVar7);
             if (puVar3 != 0)
             {
                 uint uVar6 = (uint)((unchecked((int)((uint)uVar1 << 0x10)) >> 0x18) & 1);
@@ -1084,8 +1084,8 @@ internal static class AnimCmdEffects
 
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
-                int iVar2 = FUN_8003f228((uint)(uVar5 & 0xff), iVar8);
-                iVar8 = FUN_8003f2b0(uVar5 >> 8, iVar8);
+                int iVar2 = AnimCmdTransform.FUN_8003f228((uint)(uVar5 & 0xff), iVar8);
+                iVar8 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar5 >> 8), iVar8);
                 if (iVar2 != 0 && iVar8 != 0)
                 {
                     FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
@@ -1108,7 +1108,7 @@ internal static class AnimCmdEffects
 
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
-                int puVar3 = FUN_8003f228(unchecked((uint)(short)uVar5), iVar8);
+                int puVar3 = AnimCmdTransform.FUN_8003f228((uint)(unchecked((uint)(short)uVar5)), iVar8);
                 if (puVar3 != 0)
                 {
                     int puVar7 = (int)uVar9;
@@ -1200,8 +1200,8 @@ internal static class AnimCmdEffects
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            int iVar3 = FUN_8003f228(
-                unchecked((uint)(unchecked((int)((uint)PsxRam.ReadU16(param_1) << 0x10)) >> 0x18)),
+            int iVar3 = AnimCmdTransform.FUN_8003f228(
+                (uint)(unchecked((uint)(unchecked((int)((uint)PsxRam.ReadU16(param_1) << 0x10)) >> 0x18))),
                 iVar7);
 
             if (iVar3 != 0)
@@ -1324,32 +1324,6 @@ internal static class AnimCmdEffects
     // them is invented here and none is a convenience API: they are the out-of-slice functions,
     // named exactly as Ghidra names them.
     // =====================================================================================
-
-    // GHIDRA: FUN_8003f228 @ 0x8003F228 (VS.EXE)
-    private static int FUN_8003f228(uint param_1, int param_2)
-    {
-        // BLOCKED: 136 bytes. It resolves a TRANSLATE target from a one-byte spec: bit 4 selects a
-        // slot of UNK_801F2080 at stride 8; bit 5 selects DAT_801faaac[spec & 0xF] + 0x3C; a spec
-        // below 6 selects the character object at `taskContext + 0x18 + spec*4` plus 0x114, and 0
-        // when that object is null; a spec of 6 or more returns 0. Reading it settled the opcode
-        // 12 naming question above, but porting it belongs with the character-object slice that
-        // owns +0x114 and UNK_801F2080.
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
-
-    // GHIDRA: FUN_8003f2b0 @ 0x8003F2B0 (VS.EXE)
-    private static int FUN_8003f2b0(int param_1, int param_2)
-    {
-        // BLOCKED: 96 bytes, the ROTATE counterpart of FUN_8003f228. Bit 4 selects a slot of
-        // DAT_801F2000 at stride 8; a spec below 6 selects the character object at
-        // `taskContext + 0x18 + spec*4` plus 0x11C, and 0 when that object is null; a spec of 6 or
-        // more returns DAT_1F800084, the GTE scratchpad rotation vector. Same slice.
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
 
     // GHIDRA: FUN_8003f994 @ 0x8003F994 (VS.EXE)
     private static void FUN_8003f994()

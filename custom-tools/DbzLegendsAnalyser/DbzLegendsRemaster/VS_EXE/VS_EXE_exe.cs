@@ -139,7 +139,7 @@ internal sealed class VS_EXE_exe
     private static int DAT_8008d334;
 
     // GHIDRA: DAT_8008d4f0 @ 0x8008D4F0 (VS.EXE)
-    private static int DAT_8008d4f0;
+    internal static int DAT_8008d4f0;
 
     // GHIDRA: DAT_800858bc @ 0x800858BC, DAT_800858c0 @ 0x800858C0 (VS.EXE)
     // crt0's heap base and size, computed from _end.
@@ -258,7 +258,7 @@ internal sealed class VS_EXE_exe
         DAT_8008d394 = 0;
 
         FileIo.SetupGeometry(0xa0, 0xef, 0x200, 0, 0, 0, 0x400, 0, 0, 0);
-        FUN_80042054(8, 0);
+        BattleScene.FUN_80042054(8, 0);
         DAT_8008d4f0 = 1;
         FUN_80062a1c();
 
@@ -309,6 +309,17 @@ internal sealed class VS_EXE_exe
         // The battle context task: 0x3034 bytes of workspace on list 9, id 0x51. Its workspace
         // pointer is read straight back out of the task node at +8 and handed to FUN_800511A8,
         // which is what fills the twelve-slot fighter array at context + 0x1520.
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: CreateTask range 0x80055E3C brut dans le noeud, et le repartiteur de TaskSystem
+        // a besoin de savoir a quel corps porte cette adresse correspond. Sans cette ligne, la
+        // liste 9 parcourt un noeud vivant et ne distribue rien — le gestionnaire de combat entier
+        // etait compile et inatteignable, exactement comme le corps des combattants l'etait avant
+        // que FighterSetup n'appelle FighterTask.RegisterFighterTask.
+        //
+        // BattleManager.cs expose l'enregistrement sans le faire, et le dit, parce que le createur
+        // est `main` et que `main` n'est pas son fichier. C'est ici que la couture se ferme.
+        BattleManager.RegisterBattleManagerTask();
+
         int iVar7Task = TaskSystem.CreateTask(Lab80055e3cAddress, 0x51, 9, 0x3034, 0, TaskSystem.g_TaskListTail[9]);
 
         // `uVar6 = *(undefined4 *)(iVar7 + 8)` — main reads the field INLINE. There is no accessor
@@ -316,13 +327,13 @@ internal sealed class VS_EXE_exe
         // refused to write it, and it was right to.
         int uVar6 = PsxRam.ReadI32(iVar7Task + 8);
 
-        FUN_8005cbe0();
+        Roster.FUN_8005cbe0();
         FUN_80034d98();
         FighterSetup.FUN_800511a8(uVar6);
         FUN_80026a68();
 
         DAT_8008d444 = 0;
-        FUN_80042054(2, 4);
+        BattleScene.FUN_80042054(2, 4);
 
         DeclareOrderingTableAddress();
         DAT_8008d420 = Drawenv800b0eb8Address;
@@ -430,14 +441,6 @@ internal sealed class VS_EXE_exe
     // and the twelve-slot fighter array at +0x1520.
     private const int Lab80055e3cAddress = unchecked((int)0x80055E3C);
 
-    // GHIDRA: FUN_80042054 @ 0x80042054 (VS.EXE)
-    // BLOCKED: called twice by main with (8, 0) then (2, 4).
-    private static void FUN_80042054(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
-
     // GHIDRA: FUN_80062a1c @ 0x80062A1C (VS.EXE)
     // BLOCKED: part of graphics bring-up, called once between SetupGeometry and the CLUT upload.
     private static void FUN_80062a1c()
@@ -455,15 +458,6 @@ internal sealed class VS_EXE_exe
     private static void FUN_800414ec(uint param_1)
     {
         _ = param_1;
-    }
-
-    // GHIDRA: FUN_8005cbe0 @ 0x8005CBE0 (VS.EXE)
-    // BLOCKED: THE ROSTER CONSUMER, and the only one. It reads the six character ids SELECT.EXE
-    // exports at 0x801FF102-10C — reads at 0x8005CC38 and 0x8005CC68 — and writes them into
-    // 0x80083CF0. Character ids run 1..38, closed twice independently by FACE.B's 76 sectors at two
-    // per portrait and by the 38-entry AT table.
-    private static void FUN_8005cbe0()
-    {
     }
 
     // GHIDRA: FUN_80034d98 @ 0x80034D98 (VS.EXE)

@@ -431,9 +431,9 @@ internal static class AnimCmdAppearance
                                     puVar5 = puVar4;
                                     if (((int)(short)auStack_50[iVar1] & 0x8000) == 0)
                                     {
-                                        uStack_3e = (ushort)FUN_8003f540(
+                                        uStack_3e = (ushort)AnimCmdTransform.FUN_8003f540(
                                             (uint)(int)(short)PsxRam.ReadU16(puVar5),
-                                            auStack_50[0] & 0xf,
+                                            (short)(auStack_50[0] & 0xf),
                                             (uint)(int)(short)auStack_50[iVar1]);
                                         if ((int)((uint)uStack_3e << 0x10) < 0)
                                         {
@@ -469,9 +469,9 @@ internal static class AnimCmdAppearance
                                 puVar5 = puVar4;
                                 if (((int)(short)auStack_50[iVar6] & 0x8000) == 0)
                                 {
-                                    uStack_3e = (ushort)FUN_8003f540(
+                                    uStack_3e = (ushort)AnimCmdTransform.FUN_8003f540(
                                         (uint)(int)(short)PsxRam.ReadU16(puVar5),
-                                        auStack_50[0] & 0xf,
+                                        (short)(auStack_50[0] & 0xf),
                                         (uint)(int)(short)auStack_50[iVar6]);
                                     if ((int)((uint)uStack_3e << 0x10) < 0)
                                     {
@@ -517,9 +517,9 @@ internal static class AnimCmdAppearance
                                         puVar5 = puVar4;
                                         if (((int)(short)auStack_50[iVar1] & 0x8000) == 0)
                                         {
-                                            uStack_3e = (ushort)FUN_8003f540(
+                                            uStack_3e = (ushort)AnimCmdTransform.FUN_8003f540(
                                                 (uint)(int)(short)PsxRam.ReadU16(puVar5),
-                                                auStack_50[0] & 0xf,
+                                                (short)(auStack_50[0] & 0xf),
                                                 (uint)(int)(short)auStack_50[iVar1]);
                                             if ((int)((uint)uStack_3e << 0x10) < 0)
                                             {
@@ -626,9 +626,9 @@ internal static class AnimCmdAppearance
                                 do
                                 {
                                     pbVar6 = pbVar5;
-                                    uStack_2e = (ushort)FUN_8003f540(
+                                    uStack_2e = (ushort)AnimCmdTransform.FUN_8003f540(
                                         PsxRam.ReadU8(pbVar6),
-                                        auStack_40[0] & 0xf,
+                                        (short)(auStack_40[0] & 0xf),
                                         (uint)(int)(short)auStack_40[iVar7]);
                                     if ((int)((uint)uStack_2e << 0x10) < 0)
                                     {
@@ -684,9 +684,9 @@ internal static class AnimCmdAppearance
                                 do
                                 {
                                     pbVar6 = pbVar5;
-                                    uStack_2e = (ushort)FUN_8003f540(
+                                    uStack_2e = (ushort)AnimCmdTransform.FUN_8003f540(
                                         PsxRam.ReadU8(pbVar6),
-                                        auStack_40[0] & 0xf,
+                                        (short)(auStack_40[0] & 0xf),
                                         (uint)(int)(short)auStack_40[iVar7]);
                                     if ((int)((uint)uStack_2e << 0x10) < 0)
                                     {
@@ -752,9 +752,9 @@ internal static class AnimCmdAppearance
                                         do
                                         {
                                             pbVar6 = pbVar5;
-                                            uStack_2e = (ushort)FUN_8003f540(
+                                            uStack_2e = (ushort)AnimCmdTransform.FUN_8003f540(
                                                 PsxRam.ReadU8(pbVar6),
-                                                auStack_40[0] & 0xf,
+                                                (short)(auStack_40[0] & 0xf),
                                                 (uint)(int)(short)auStack_40[iVar8]);
                                             if ((int)((uint)uStack_2e << 0x10) < 0)
                                             {
@@ -1022,7 +1022,7 @@ internal static class AnimCmdAppearance
                 {
                     if ((param_1 & uVar6) == 0)
                     {
-                        iVar4 = FUN_8003f540(PsxRam.ReadU8(param_3), param_4,
+                        iVar4 = AnimCmdTransform.FUN_8003f540(PsxRam.ReadU8(param_3), (short)(param_4),
                             (uint)(int)param_5);
                         iVar3 = (iVar4 << 0x10) >> 0x10;
                         if (iVar4 << 0x10 < 0)
@@ -1036,7 +1036,7 @@ internal static class AnimCmdAppearance
                             uVar5 = 0xff;
                         }
                         PsxRam.WriteU8(param_3, uVar5);
-                        iVar4 = FUN_8003f540(PsxRam.ReadU8(param_3 + 1), param_6,
+                        iVar4 = AnimCmdTransform.FUN_8003f540(PsxRam.ReadU8(param_3 + 1), (short)(param_6),
                             (uint)(int)param_7);
                         iVar3 = (iVar4 << 0x10) >> 0x10;
                         if (iVar4 << 0x10 < 0)
@@ -1050,7 +1050,7 @@ internal static class AnimCmdAppearance
                             uVar5 = 0xff;
                         }
                         PsxRam.WriteU8(param_3 + 1, uVar5);
-                        iVar4 = FUN_8003f540(PsxRam.ReadU8(param_3 + 2), param_8,
+                        iVar4 = AnimCmdTransform.FUN_8003f540(PsxRam.ReadU8(param_3 + 2), (short)(param_8),
                             (uint)(int)param_9);
                         iVar3 = (iVar4 << 0x10) >> 0x10;
                         if (iVar4 << 0x10 < 0)
@@ -1065,7 +1065,7 @@ internal static class AnimCmdAppearance
                         }
                         PsxRam.WriteU8(param_3 + 2, uVar5);
                         bVar1 = PsxRam.ReadU8(param_3 + 3);
-                        bVar2 = (byte)FUN_8003f540(bVar1, param_10, (uint)(int)param_11);
+                        bVar2 = (byte)AnimCmdTransform.FUN_8003f540(bVar1, (short)(param_10), (uint)(int)param_11);
                         PsxRam.WriteU8(param_3 + 3, (byte)((bVar1 & 0xfc) | (bVar2 & 3)));
                     }
                     uVar6 = (ushort)(uVar6 << 1);
@@ -1146,9 +1146,9 @@ internal static class AnimCmdAppearance
                                 do
                                 {
                                     psVar7 = psVar6;
-                                    sVar2 = (short)FUN_8003f540(
+                                    sVar2 = (short)AnimCmdTransform.FUN_8003f540(
                                         (uint)(int)(short)PsxRam.ReadU16(psVar7),
-                                        auStack_50[0] & 0xf,
+                                        (short)(auStack_50[0] & 0xf),
                                         (uint)(int)(short)auStack_50[iVar9]);
                                     PsxRam.WriteU16(psVar7, (ushort)sVar2);
                                     iVar9 = iVar9 + 1;
@@ -1177,9 +1177,9 @@ internal static class AnimCmdAppearance
                             do
                             {
                                 psVar7 = psVar6;
-                                sVar2 = (short)FUN_8003f540(
+                                sVar2 = (short)AnimCmdTransform.FUN_8003f540(
                                     (uint)(int)(short)PsxRam.ReadU16(psVar7),
-                                    auStack_50[0] & 0xf,
+                                    (short)(auStack_50[0] & 0xf),
                                     (uint)(int)(short)auStack_50[iVar5]);
                                 PsxRam.WriteU16(psVar7, (ushort)sVar2);
                                 iVar5 = iVar5 + 1;
@@ -1217,9 +1217,9 @@ internal static class AnimCmdAppearance
                                     do
                                     {
                                         psVar7 = psVar6;
-                                        sVar2 = (short)FUN_8003f540(
+                                        sVar2 = (short)AnimCmdTransform.FUN_8003f540(
                                             (uint)(int)(short)PsxRam.ReadU16(psVar7),
-                                            auStack_50[0] & 0xf,
+                                            (short)(auStack_50[0] & 0xf),
                                             (uint)(int)(short)auStack_50[iVar8]);
                                         PsxRam.WriteU16(psVar7, (ushort)sVar2);
                                         iVar8 = iVar8 + 1;
@@ -1363,14 +1363,14 @@ internal static class AnimCmdAppearance
                                     psVar13 = psVar12;
                                     puVar10 = puVar11 + 1;
                                     puVar8 = puVar9 + 1;
-                                    sVar4 = (short)FUN_8003f540(
+                                    sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                         (uint)(int)(short)PsxRam.ReadU16(psVar13),
                                         (short)auStack_68[puVar11],
                                         (uint)(int)(short)auStack_50[puVar9]);
                                     PsxRam.WriteU16(psVar13, (ushort)sVar4);
                                     puVar11 = puVar11 + 2;
                                     puVar9 = puVar9 + 2;
-                                    sVar4 = (short)FUN_8003f540(
+                                    sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                         (uint)(int)(short)PsxRam.ReadU16(psVar13 + 2),
                                         (short)auStack_68[puVar10],
                                         (uint)(int)(short)auStack_50[puVar8]);
@@ -1404,14 +1404,14 @@ internal static class AnimCmdAppearance
                                 psVar13 = psVar12;
                                 puVar10 = puVar11 + 1;
                                 puVar8 = puVar9 + 1;
-                                sVar4 = (short)FUN_8003f540(
+                                sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                     (uint)(int)(short)PsxRam.ReadU16(psVar13),
                                     (short)auStack_68[puVar11],
                                     (uint)(int)(short)auStack_50[puVar9]);
                                 PsxRam.WriteU16(psVar13, (ushort)sVar4);
                                 puVar11 = puVar11 + 2;
                                 puVar9 = puVar9 + 2;
-                                sVar4 = (short)FUN_8003f540(
+                                sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                     (uint)(int)(short)PsxRam.ReadU16(psVar13 + 2),
                                     (short)auStack_68[puVar10],
                                     (uint)(int)(short)auStack_50[puVar8]);
@@ -1455,14 +1455,14 @@ internal static class AnimCmdAppearance
                                         psVar13 = psVar12;
                                         puVar10 = puVar11 + 1;
                                         puVar8 = puVar9 + 1;
-                                        sVar4 = (short)FUN_8003f540(
+                                        sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                             (uint)(int)(short)PsxRam.ReadU16(psVar13),
                                             (short)auStack_68[puVar11],
                                             (uint)(int)(short)auStack_50[puVar9]);
                                         PsxRam.WriteU16(psVar13, (ushort)sVar4);
                                         puVar11 = puVar11 + 2;
                                         puVar9 = puVar9 + 2;
-                                        sVar4 = (short)FUN_8003f540(
+                                        sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                             (uint)(int)(short)PsxRam.ReadU16(psVar13 + 2),
                                             (short)auStack_68[puVar10],
                                             (uint)(int)(short)auStack_50[puVar8]);
@@ -1555,9 +1555,9 @@ internal static class AnimCmdAppearance
                         {
                             do
                             {
-                                sVar5 = (short)FUN_8003f540(
+                                sVar5 = (short)AnimCmdTransform.FUN_8003f540(
                                     (uint)(int)(short)PsxRam.ReadU16(psVar9),
-                                    uStack_40 & 0xf,
+                                    (short)(uStack_40 & 0xf),
                                     (uint)(int)(short)uVar2);
                                 PsxRam.WriteU16(psVar9, (ushort)sVar5);
                                 iVar8 = iVar8 + 1;
@@ -1585,9 +1585,9 @@ internal static class AnimCmdAppearance
                     {
                         do
                         {
-                            sVar4 = (short)FUN_8003f540(
+                            sVar4 = (short)AnimCmdTransform.FUN_8003f540(
                                 (uint)(int)(short)PsxRam.ReadU16(psVar9),
-                                uStack_40 & 0xf,
+                                (short)(uStack_40 & 0xf),
                                 (uint)(int)(short)uVar2);
                             PsxRam.WriteU16(psVar9, (ushort)sVar4);
                             iVar8 = iVar8 + 1;
@@ -1616,9 +1616,9 @@ internal static class AnimCmdAppearance
                         {
                             do
                             {
-                                sVar5 = (short)FUN_8003f540(
+                                sVar5 = (short)AnimCmdTransform.FUN_8003f540(
                                     (uint)(int)(short)PsxRam.ReadU16(psVar9),
-                                    uStack_40 & 0xf,
+                                    (short)(uStack_40 & 0xf),
                                     (uint)(int)(short)uVar2);
                                 PsxRam.WriteU16(psVar9, (ushort)sVar5);
                                 iVar10 = iVar10 + 1;
@@ -1734,9 +1734,9 @@ internal static class AnimCmdAppearance
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
             iVar7 = ((int)(uVar5 << 0x10) >> 0xe) + PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
-            uVar1 = (ushort)FUN_8003f540(
+            uVar1 = (ushort)AnimCmdTransform.FUN_8003f540(
                 PsxRam.ReadU8(PsxRam.ReadI32(iVar7 + 0x18) + 0x150),
-                uVar2 & 0xf,
+                (short)(uVar2 & 0xf),
                 (uint)(int)(short)uVar1);
             iVar3 = (int)((uint)uVar1 << 0x10);
             if (0xff < (short)uVar1)
@@ -1750,9 +1750,9 @@ internal static class AnimCmdAppearance
                 uVar4 = 0;
             }
             PsxRam.WriteU8(PsxRam.ReadI32(iVar7 + 0x18) + 0x150, uVar4);
-            uVar1 = (ushort)FUN_8003f540(
+            uVar1 = (ushort)AnimCmdTransform.FUN_8003f540(
                 PsxRam.ReadU8(PsxRam.ReadI32(iVar7 + 0x18) + 0x151),
-                ((int)((uint)uVar2 << 0x10) >> 0x15) & 0xf,
+                (short)(((int)((uint)uVar2 << 0x10) >> 0x15) & 0xf),
                 (uint)(int)(short)uVar6);
             iVar3 = (int)((uint)uVar1 << 0x10);
             if (0xff < (short)uVar1)
@@ -1766,9 +1766,9 @@ internal static class AnimCmdAppearance
                 uVar4 = 0;
             }
             PsxRam.WriteU8(PsxRam.ReadI32(iVar7 + 0x18) + 0x151, uVar4);
-            uVar2 = (ushort)FUN_8003f540(
+            uVar2 = (ushort)AnimCmdTransform.FUN_8003f540(
                 PsxRam.ReadU8(PsxRam.ReadI32(iVar7 + 0x18) + 0x152),
-                ((int)((uint)uVar2 << 0x10) >> 0x1a) & 0xf,
+                (short)(((int)((uint)uVar2 << 0x10) >> 0x1a) & 0xf),
                 (uint)(int)(short)uVar8);
             iVar3 = (int)((uint)uVar2 << 0x10);
             if (0xff < (short)uVar2)
@@ -1789,82 +1789,4 @@ internal static class AnimCmdAppearance
     // =====================================================================================
     // The VM's generic operator
     // =====================================================================================
-
-    // GHIDRA: FUN_8003f540 @ 0x8003F540 (VS.EXE)
-    // THE OPERATOR EVERY `*_set` OPCODE APPLIES. Called from 42 sites across the whole VM, six of
-    // them in this file; see the ownership block at the top of the file for why it is transliterated
-    // here rather than left to another slice.
-    //
-    // Thirteen cases on a jump table, result always narrowed back to a signed 16-bit value:
-    //   0  set          4  and          9  reverse subtract (operand - value)
-    //   1  add          5  xor         10  store value into g_animSharedVarTable[operand]
-    //   2  subtract     6  multiply    11  add (operand & rand())
-    //   3  or           7  divide      12  modulo
-    // Case 8 and everything from 13 up — including the 0xF the `*0123_set` opcodes use to mean
-    // "leave this channel alone", and the 0x1F they leave in place when the variable-index bit is
-    // also set — fall through to the tail and return the value unchanged. That fall-through is the
-    // mechanism, not an accident, and it is why a 0xF operator field is a no-op.
-    //
-    // Two of the original's guards are not reproduced, and neither is behaviour:
-    //   * `if (false) goto switchD_8003f580_caseD_8;` is the decompiler's rendering of the jump
-    //     table's default edge and executes nothing;
-    //   * `if ((iVar3 == -1) && (sVar1 == -0x80000000))` compares a value that came from a short
-    //     against INT_MIN and can never be true.
-    // The divide-by-zero guard IS behaviour: the original executes `break 0x1C00`, which traps.
-    // C# raises DivideByZeroException on the same input. Rule 12 — the original is not repaired
-    // here into returning something.
-    internal static int FUN_8003f540(uint param_1, int param_2, uint param_3)
-    {
-        short sVar1;
-        uint uVar2;
-        int iVar3;
-
-        sVar1 = (short)param_1;
-        switch (param_2)
-        {
-            case 0:
-                param_1 = param_3;
-                break;
-            case 1:
-                param_1 = param_1 + param_3;
-                break;
-            case 2:
-                param_1 = param_1 - param_3;
-                break;
-            case 3:
-                param_1 = param_1 | param_3;
-                break;
-            case 4:
-                param_1 = param_1 & param_3;
-                break;
-            case 5:
-                param_1 = param_1 ^ param_3;
-                break;
-            case 6:
-                iVar3 = (int)(param_1 * param_3 * 0x10000);
-                return iVar3 >> 0x10;
-            case 7:
-                iVar3 = (short)param_3;
-                param_1 = (uint)((int)sVar1 / iVar3);
-                break;
-            case 9:
-                param_1 = param_3 - param_1;
-                break;
-            case 10:
-                PsxRam.WriteU16(
-                    AnimVm.g_animSharedVarTable + ((int)(param_3 << 0x10) >> 0xf), (ushort)sVar1);
-                iVar3 = (int)(param_1 << 0x10);
-                return iVar3 >> 0x10;
-            case 0xb:
-                uVar2 = (uint)rand();
-                param_1 = param_1 + (param_3 & uVar2);
-                break;
-            case 0xc:
-                iVar3 = (short)param_3;
-                param_1 = (uint)((int)sVar1 % iVar3);
-                break;
-        }
-        iVar3 = (int)(param_1 << 0x10);
-        return iVar3 >> 0x10;
-    }
 }

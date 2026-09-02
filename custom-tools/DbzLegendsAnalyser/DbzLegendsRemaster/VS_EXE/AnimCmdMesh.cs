@@ -618,7 +618,7 @@ internal static class AnimCmdMesh
                 uVar6 = (ushort)(uVar5 & 0x3f);
                 if (iVar4 == 1)
                 {
-                    unaff_s3 = FUN_8003f2b0(uVar5 & 0x1f, uVar11);
+                    unaff_s3 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar5 & 0x1f), uVar11);
                     iVar4 = unaff_s3;
                     if (iVar4 == 0)
                     {
@@ -629,7 +629,7 @@ internal static class AnimCmdMesh
                 {
                     if (iVar4 == 0)
                     {
-                        unaff_s4 = FUN_8003f228(uVar5 & 0x3f, uVar11);
+                        unaff_s4 = AnimCmdTransform.FUN_8003f228((uint)(uVar5 & 0x3f), uVar11);
                         iVar4 = unaff_s4;
                         if (iVar4 == 0)
                         {
@@ -854,7 +854,7 @@ internal static class AnimCmdMesh
                 do
                 {
                     psVar7 = g_meshEntryFlagsHiBuf + ((iVar5 << 0x10) >> 0xf);
-                    sVar3 = (short)FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar7), uStack_24,
+                    sVar3 = (short)AnimCmdTransform.FUN_8003f540((uint)(int)(short)PsxRam.ReadU16(psVar7), (short)(uStack_24),
                         (uint)(int)(short)uVar4);
                     PsxRam.WriteU16(psVar7, (ushort)sVar3);
                     if (uStack_24 == 8)
@@ -917,7 +917,7 @@ internal static class AnimCmdMesh
                 uStack_1e = PsxRam.ReadU16(AnimVm.g_animSharedVarTable + (uStack_1e & 0xfff) * 2);
             }
 
-            iVar1 = FUN_8003f2b0((uint)((int)(sbyte)(PsxRam.ReadU16(streamPtr) >> 8) & 0x3f),
+            iVar1 = AnimCmdTransform.FUN_8003f2b0((uint)((int)(sbyte)(PsxRam.ReadU16(streamPtr) >> 8) & 0x3f),
                 PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
             if (iVar1 != 0)
             {
@@ -962,9 +962,9 @@ internal static class AnimCmdMesh
         uVar2 = PsxRam.ReadU16(streamPtr + 2 * 2);
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            iVar3 = FUN_8003f228((uint)(int)(sbyte)(PsxRam.ReadU16(streamPtr) >> 8), uVar6);
-            iVar4 = FUN_8003f228((uint)(uVar1 & 0xff), uVar6);
-            if (iVar3 != 0 && iVar4 != 0 && (iVar5 = FUN_8003f2b0((uint)(uVar1 >> 8), uVar6)) != 0)
+            iVar3 = AnimCmdTransform.FUN_8003f228((uint)(int)(sbyte)(PsxRam.ReadU16(streamPtr) >> 8), uVar6);
+            iVar4 = AnimCmdTransform.FUN_8003f228((uint)(uVar1 & 0xff), uVar6);
+            if (iVar3 != 0 && iVar4 != 0 && (iVar5 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar1 >> 8), uVar6)) != 0)
             {
                 FUN_80045f34(iVar3, iVar4, iVar5);
                 PsxRam.WriteU16(iVar5 + 2, (ushort)(((short)PsxRam.ReadU16(iVar5 + 2) + uVar2) & 0xfff));
@@ -1050,7 +1050,7 @@ internal static class AnimCmdMesh
             uStack_5a = PsxRam.ReadU16(AnimVm.g_animSharedVarTable + (uVar9 & 0xf) * 2);
         }
 
-        psVar5 = FUN_8003f228((uint)(int)sStack_60, uVar11);
+        psVar5 = AnimCmdTransform.FUN_8003f228((uint)(int)sStack_60, uVar11);
         if (psVar5 == 0)
         {
             return streamPtr;
@@ -1066,8 +1066,8 @@ internal static class AnimCmdMesh
             goto code_r0x8003c9c4;
         }
 
-        psVar6 = FUN_8003f228((uint)(int)(short)uStack_5e, uVar11);
-        psVar7 = FUN_8003f228((uint)(int)(short)uStack_5a, uVar11);
+        psVar6 = AnimCmdTransform.FUN_8003f228((uint)(int)(short)uStack_5e, uVar11);
+        psVar7 = AnimCmdTransform.FUN_8003f228((uint)(int)(short)uStack_5a, uVar11);
         if (psVar6 == 0)
         {
             return streamPtr;
@@ -1188,38 +1188,6 @@ internal static class AnimCmdMesh
     // small and fully readable, and are described below so that the next slice does not have to
     // re-derive them.
 
-    // GHIDRA: FUN_8003f228 @ 0x8003F228 (VS.EXE)
-    // BLOCKED — shared VM machinery, twenty call sites, not this family's to own.
-    // Resolves an operand selector to a TRANSLATION slot address and returns 0 for "none":
-    // bit 4 set -> `&AnimVm.UNK_801f2080 + (sel & 0xf) * 8`; else bit 5 set -> `(&DAT_801faaac)[sel & 0xf]`
-    // plus 0x3c, 0 when that entry is 0; else selector < 6 -> `*(int *)(ctx + 0x18 + sel * 4)` plus
-    // 0x114, 0 when that entry is 0; else 0.
-    private static int FUN_8003f228(uint param_1, int param_2)
-    {
-        return 0;
-    }
-
-    // GHIDRA: FUN_8003f2b0 @ 0x8003F2B0 (VS.EXE)
-    // BLOCKED — shared VM machinery, twelve call sites.
-    // The ROTATION counterpart of FUN_8003f228: bit 4 set -> `&AnimVm.DAT_801f2000 + (sel & 0xf) * 8`;
-    // else selector < 6 -> `*(int *)(ctx + 0x18 + sel * 4)` plus 0x11c, 0 when that entry is 0;
-    // else `&DAT_1f800084`, the scratchpad short already declared in VS_EXE/FileIo.cs.
-    private static int FUN_8003f2b0(uint param_1, int param_2)
-    {
-        return 0;
-    }
-
-    // GHIDRA: FUN_8003f540 @ 0x8003F540 (VS.EXE)
-    // BLOCKED — shared VM machinery, forty-two call sites.
-    // The VM's arithmetic dispatcher, `param_2` selecting the operation on (param_1, param_3):
-    // 0 set, 1 add, 2 sub, 3 or, 4 and, 5 xor, 6 multiply, 7 divide (with the MIPS divide-by-zero
-    // and INT_MIN/-1 traps intact), 9 reverse subtract. Case 8 is absent, which is why
-    // AnimCmd_XMaxSet special-cases operator 8 into a slot copy after the call.
-    private static int FUN_8003f540(uint param_1, ushort param_2, uint param_3)
-    {
-        return 0;
-    }
-
     // GHIDRA: FUN_8003f6c0 @ 0x8003F6C0 (VS.EXE)
     // BLOCKED — and this one is blocked by the SDK, not by ownership: it has exactly ONE caller,
     // AnimCmd_CulSet at 0x80038998, so it is this family's function and nothing else will claim it.
@@ -1241,17 +1209,34 @@ internal static class AnimCmdMesh
     {
     }
 
-    // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
-    // BLOCKED: 312 bytes, called by AnimCmd_MovexpSet with the resolved rotation slot, the ADDRESS
-    // of the DAT_801faa84 triple, a twelve-bit value, and two more operands. Semantics not closed.
-    private static void FUN_80047550(int param_1, int param_2, uint param_3, ushort param_4, int param_5)
-    {
-    }
-
     // GHIDRA: FUN_80045f34 @ 0x80045F34 (VS.EXE)
     // BLOCKED: 712 bytes, called by AnimCmd_DistSet with two translation slots and one rotation
     // slot. Semantics not closed.
     private static void FUN_80045f34(int param_1, int param_2, int param_3)
     {
     }
+    // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
+    // BLOCKED: 312 bytes, called by AnimCmd_MovexpSet avec le creneau de rotation resolu, l'ADRESSE
+    // du triplet DAT_801faa84, une valeur de douze bits, et deux operandes de plus.
+    //
+    // CETTE SOUCHE EST DELIBEREMENT LAISSEE EN DOUBLE, ET C'EST LA SEULE DU PORTAGE.
+    // AnimCmdControl.cs porte la meme adresse avec une AUTRE liste de parametres:
+    //     ici      (int param_1, int  param_2, uint param_3, ushort param_4, int param_5)
+    //     la-bas   (int param_1, VECTOR param_2, int param_3, short  param_4, int param_5)
+    // Les octets disent que les deux ont raison sur le fond: `a1` est un POINTEUR aux deux sites
+    // d'appel — `lui a1,0x801f; ori a1,a1,-21884` donne 0x801FAA84 ici (0x8003C4B0..0x8003C4C0),
+    // et `addiu a1,sp,104` donne une adresse de pile la-bas (0x8003AB3C). Un pointeur dans les deux
+    // cas, vers un triplet en forme de VECTOR.
+    //
+    // Mais les deux sites ne peuvent PAS s'ecrire avec un seul type C#: AnimCmdControl passe
+    // `VStack_80`, un `VECTOR` managé cree par `new()` et qui n'a aucune adresse PSX, tandis qu'ici
+    // l'argument EST une adresse PSX. Les unifier demande de decider comment ce portage represente
+    // une VECTOR de pile adressable — une decision d'architecture, pas une deduction. Les neuf
+    // autres doublons de VS.EXE ont ete fusionnes; celui-ci attend cette decision, et le dire
+    // explicitement vaut mieux que de choisir en silence l'un des deux et de casser l'autre site.
+    // Les deux corps sont vides, donc rien ne diverge tant qu'aucun des deux n'est transliteré.
+    private static void FUN_80047550(int param_1, int param_2, uint param_3, ushort param_4, int param_5)
+    {
+    }
+
 }
