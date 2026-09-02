@@ -146,6 +146,23 @@ internal static class FighterSetup
         int puVar1;
         int iVar2;
 
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: the original hands &LAB_80050AE4 to CreateTask, which stores the raw pointer at
+        // node+0x04 — and this port stores the same 0x80050AE4 there, so a node built here compares
+        // byte for byte with one read out of PCSX-Redux. This line is what lets TaskSystem's
+        // dispatcher turn that address back into the ported body when ExecuteTaskList walks list 10.
+        // PrimitivePools.CreatePrimitivePools makes the same call before its own CreateTask.
+        //
+        // IT WAS MISSING, and a fresh verification is what found it. FighterTask.cs exposed the
+        // registration rather than performing it, because when it was written the creator of a
+        // fighter was not yet ported; this file then ported the creator without making the call.
+        // Six live task nodes carrying 0x80050AE4, an ordering table walking them every frame, and
+        // no callback registered: the dispatcher skips an unknown address rather than failing, so
+        // the whole fighter body was compiled and unreachable with a green build and nine green
+        // benches. The same shape as the empty stub main was calling one layer up.
+        // Registration is idempotent; the original calls the creator six times and so does this.
+        FighterTask.RegisterFighterTask();
+
         puVar1 = TaskSystem.CreateTask(
             BattleState.FighterEntry, 0, 10, BattleState.FighterSize, 1, TaskSystem.g_TaskListTail[10]);
         if (puVar1 != 0)
@@ -172,19 +189,19 @@ internal static class FighterSetup
             // it with. Nothing new is declared for it here.
             if (SharedHighRam.SHORT_ARRAY_801ff000[0x80] == 1)
             {
-                PsxRam.WriteU16(iVar2 + BattleState.FighterPlacementScale, 20000);
+                PsxRam.WriteU16(iVar2 + BattleState.FighterBoundsMax, 20000);
                 PsxRam.WriteU16(iVar2 + 0xba, 0x78);
                 PsxRam.WriteU16(iVar2 + 0xbc, 20000);
-                PsxRam.WriteU16(iVar2 + BattleState.FighterPlacementRot, 0xb1e0);
+                PsxRam.WriteU16(iVar2 + BattleState.FighterBoundsMin, 0xb1e0);
                 PsxRam.WriteU16(iVar2 + 0xb2, 0xf448);
                 PsxRam.WriteU16(iVar2 + 0xb4, 0xb1e0);
             }
             else
             {
-                PsxRam.WriteU16(iVar2 + BattleState.FighterPlacementScale, 0x1e0);
+                PsxRam.WriteU16(iVar2 + BattleState.FighterBoundsMax, 0x1e0);
                 PsxRam.WriteU16(iVar2 + 0xba, 0x78);
                 PsxRam.WriteU16(iVar2 + 0xbc, 0x1e0);
-                PsxRam.WriteU16(iVar2 + BattleState.FighterPlacementRot, 0xfe20);
+                PsxRam.WriteU16(iVar2 + BattleState.FighterBoundsMin, 0xfe20);
                 PsxRam.WriteU16(iVar2 + 0xb2, 0xfd00);
                 PsxRam.WriteU16(iVar2 + 0xb4, 0xfe20);
             }
@@ -199,8 +216,8 @@ internal static class FighterSetup
             PsxRam.WriteI32(iVar2 + 0x18, iVar2 + BattleState.FighterZeroedFrom114);
             PsxRam.WriteI32(iVar2 + 0x1c, iVar2 + BattleState.FighterBlock80);
             PsxRam.WriteI32(iVar2 + 0x20, iVar2 + BattleState.FighterBlockD0);
-            PsxRam.WriteI32(iVar2 + 0x24, iVar2 + BattleState.FighterPlacement);
-            PsxRam.WriteI32(iVar2 + 0x28, iVar2 + BattleState.FighterPlacementScale);
+            PsxRam.WriteI32(iVar2 + 0x24, iVar2 + BattleState.FighterBoundsMin);
+            PsxRam.WriteI32(iVar2 + 0x28, iVar2 + BattleState.FighterBoundsMax);
             PsxRam.WriteI32(iVar2 + 0x2c, iVar2 + 0x134);
             PsxRam.WriteI32(iVar2 + 0x34, iVar2);
             PsxRam.WriteI32(iVar2 + 0x38, iVar2 + 0xf4);

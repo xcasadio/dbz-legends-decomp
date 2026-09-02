@@ -96,10 +96,10 @@ internal static class BattleState
     internal const int FighterSelfPointersEnd = 0x7C;
 
     // GHIDRA: fighter + 0x80, + 0xB0, + 0xD0 (VS.EXE)
-    // The three sub-blocks the self-pointer table addresses.
+    // The three sub-blocks the self-pointer table addresses. +0xB0 is FighterBoundsMin below;
+    // it had a second name here, which is one offset with two spellings and exactly the kind of
+    // fork this file exists to stop.
     internal const int FighterBlock80 = 0x80;
-
-    internal const int FighterPlacement = 0xB0;
 
     internal const int FighterBlockD0 = 0xD0;
 
@@ -136,13 +136,13 @@ internal static class BattleState
     // =====================================================================================
     // FUN_800512CC branches on DAT_801FF100 and writes one of two triples into +0xB0..+0xBC:
     //
-    //            DAT_801FF100 == 1            otherwise
-    //   +0xB0    0xB1E0                       0xFE20
-    //   +0xB2    0xF448                       0xFD00
-    //   +0xB4    0xB1E0                       0xFE20
-    //   +0xB8    20000                        0x1E0
-    //   +0xBA    0x78                         0x78
-    //   +0xBC    20000                        0x1E0
+    //            DAT_801FF100 == 1            otherwise        signed
+    //   +0xB0    0xB1E0                       0xFE20            min X: -20000 / -480
+    //   +0xB2    0xF448                       0xFD00            min Y:  -3000 / -768
+    //   +0xB4    0xB1E0                       0xFE20            min Z: -20000 / -480
+    //   +0xB8    20000                        0x1E0             max X:  20000 /  480
+    //   +0xBA    0x78                         0x78              max Y:    120 /  120
+    //   +0xBC    20000                        0x1E0             max Z:  20000 /  480
     //
     // DAT_801FF100 IS THE HANDOVER WORD SELECT.EXE WRITES. The reconnaissance closed that it is a
     // mode-and-result word, not a character id — three values in on entry, 3/4/5 written back on
@@ -152,9 +152,20 @@ internal static class BattleState
     //
     // It is read through SharedHighRam, which already models the 0x801FF000 block for every
     // overlay: this file does not redeclare it.
-    internal const int FighterPlacementRot = 0xB0;
+    // CORRECTED, AND THE CORRECTION IS MINE TO OWN. These were first named FighterPlacementRot and
+    // FighterPlacementScale, on nothing better than their neighbours and the fact that a fighter has
+    // to be placed somewhere. The fighter task reads them as the two corners of an AXIS-ALIGNED BOX
+    // it clamps the position triple into, one comparison per axis, and the values agree: the default
+    // set spans (-480, -768, -480) to (480, 120, 480), and the DAT_801FF100 == 1 set spans
+    // (-20000, -3000, -20000) to (20000, 120, 20000) — a wider arena, same floor height.
+    // Nothing rotates and nothing scales. Rule 11: a speculative name that hides an unknown is worse
+    // than a raw one, and this pair had been hiding a clamp box.
+    //
+    // The slice that found it reported it upward instead of renaming, which is what the ownership
+    // rule asks of a slice that does not own this file.
+    internal const int FighterBoundsMin = 0xB0;
 
-    internal const int FighterPlacementScale = 0xB8;
+    internal const int FighterBoundsMax = 0xB8;
 
     // =====================================================================================
     // THE TASK ENTRY POINTS

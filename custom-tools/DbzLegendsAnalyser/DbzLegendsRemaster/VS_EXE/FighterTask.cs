@@ -40,8 +40,8 @@ namespace DbzLegendsRemaster.VS_EXE;
 // phase 1 fails and this callback returns -1 on every frame until something else raises +0x144.
 // That is the original's behaviour and is reproduced, not corrected.
 //
-// WHAT +0xB0 AND +0xB8 ACTUALLY ARE. BattleState names them FighterPlacementRot and
-// FighterPlacementScale. Phase 2 reads them as an AXIS-ALIGNED BOX around the position triple at
+// WHAT +0xB0 AND +0xB8 ACTUALLY ARE. BattleState names them FighterBoundsMin and
+// FighterBoundsMax. Phase 2 reads them as an AXIS-ALIGNED BOX around the position triple at
 // +0x114: +0xB0/+0xB2/+0xB4 are the per-axis MINIMA and +0xB8/+0xBA/+0xBC the MAXIMA, and the six
 // values FUN_800512cc writes are consistent with that and with nothing else —
 // (0xB1E0, 0xF448, 0xB1E0) is (-20000, -3000, -20000) against (20000, 120, 20000), and the other
@@ -109,38 +109,38 @@ internal static class FighterTask
 
             if ((sbyte)PsxRam.ReadU8(iVar3 + 0x16a) == 0
                 && (short)PsxRam.ReadU16(iVar3 + 0x116)
-                   < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot + 2))
+                   < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin + 2))
             {
                 PsxRam.WriteU16(iVar3 + 0x116,
-                    PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot + 2));
+                    PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin + 2));
             }
 
-            if ((short)PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementScale)
+            if ((short)PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMax)
                 < (short)PsxRam.ReadU16(iVar3 + 0x114))
             {
                 PsxRam.WriteU16(iVar3 + 0x114,
-                    PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementScale));
+                    PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMax));
             }
 
             if ((short)PsxRam.ReadU16(iVar3 + 0x114)
-                < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot))
+                < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin))
             {
                 PsxRam.WriteU16(iVar3 + 0x114,
-                    PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot));
+                    PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin));
             }
 
-            if ((short)PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementScale + 4)
+            if ((short)PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMax + 4)
                 < (short)PsxRam.ReadU16(iVar3 + 0x118))
             {
                 PsxRam.WriteU16(iVar3 + 0x118,
-                    PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementScale + 4));
+                    PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMax + 4));
             }
 
             if ((short)PsxRam.ReadU16(iVar3 + 0x118)
-                < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot + 4))
+                < (short)PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin + 4))
             {
                 PsxRam.WriteU16(iVar3 + 0x118,
-                    PsxRam.ReadU16(iVar3 + BattleState.FighterPlacementRot + 4));
+                    PsxRam.ReadU16(iVar3 + BattleState.FighterBoundsMin + 4));
             }
 
             // PHASE 3 @ 0x80050C90 — the animation VM's suspend gate, the same
