@@ -108,6 +108,37 @@ internal static class SelectIntroDiagnostic
         }
 
         Console.WriteLine($"  enregistrements      :{records}");
+
+        // JUSTIFICATION: backend MonoGame only
+        // RELATION: this row-3 confirm reaches CardRecords.FUN_800276d8, whose mode 2/3 arms are the
+        // two call sites the mandate names for ShowCardMessage(5) / ShowCardMessage(1). ShowCardMessage
+        // draws exactly two frames with the dim boxfill armed, then restores the five sprites and
+        // draws a third with them back to normal — double buffering means the message frame's content
+        // survives in whichever of the two VRAM pages the restore frame did NOT just overwrite, so
+        // dumping both after Drive() returns is enough to see it without editing MemoryCard.cs to add
+        // a capture hook.
+        LibGs.GsBOXF boxf0 = FrameStep.GsBOXF_ARRAY_80067b68[0];
+        Console.WriteLine(
+            $"  boxfill[0] apres l'appel : attr=0x{boxf0.attribute:X8} x={boxf0.x} y={boxf0.y} " +
+            $"w={boxf0.w} h={boxf0.h} rgb=({boxf0.r},{boxf0.g},{boxf0.b})");
+        for (int page = 0; page < 2; page++)
+        {
+            int vy = page * 240;
+            int lit = 0;
+            for (int y = 0; y < 240; y++)
+            {
+                for (int x = 0; x < 320; x++)
+                {
+                    if (LibGpu.Vram[((vy + y) * 1024) + x] != 0)
+                    {
+                        lit++;
+                    }
+                }
+            }
+
+            Console.WriteLine($"  VRAM page{page}: {lit} pixels allumes");
+            DumpBmp(0, vy, 320, 240, $"saveload_{arg}_page{page}.bmp");
+        }
     }
 
     internal static int RunOptions(string[] args)

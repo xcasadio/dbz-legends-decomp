@@ -60,3 +60,4 @@ obj/
 # Sorties du diagnostic --diag-select, ou que dotnet run les depose
 select_page*.bmp
 options_page*.bmp
+saveload_*.bmp

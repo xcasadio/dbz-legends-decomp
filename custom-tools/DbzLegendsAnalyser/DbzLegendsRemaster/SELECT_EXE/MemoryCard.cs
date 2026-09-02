@@ -2,6 +2,7 @@
 using static PsxSdkMonogame.Kernel;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibEtc;
+using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.SELECT_EXE;
 
@@ -775,18 +776,297 @@ internal static class MemoryCard
     // through the Cross arm. None of the three is reachable on this port's boot path anyway — see
     // that function's own remarks.
 
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: the original's `*dst = *src` on a GsSPRITE, the same shape MenuIntro.CopySprite is.
+    // ShowCardMessage below runs its own field-by-field struct copy TWICE — once to snapshot the
+    // five live sprites into local_d0 before overwriting them, once to restore local_d0 back into
+    // the array afterwards — and LibGs.GsSPRITE is a CLASS in this port, so `dst = src` would alias
+    // one object instead of copying it. MenuIntro's copy is private to that file, so this is its own
+    // instance rather than a cross-file reuse of a private helper.
+    private static void CopySprite(LibGs.GsSPRITE dst, LibGs.GsSPRITE src)
+    {
+        dst.attribute = src.attribute;
+        dst.x = src.x;
+        dst.y = src.y;
+        dst.w = src.w;
+        dst.h = src.h;
+        dst.tpage = src.tpage;
+        dst.u = src.u;
+        dst.v = src.v;
+        dst.cx = src.cx;
+        dst.cy = src.cy;
+        dst.r = src.r;
+        dst.g = src.g;
+        dst.b = src.b;
+        dst.mx = src.mx;
+        dst.my = src.my;
+        dst.scalex = src.scalex;
+        dst.scaley = src.scaley;
+        dst.rotate = src.rotate;
+    }
+
+    // GHIDRA: DAT_800c0000 @ 0x800C0000
+    // get-data on SELECT.EXE reports no memory at this address — it sits far past the overlay's own
+    // image (the .sdata/.sbss globals this file already carries top out around 0x80056000). Taking
+    // its ADDRESS and handing that to StoreImage/LoadImage as a `u_long *` is the only thing
+    // ShowCardMessage does with it, so it is a bounce buffer in unmapped scratch RAM rather than a
+    // named global with its own meaning — kept private to this function, the same scope the original
+    // gives it (nothing else in the eleven ShowCardMessage call sites, or anywhere else searched,
+    // references 0x800C0000). Sized for the 320x240 halfword round trip the two calls below perform
+    // (320 * 240 * 2 bytes), which is the same sizing StoreImage/LoadImage's byte[] overloads use
+    // elsewhere in this port (LibGpu.cs, BYTE_ARRAY_801771a0).
+    private static readonly byte[] DAT_800c0000 = new byte[0x140 * 0xf0 * 2];
+
     // GHIDRA: ShowCardMessage @ 0x80027A58
+    // Two hundred and eighty-eight lines, five callees (StoreImage, DrawSync x3, MoveImage,
+    // DrawFrame x4) — verified against get-decompilation's callee counts. Eleven call sites across
+    // RunSaveLoadFlow (three), RunSaveWriteFlow (six) and FUN_800276d8 (two) — the mode-2 arm there
+    // calls ShowCardMessage(5), the mode-3 arm ShowCardMessage(1), both confirmed from the incoming
+    // references list.
+    //
+    // WHAT IT DOES, IN ORDER: stash the just-rendered 320x240 frame into off-screen VRAM at
+    // (0x280, 0) (StoreImage the old contents of that scratch area out to DAT_800c0000, draw one
+    // frame, then MoveImage the on-screen 320x240 rect there); reset the first five entries of
+    // GsSPRITE_ARRAY_800654ec to a shared default (tpage 0x1F, cx = 0x170, cy = 0x1F6, 24x16,
+    // full-alpha white, unit scale) while snapshotting their PREVIOUS contents into local_d0;
+    // the switch on param_1 arms message-specific x/y/u/v/w on top of those defaults; every path
+    // then adds 0x80 to v on all five (the palette-bank-16 rows FUN_80030848 already established);
+    // arms FrameStep.GsBOXF_ARRAY_80067b68[0] (the full-screen dim box FrameStep.cs documents as
+    // ONLY ever written here) and sprite index 4 (a 0xFF x 0xFF backdrop tile); sets DAT_80055b80's
+    // bits 0 and 3 (suppress background clear, take the boxfill pass) and draws two frames; clears
+    // those bits; restores the five sprites from local_d0; and finally LoadImage's DAT_800c0000 back
+    // over the same (0x280, 0) rect before one last DrawFrame. This is the standard "freeze the
+    // screen behind a dimmed message box" idiom — LibGpu.cs's own note on MoveImage documents the
+    // same x = 0x280/0x2c0 off-screen VRAM strip being used as spare storage elsewhere in this image.
     internal static void ShowCardMessage(int param_1)
     {
-        // BLOCKED: the memory-card message overlay, 2376 bytes / 288 lines, ending at 0x8002839F
-        // immediately before the mode menu RunModeMenu. It saves the 320x240 frame to VRAM at
-        // (0x280, 0) with StoreImage, MoveImage's it back, builds five transient GsSPRITE overlays on
-        // tpage 0x1F at cx = 0x170 / cy = 0x1F6 out of GsSPRITE_ARRAY_800654ec, and drives the frame
-        // step DrawFrame four times inline. Eleven call sites across the four card screens; its
-        // argument selects which message.
-        // Not this module and not this slice: it is a screen body, it owns the boxfill element
-        // FrameStep.cs already documents as "only ever written by ShowCardMessage", and it needs the
-        // sprite/VRAM work the screen-body slice owns.
-        _ = param_1;
+        RECT storeRect = new RECT { x = 0x280, y = 0, w = 0x140, h = 0xf0 };
+        StoreImage(storeRect, DAT_800c0000);
+        DrawSync(0);
+        FrameStep.DrawFrame();
+
+        RECT moveRect = new RECT { x = 0, y = 0, w = 0x140, h = 0xf0 };
+        MoveImage(moveRect, 0x280, 0);
+        DrawSync(0);
+
+        // local_d0: the five-sprite snapshot the tail of this function restores from. Built in the
+        // SAME pass that arms the shared defaults below, exactly as the original's combined
+        // save+overwrite loop does.
+        LibGs.GsSPRITE[] local_d0 = new LibGs.GsSPRITE[5];
+        for (int snapshotIndex = 0; snapshotIndex < 5; snapshotIndex++)
+        {
+            local_d0[snapshotIndex] = new LibGs.GsSPRITE();
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            LibGs.GsSPRITE sprite = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[i];
+            CopySprite(local_d0[i], sprite);
+            sprite.tpage = 0x1f;
+            sprite.h = 0x10;
+            sprite.b = 0x80;
+            sprite.g = 0x80;
+            sprite.r = 0x80;
+            sprite.my = 0;
+            sprite.cx = 0x170;
+            sprite.mx = 0;
+            sprite.cy = 0x1f6;
+            sprite.scaley = 0x1000;
+            sprite.scalex = 0x1000;
+            sprite.rotate = 0;
+            sprite.attribute = 0x80000000;
+        }
+
+        LibGs.GsSPRITE s0 = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[0];
+        LibGs.GsSPRITE s1 = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[1];
+        LibGs.GsSPRITE s2 = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[2];
+        LibGs.GsSPRITE s3 = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[3];
+        LibGs.GsSPRITE s4 = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[4];
+
+        switch (param_1)
+        {
+            case 1:
+            case 5:
+                if (param_1 == 1)
+                {
+                    s0.v = 0x10;
+                    s0.w = 0x50;
+                }
+                else
+                {
+                    s0.v = 0;
+                    s0.w = 0x50;
+                }
+
+                goto LAB_800281d8;
+            case 2:
+                s0.x = -0x50;
+                s0.u = 0x78;
+                s0.v = 0x30;
+                s0.w = 0x48;
+                s1.x = -8;
+                s1.u = 0x50;
+                s1.v = 0x10;
+                s2.y = 0xc;
+                s0.y = -0xc;
+                s1.y = -0xc;
+                break;
+            case 3:
+                s0.x = -0x50;
+                s0.y = -0x14;
+                s0.w = 0xa8;
+                s1.x = -0x2c;
+                s1.y = -4;
+                s1.v = 0x10;
+                s2.y = 0x14;
+                s0.u = 0x50;
+                s0.v = 0;
+                s1.u = 0x50;
+                break;
+            case 4:
+            case 9:
+                s0.x = -0x40;
+                if (param_1 == 4)
+                {
+                    s0.v = 0x10;
+                }
+                else
+                {
+                    s0.v = 0;
+                }
+
+                s1.x = -8;
+                s2.x = -0x28;
+                s0.w = 0x38;
+                goto LAB_800280c4;
+            case 6:
+                s0.x = -0x60;
+                s0.y = -0x1c;
+                s0.v = 0x60;
+                s0.w = 0xc0;
+                s1.x = -0x5c;
+                s1.y = -0xc;
+                s1.v = 0x70;
+                s1.w = 0xb0;
+                s2.x = -0x48;
+                s2.y = 0xc;
+                s2.u = 0x58;
+                s2.v = 0x40;
+                s2.w = 0x90;
+                s0.u = 0;
+                s0.attribute = 0;
+                s1.u = 0;
+                s1.attribute = 0;
+                s2.h = 0x20;
+                s2.attribute = 0;
+                goto switchD_80027c38_default;
+            case 7:
+                s0.x = -0x50;
+                s0.v = 0x60;
+                s0.w = 0x60;
+                s1.x = 0x10;
+                s2.x = -0x20;
+                goto LAB_800280c4;
+            case 8:
+                s0.y = -0x14;
+                s0.v = 0x40;
+                s1.x = -0x10;
+                s1.y = -4;
+                s1.v = 0x50;
+                s2.y = 0x14;
+                s0.x = -0x40;
+                s0.u = 0;
+                s0.w = 0x58;
+                s1.u = 0;
+                break;
+            case 10:
+                s0.v = 0x20;
+                s0.w = 0x58;
+                goto LAB_800281d8;
+            default:
+                goto switchD_80027c38_default;
+        }
+
+        s2.v = 0x20;
+        s2.u = 0x58;
+        s2.x = -0x40;
+        s1.w = 0x58;
+        s1.attribute = 0;
+        s0.attribute = 0;
+        s2.w = 0x88;
+        s2.attribute = 0;
+        goto switchD_80027c38_default;
+
+    LAB_800280c4:
+        s3.v = 0x20;
+        s3.u = 0x58;
+        s3.y = 0x14;
+        s3.x = -0x40;
+        s2.v = 0x30;
+        s2.u = 0x38;
+        s2.w = 0x40;
+        s2.y = -4;
+        s1.v = 0x30;
+        s1.u = 0;
+        s1.w = 0x38;
+        s1.y = -0x14;
+        s1.attribute = 0;
+        s0.u = 0;
+        s0.y = -0x14;
+        s0.attribute = 0;
+        s2.attribute = 0;
+        s3.w = 0x88;
+        s3.attribute = 0;
+        goto switchD_80027c38_default;
+
+    LAB_800281d8:
+        s0.u = 0;
+        s0.y = -0xc;
+        s0.x = -0x30;
+        s0.attribute = 0;
+
+    switchD_80027c38_default:
+        for (int i = 0; i < 5; i++)
+        {
+            LibGs.GsSPRITE sprite = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[i];
+            sprite.v = (byte)(sprite.v + 0x80);
+        }
+
+        LibGs.GsBOXF boxf0 = FrameStep.GsBOXF_ARRAY_80067b68[0];
+        boxf0.w = 0x140;
+        boxf0.x = -0xa0;
+        boxf0.y = -0x78;
+        boxf0.h = 0xf0;
+        boxf0.r = 0;
+        boxf0.g = 0;
+        boxf0.b = 1;
+        boxf0.attribute = 0x40000000;
+        if (s0.attribute != 0)
+        {
+            boxf0.attribute = 0x80000000;
+        }
+
+        s4.tpage = 10;
+        s4.w = 0xff;
+        s4.h = 0xff;
+        s4.x = -0xa0;
+        s4.y = -0x78;
+        s4.u = 0;
+        s4.v = 0;
+        s4.attribute = 0x2000000;
+
+        SELECT_EXE_exe.DAT_80055b80 = SELECT_EXE_exe.DAT_80055b80 | 9;
+        FrameStep.DrawFrame();
+        FrameStep.DrawFrame();
+        SELECT_EXE_exe.DAT_80055b80 = SELECT_EXE_exe.DAT_80055b80 & unchecked((int)0xfffffff6);
+
+        for (int i = 0; i < 5; i++)
+        {
+            CopySprite(SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec[i], local_d0[i]);
+        }
+
+        LoadImage(storeRect, DAT_800c0000, 0);
+        DrawSync(0);
+        FrameStep.DrawFrame();
     }
 }
