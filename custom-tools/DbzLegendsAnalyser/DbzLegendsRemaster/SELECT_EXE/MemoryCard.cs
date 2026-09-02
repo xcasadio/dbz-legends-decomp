@@ -97,22 +97,17 @@ internal static class MemoryCard
     // 1 to the caller. It is reset to 0 by states 0 and 1.
     internal static ushort DAT_80055a8c;
 
-    // GHIDRA: DAT_80055b54 @ 0x80055B54
-    // .sbss, undefined4. OpenEvent(0xF4000001, 0x0004, 0x2000, NULL) — card command completed.
-    private static int DAT_80055b54;
-
-    // GHIDRA: DAT_80055b58 @ 0x80055B58
-    // .sbss, undefined4. OpenEvent(0xF4000001, 0x8000, 0x2000, NULL) — card command failed.
-    private static int DAT_80055b58;
-
-    // GHIDRA: DAT_80055b5c @ 0x80055B5C
-    // .sbss, undefined4. OpenEvent(0xF4000001, 0x0100, 0x2000, NULL) — poll code 2.
-    private static int DAT_80055b5c;
-
-    // GHIDRA: DAT_80055b60 @ 0x80055B60
-    // .sbss, undefined4. OpenEvent(0xF4000001, 0x2000, 0x2000, NULL) — poll code 4, the "new /
-    // unformatted card" answer ProbeMemoryCard reacts to with _card_clear.
-    private static int DAT_80055b60;
+    // GHIDRA: g_SwCardEvents4 @ 0x80055B54, long[4]
+    // .sbss. Ghidra poses this as one four-element `long[4]` (MIPS32, so `long` is four bytes here);
+    // the C# port keeps `int[4]` as the exact same-width transliteration. Formerly four separate
+    // undefined4 words at 0x80055B54, 0x80055B58, 0x80055B5C and 0x80055B60, now indices:
+    //   [0] OpenEvent(0xF4000001, 0x0004, 0x2000, NULL) — card command completed.
+    //   [1] OpenEvent(0xF4000001, 0x8000, 0x2000, NULL) — card command failed.
+    //   [2] OpenEvent(0xF4000001, 0x0100, 0x2000, NULL) — poll code 2.
+    //   [3] OpenEvent(0xF4000001, 0x2000, 0x2000, NULL) — poll code 4, the "new / unformatted card"
+    //       answer ProbeMemoryCard reacts to with _card_clear.
+    // These are the four open event descriptors on the SwCARD class 0xF4000001.
+    private static readonly int[] g_SwCardEvents4 = new int[4];
 
     // GHIDRA: DAT_80055b68 @ 0x80055B68
     // .sbss, undefined2. ProbeMemoryCard sets it to 1 when the probe took the _card_clear arm and to 0
@@ -192,19 +187,19 @@ internal static class MemoryCard
     private static void OpenMemoryCardEvents()
     {
         EnterCriticalSection();
-        DAT_80055b54 = (int)OpenEvent(0xf4000001, 4, 0x2000, null);
-        DAT_80055b58 = (int)OpenEvent(0xf4000001, 0x8000, 0x2000, null);
-        DAT_80055b5c = (int)OpenEvent(0xf4000001, 0x100, 0x2000, null);
-        DAT_80055b60 = (int)OpenEvent(0xf4000001, 0x2000, 0x2000, null);
+        g_SwCardEvents4[0] = (int)OpenEvent(0xf4000001, 4, 0x2000, null);
+        g_SwCardEvents4[1] = (int)OpenEvent(0xf4000001, 0x8000, 0x2000, null);
+        g_SwCardEvents4[2] = (int)OpenEvent(0xf4000001, 0x100, 0x2000, null);
+        g_SwCardEvents4[3] = (int)OpenEvent(0xf4000001, 0x2000, 0x2000, null);
         DAT_80055b70 = (int)OpenEvent(0xf0000011, 4, 0x2000, null);
         DAT_80055b74 = (int)OpenEvent(0xf0000011, 0x8000, 0x2000, null);
         DAT_80055b78 = (int)OpenEvent(0xf0000011, 0x100, 0x2000, null);
         DAT_80055b7c = (int)OpenEvent(0xf0000011, 0x2000, 0x2000, null);
         ExitCriticalSection();
-        EnableEvent(DAT_80055b54);
-        EnableEvent(DAT_80055b58);
-        EnableEvent(DAT_80055b5c);
-        EnableEvent(DAT_80055b60);
+        EnableEvent(g_SwCardEvents4[0]);
+        EnableEvent(g_SwCardEvents4[1]);
+        EnableEvent(g_SwCardEvents4[2]);
+        EnableEvent(g_SwCardEvents4[3]);
         EnableEvent(DAT_80055b70);
         EnableEvent(DAT_80055b74);
         EnableEvent(DAT_80055b78);
@@ -232,10 +227,10 @@ internal static class MemoryCard
     // evidence for that (see the block comment above LibApi.TestEvent).
     private static void FUN_800222b8()
     {
-        TestEvent(DAT_80055b54);
-        TestEvent(DAT_80055b58);
-        TestEvent(DAT_80055b5c);
-        TestEvent(DAT_80055b60);
+        TestEvent(g_SwCardEvents4[0]);
+        TestEvent(g_SwCardEvents4[1]);
+        TestEvent(g_SwCardEvents4[2]);
+        TestEvent(g_SwCardEvents4[3]);
     }
 
     // GHIDRA: FUN_80022300 @ 0x80022300
@@ -260,25 +255,25 @@ internal static class MemoryCard
 
         do
         {
-            iVar1 = (int)TestEvent(DAT_80055b54);
+            iVar1 = (int)TestEvent(g_SwCardEvents4[0]);
             if (iVar1 == 1)
             {
                 return 0;
             }
 
-            iVar1 = (int)TestEvent(DAT_80055b58);
+            iVar1 = (int)TestEvent(g_SwCardEvents4[1]);
             if (iVar1 == 1)
             {
                 return 1;
             }
 
-            iVar1 = (int)TestEvent(DAT_80055b5c);
+            iVar1 = (int)TestEvent(g_SwCardEvents4[2]);
             if (iVar1 == 1)
             {
                 return 2;
             }
 
-            iVar1 = (int)TestEvent(DAT_80055b60);
+            iVar1 = (int)TestEvent(g_SwCardEvents4[3]);
         }
         while (iVar1 != 1);
 
@@ -389,19 +384,19 @@ internal static class MemoryCard
     // slice's path, and FUN_800276d8 @ 0x800276D8, which is not.
     internal static void ShutdownMemoryCard()
     {
-        DisableEvent(DAT_80055b54);
-        DisableEvent(DAT_80055b58);
-        DisableEvent(DAT_80055b5c);
-        DisableEvent(DAT_80055b60);
+        DisableEvent(g_SwCardEvents4[0]);
+        DisableEvent(g_SwCardEvents4[1]);
+        DisableEvent(g_SwCardEvents4[2]);
+        DisableEvent(g_SwCardEvents4[3]);
         DisableEvent(DAT_80055b70);
         DisableEvent(DAT_80055b74);
         DisableEvent(DAT_80055b78);
         DisableEvent(DAT_80055b7c);
         EnterCriticalSection();
-        CloseEvent(DAT_80055b54);
-        CloseEvent(DAT_80055b58);
-        CloseEvent(DAT_80055b5c);
-        CloseEvent(DAT_80055b60);
+        CloseEvent(g_SwCardEvents4[0]);
+        CloseEvent(g_SwCardEvents4[1]);
+        CloseEvent(g_SwCardEvents4[2]);
+        CloseEvent(g_SwCardEvents4[3]);
         CloseEvent(DAT_80055b70);
         CloseEvent(DAT_80055b74);
         CloseEvent(DAT_80055b78);

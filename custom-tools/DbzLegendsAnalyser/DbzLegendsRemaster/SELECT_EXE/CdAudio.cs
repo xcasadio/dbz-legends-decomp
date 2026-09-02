@@ -57,9 +57,9 @@ internal static class CdAudio
     // PARTIAL: bit 3 (8) is set by that same call and has no reader in the module.
     internal static int DAT_80055ac0;
 
-    // GHIDRA: g_CdResultBuffer8 @ 0x80055AD4
-    // .sbss. The EIGHT-BYTE libcd result buffer every command in this module is handed. Its
-    // second byte — what Ghidra names DAT_80055ad5 and reads with `lbu a0,0xed(gp)` — is the BCD
+    // GHIDRA: g_CdResultBuffer8 @ 0x80055AD4, byte[8]
+    // .sbss. The EIGHT-BYTE libcd result buffer every command in this module is handed. Ghidra now
+    // poses the whole thing as one array; its second byte — read with `lbu a0,0xed(gp)` — is the BCD
     // minute CdReady reports in CdlModeDA report mode.
     // EXTENT CLOSED AT BOTH ENDS: 0x80055AD4 is the address CdReady is given, and 0x80055ADC is
     // g_CdMixVolume, the four-byte CdlATV InitializeCdAudio hands to CdMix. Eight bytes, which is what a
@@ -138,8 +138,8 @@ internal static class CdAudio
             // is that short circuit, not a reordering.
             if (g_CdReadyResult == 1)
             {
-                // `(uint)(DAT_80055ad5 >> 4) * 10 + (DAT_80055ad5 & 0xf)` — packed BCD to binary,
-                // on result byte 1.
+                // `(uint)(g_CdResultBuffer8[1] >> 4) * 10 + (g_CdResultBuffer8[1] & 0xf)` — packed
+                // BCD to binary, on result byte 1.
                 DAT_80055ab8 = (g_CdResultBuffer8[1] >> 4) * 10 + (g_CdResultBuffer8[1] & 0xf);
                 if (g_CdPlayTocIndex < DAT_80055ab8)
                 {

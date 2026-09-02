@@ -45,15 +45,11 @@ internal static class ModeBranches
     // .sdata, undefined4, image value 0. THE SP PICKER'S CURSOR, 0..3.
     private static int g_SpListCursor;
 
-    // GHIDRA: g_SpBranchDigitCellRect @ 0x80055A48
-    // .sdata, undefined4, image value 0x00DD0000 (read with get-data; the bytes at 0x80055A48 are
-    // 00 00 DD 00). It is the FIRST HALF of a RECT constant: x = 0x0000, y = 0x00DD.
-    private static readonly uint g_SpBranchDigitCellRect = 0x00DD0000;
-
-    // GHIDRA: DAT_80055a4c @ 0x80055A4C
-    // .sdata, undefined4, image value 0x00100004 (bytes 04 00 10 00). The SECOND half of that RECT:
-    // w = 0x0004, h = 0x0010 — a four-by-sixteen digit cell.
-    private static readonly uint DAT_80055a4c = 0x00100004;
+    // GHIDRA: g_SpBranchDigitCellRect @ 0x80055A48, LibGpu.RECT
+    // .sdata. Ghidra now poses this as one RECT rather than two undefined4 words (the bytes at
+    // 0x80055A48 are 00 00 DD 00 00 04 00 10): x = 0x0000, y = 0x00DD, w = 0x0004, h = 0x0010 — a
+    // four-by-sixteen digit cell. Identical image to ScreenDecoration.g_SpBuildDigitCellRect.
+    private static readonly LibGpu.RECT g_SpBranchDigitCellRect = new() { x = 0x0000, y = 0x00DD, w = 0x0004, h = 0x0010 };
 
     // GHIDRA: DAT_801ff000 @ 0x801FF000
     // The 24-byte LAUNCH PARAMETER BLOCK the next overlay reads. The two card pickers write it and
@@ -106,7 +102,7 @@ internal static class ModeBranches
     // 1024 bytes. main's state 0 — the DEMO save-slot picker.
     //
     // Shape: load the three eight-byte records, publish their "exists" bits into
-    // ListCursor.g_ListRowAvailable4..87, preselect the last record whose bit 1 is set, draw the list, let
+    // ListCursor.g_ListRowAvailable4[0..3], preselect the last record whose bit 1 is set, draw the list, let
     // eight frames settle, then loop on ListCursor.RunListSelect(cursor, spriteBase 0x10, 4 rows,
     // screen 2). -1 unwinds back to the mode menu; -2 means the card changed and the list is rebuilt
     // in place; anything else is the chosen row. The chosen row's eight bytes are copied to
@@ -127,12 +123,12 @@ internal static class ModeBranches
 
         CardRecords.FUN_800276d8(0, g_DemoSaveRecords3_Address);
         iVar10 = 0;
-        ListCursor.g_ListRowAvailable4 = 1;
+        ListCursor.g_ListRowAvailable4[0] = 1;
         puVar4 = g_DemoSaveRecords3_Address;
         g_DemoListCursor = 0;
-        ListCursor.DAT_80055b85 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address) & 1);
-        ListCursor.DAT_80055b86 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 8) & 1);
-        ListCursor.DAT_80055b87 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 0x10) & 1);
+        ListCursor.g_ListRowAvailable4[1] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address) & 1);
+        ListCursor.g_ListRowAvailable4[2] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 8) & 1);
+        ListCursor.g_ListRowAvailable4[3] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 0x10) & 1);
         do
         {
             uVar1 = PsxRam.ReadU16(puVar4);
@@ -173,12 +169,12 @@ internal static class ModeBranches
 
             CardRecords.FUN_800276d8(0, g_DemoSaveRecords3_Address);
             iVar10 = 0;
-            ListCursor.g_ListRowAvailable4 = 1;
+            ListCursor.g_ListRowAvailable4[0] = 1;
             puVar4 = g_DemoSaveRecords3_Address;
             g_DemoListCursor = 0;
-            ListCursor.DAT_80055b85 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address) & 1);
-            ListCursor.DAT_80055b87 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 0x10) & 1);
-            ListCursor.DAT_80055b86 = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 8) & 1);
+            ListCursor.g_ListRowAvailable4[1] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address) & 1);
+            ListCursor.g_ListRowAvailable4[3] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 0x10) & 1);
+            ListCursor.g_ListRowAvailable4[2] = (byte)(PsxRam.ReadU8(g_DemoSaveRecords3_Address + 8) & 1);
             do
             {
                 uVar1 = PsxRam.ReadU16(puVar4);
@@ -417,22 +413,22 @@ internal static class ModeBranches
         int iVar12;
         RECT local_20 = new RECT();
 
-        // `local_20._0_4_ = g_SpBranchDigitCellRect; local_20._4_4_ = DAT_80055a4c;` — Ghidra renders each word
-        // twice, once as the unaligned SWL/SWR pair the compiler emitted for the struct copy and
-        // once as the aligned store. Both write the same four bytes.
-        local_20.x = (short)(g_SpBranchDigitCellRect & 0xffff);
-        local_20.y = (short)(g_SpBranchDigitCellRect >> 16);
-        local_20.w = (short)(DAT_80055a4c & 0xffff);
-        local_20.h = (short)(DAT_80055a4c >> 16);
+        // Ghidra now shows this as a struct copy of g_SpBranchDigitCellRect field by field; RECT is a
+        // reference type in C#, so this stays a field-by-field copy into the local, not an aliasing
+        // assignment.
+        local_20.x = g_SpBranchDigitCellRect.x;
+        local_20.y = g_SpBranchDigitCellRect.y;
+        local_20.w = g_SpBranchDigitCellRect.w;
+        local_20.h = g_SpBranchDigitCellRect.h;
 
         CardRecords.FUN_800276d8(1, g_SpSaveRecords3_Address);
         iVar10 = 0;
-        ListCursor.g_ListRowAvailable4 = 1;
+        ListCursor.g_ListRowAvailable4[0] = 1;
         iVar7 = 0;
         g_SpListCursor = 0;
-        ListCursor.DAT_80055b85 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address) & 1);
-        ListCursor.DAT_80055b86 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x10) & 1);
-        ListCursor.DAT_80055b87 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x20) & 1);
+        ListCursor.g_ListRowAvailable4[1] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address) & 1);
+        ListCursor.g_ListRowAvailable4[2] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x10) & 1);
+        ListCursor.g_ListRowAvailable4[3] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x20) & 1);
         do
         {
             puVar11 = g_SpSaveRecords3_Address + iVar7;
@@ -463,12 +459,12 @@ internal static class ModeBranches
 
             CardRecords.FUN_800276d8(1, g_SpSaveRecords3_Address);
             iVar10 = 0;
-            ListCursor.g_ListRowAvailable4 = 1;
+            ListCursor.g_ListRowAvailable4[0] = 1;
             iVar7 = 0;
             g_SpListCursor = 0;
-            ListCursor.DAT_80055b85 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address) & 1);
-            ListCursor.DAT_80055b87 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x20) & 1);
-            ListCursor.DAT_80055b86 = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x10) & 1);
+            ListCursor.g_ListRowAvailable4[1] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address) & 1);
+            ListCursor.g_ListRowAvailable4[3] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x20) & 1);
+            ListCursor.g_ListRowAvailable4[2] = (byte)(PsxRam.ReadU8(g_SpSaveRecords3_Address + 0x10) & 1);
             do
             {
                 puVar11 = g_SpSaveRecords3_Address + iVar7;

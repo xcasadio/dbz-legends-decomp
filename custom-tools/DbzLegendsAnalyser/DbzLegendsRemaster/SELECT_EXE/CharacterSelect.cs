@@ -98,22 +98,20 @@ internal static class CharacterSelect
     // 30 00`. Only w and h survive — every LoadImage below overwrites x and y first.
     private static readonly RECT g_UsagiChunk18TileRect12x48 = new RECT { x = 0, y = 0, w = 0x0c, h = 0x30 };
 
-    // GHIDRA: g_MaxSelectionIndexTable8 @ 0x80055A68
-    // .data, image value 0x130C0A05 — the bytes 05 0A 0C 13.
-    private static readonly uint g_MaxSelectionIndexTable8 = 0x130c0a05;
-
-    // GHIDRA: DAT_80055a6c @ 0x80055A6C
-    // .data, image value 0x22201C16 — the bytes 16 1C 20 22.
-    //
-    // The two words are ADJACENT and this function copies them onto adjacent stack slots
-    // (auStack_e8[4] at fp-0xE8, auStack_e4[4] at fp-0xE4) and then indexes ACROSS the pair with
-    // `auStack_e8[DAT_801ff002]`, DAT_801FF002 running 0..7. So the pair is one eight-byte table
+    // GHIDRA: g_MaxSelectionIndexTable8 @ 0x80055A68, byte[8]
+    // .data, image bytes 05 0A 0C 13 16 1C 20 22. Formerly two separate undefined4 words at
+    // 0x80055A68 and 0x80055A6C; Ghidra now poses one eight-byte array, matching
+    // how this function already read the pair — `auStack_e8[DAT_801ff002]`, DAT_801FF002 running
+    // 0..7. So the table is
     //     5, 10, 12, 19, 22, 28, 32, 34
     // and the entry it selects is the HIGHEST SLOT VALUE the roster may hold at that unlock tier —
     // it is the bound both the increment (`> bound` wraps to -1) and the decrement (`< -1` wraps to
     // bound) test against. 34 is the last index of the 35-entry tables, so tier 7 is the full
     // roster. What advances DAT_801FF002 is RunDemoModeScreen, outside this slice.
-    private static readonly uint DAT_80055a6c = 0x22201c16;
+    private static readonly byte[] g_MaxSelectionIndexTable8 =
+    {
+        0x05, 0x0A, 0x0C, 0x13, 0x16, 0x1C, 0x20, 0x22,
+    };
 
     // GHIDRA: DAT_80055b18 @ 0x80055B18
     // .sbss, undefined4. The unlock tier THIS SCREEN LAST RAN AT. Two references in the whole
@@ -196,14 +194,12 @@ internal static class CharacterSelect
 
         local_88 = param_1;
 
-        // Ghidra prints the two eight-byte copies below as an `swl`/`swr` pair followed by the
-        // aligned `sw` — the compiler's unaligned-store idiom. The stack slot is word aligned, so
-        // the partial store writes the same bytes the aligned one does and the net effect is the
-        // plain word copy. Same for the three block copies that follow, where Ghidra prints the
+        // Ghidra now poses g_MaxSelectionIndexTable8 as one eight-byte array, so this is a plain
+        // array copy rather than the two `swl`/`swr`-plus-`sw` word stores it used to be. Same
+        // alignment idiom for the three block copies that follow, where Ghidra prints the
         // alignment test already resolved as `if (true) { ... } else { ... }`: the `true` arm is
         // the aligned copy and the `else` arm is unreachable, so only the taken arm is written.
-        MipsMemory.WriteU32(auStack_e8, 0, g_MaxSelectionIndexTable8);
-        MipsMemory.WriteU32(auStack_e8, 4, DAT_80055a6c);
+        g_MaxSelectionIndexTable8.CopyTo(auStack_e8, 0);
 
         // g_UsagiChunk18TileIndexMap35 -> local_e0, thirty-five bytes: two sixteen-byte passes
         // (`while (pbVar16 != base + 0x20)`) and then a three-byte tail.

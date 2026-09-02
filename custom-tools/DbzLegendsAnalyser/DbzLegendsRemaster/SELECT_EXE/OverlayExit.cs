@@ -32,15 +32,14 @@ internal static class OverlayExit
     // PARTIAL: only the address reaches LoadExec; nothing in SELECT.EXE reads the contents.
     private const int DAT_801fff00 = unchecked((int)0x801FFF00);
 
-    // GHIDRA: g_PadRemapTablePointers2 @ 0x80055B44
-    // .sbss. Holds &g_PadRemapTable0. Its consumer is BuildButtonConfigScreen @ 0x8002C048, which reads the pair
-    // below as a two-entry array selected by player index — `(&g_PadRemapTablePointers2)[param_1]` — and
-    // indexes the table it points at by a pad byte.
-    internal static int g_PadRemapTablePointers2;
-
-    // GHIDRA: DAT_80055b48 @ 0x80055B48
-    // .sbss. Holds &g_PadRemapTable1, the second entry of that pair.
-    internal static int DAT_80055b48;
+    // GHIDRA: g_PadRemapTablePointers2 @ 0x80055B44, u_short *[2]
+    // .sbss. Two PSX addresses: [0] = &g_PadRemapTable0, [1] = &g_PadRemapTable1. Its consumer is
+    // BuildButtonConfigScreen @ 0x8002C048, which reads it as a two-entry array selected by player
+    // index — `g_PadRemapTablePointers2[param_1]` — and indexes the table it points at by a pad
+    // byte. Ghidra poses this as `u_short *[2]`; the C# port already models each pointer as a raw
+    // PSX address rather than a managed reference, so `int[2]` stays the faithful transliteration
+    // of the pointer array — one `int` per slot, same as before the array pose.
+    internal static readonly int[] g_PadRemapTablePointers2 = new int[2];
 
     // GHIDRA: InitializePadRemapTablePointers @ 0x80034380
     // Thirty-six bytes, two stores, no callees. It publishes the two pointers into the
@@ -48,8 +47,8 @@ internal static class OverlayExit
     // the graphics bring-up and the memory-card bring-up.
     internal static void InitializePadRemapTablePointers()
     {
-        g_PadRemapTablePointers2 = g_PadRemapTable0_Address;
-        DAT_80055b48 = g_PadRemapTable1_Address;
+        g_PadRemapTablePointers2[0] = g_PadRemapTable0_Address;
+        g_PadRemapTablePointers2[1] = g_PadRemapTable1_Address;
     }
 
     // GHIDRA: PadMaskToButtonIndex @ 0x800343A4

@@ -22,30 +22,19 @@ internal static class ListCursor
     // the two "-2" tests can spot a transition rather than a level.
     private static int g_PrevCardProbeResult;
 
-    // GHIDRA: g_ListRowAvailable4 @ 0x80055B84
-    // .sbss, undefined1. Row 0's availability — both card pickers set it to 1 unconditionally, so
-    // the "no card" row is always selectable.
-    internal static byte g_ListRowAvailable4;
-
-    // GHIDRA: DAT_80055b85 @ 0x80055B85
-    // .sbss, undefined1. Row 1's availability: bit 0 of the first save record.
-    internal static byte DAT_80055b85;
-
-    // GHIDRA: DAT_80055b86 @ 0x80055B86
-    // .sbss, undefined1. Row 2's availability.
-    internal static byte DAT_80055b86;
-
-    // GHIDRA: DAT_80055b87 @ 0x80055B87
-    // .sbss, undefined1. Row 3's availability.
-    internal static byte DAT_80055b87;
+    // GHIDRA: g_ListRowAvailable4 @ 0x80055B84, byte[4]
+    // .sbss. Ghidra now shows the four availability bytes as one array — `g_ListRowAvailable4[iVar6 + 1]`
+    // in the decompilation — rather than four separate one-byte symbols. Row 0 (index 0) is both card
+    // pickers' "no card" row, set to 1 unconditionally so it is always selectable; rows 1-3 (indices
+    // 1-3) are bit 0 of the first/second/third save record.
+    internal static readonly byte[] g_ListRowAvailable4 = new byte[4];
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: RunListSelect addresses the four bytes above as an array from two different bases —
-    // `(&g_ListRowAvailable4)[*param_1]` when the cursor moves UP, and `(&DAT_80055b85)[iVar6]` when it
-    // moves DOWN (moving down from row c lands on row c + 1, whose byte is 0x80055B84 + c + 1).
-    // A third spelling, `*(char *)((int)&DAT_80055b80 + iVar6 + 3)`, is the same 0x80055B84 + iVar6.
-    // This helper is that indexing and nothing else; the four globals keep their own names at every
-    // write site.
+    // RELATION: RunListSelect addresses the array above from two different bases —
+    // `g_ListRowAvailable4[*param_1]` when the cursor moves UP, and `g_ListRowAvailable4[iVar6 + 1]`
+    // when it moves DOWN (moving down from row c lands on row c + 1, whose byte is index c + 1).
+    // A third spelling, `*(char *)((int)&DAT_80055b80 + iVar6 + 3)`, is the same 0x80055B84 + iVar6,
+    // i.e. g_ListRowAvailable4[iVar6]. This helper is that indexing and nothing else.
     //
     // INDEX 4 IS A ONE-BYTE OVERREAD IN THE ORIGINAL, and it is reproduced, not corrected — rule 12.
     // The DOWN path reads 0x80055B85 + cursor with no upper guard before the first read, so a cursor
@@ -58,14 +47,12 @@ internal static class ListCursor
     // for that index here, and the two paths still agree.
     internal static byte AvailabilityByte(int indexFromDAT_80055b84)
     {
-        switch (indexFromDAT_80055b84)
+        if ((uint)indexFromDAT_80055b84 >= 4)
         {
-            case 0: return g_ListRowAvailable4;
-            case 1: return DAT_80055b85;
-            case 2: return DAT_80055b86;
-            case 3: return DAT_80055b87;
-            default: return 0;
+            return 0;
         }
+
+        return g_ListRowAvailable4[indexFromDAT_80055b84];
     }
 
     // GHIDRA: RunListSelect @ 0x80033D34

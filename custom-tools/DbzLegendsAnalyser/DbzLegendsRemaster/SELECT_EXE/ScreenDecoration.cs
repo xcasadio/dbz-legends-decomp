@@ -44,33 +44,23 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // the way out) with `g` and `b` copied from it, which is how the whole picture dims.
 internal static class ScreenDecoration
 {
-    // GHIDRA: g_SpBuildDigitCellRect @ 0x80055A10
-    // .sdata, undefined4, image value 0x00DD0000 (the bytes at 0x80055A10 are 00 00 DD 00, read with
-    // read-memory). The FIRST half of the RECT constant BuildSpSaveSlotScreen copies into its stack frame:
-    // x = 0x0000, y = 0x00DD. It is the same four-by-sixteen digit cell as ModeBranches.g_SpBranchDigitCellRect,
-    // which is the copy RunSpModeScreen makes of the same source RECT.
-    private static readonly uint g_SpBuildDigitCellRect = 0x00DD0000;
+    // GHIDRA: g_SpBuildDigitCellRect @ 0x80055A10, LibGpu.RECT
+    // .sdata. Ghidra now poses this as one RECT rather than two undefined4 words: low word x=0x0000,
+    // next word y=0x00DD, w=0x0004, h=0x0010 (the bytes at 0x80055A10 are 00 00 DD 00 00 04 00 10,
+    // read with read-memory). BuildSpSaveSlotScreen copies it field by field into its stack frame.
+    // It is the same four-by-sixteen digit cell as ModeBranches.g_SpBranchDigitCellRect, which is the
+    // copy RunSpModeScreen makes of the same source RECT.
+    private static readonly LibGpu.RECT g_SpBuildDigitCellRect = new() { x = 0x0000, y = 0x00DD, w = 0x0004, h = 0x0010 };
 
-    // GHIDRA: DAT_80055a14 @ 0x80055A14
-    // .sdata, undefined4, image value 0x00100004 (bytes 04 00 10 00). The SECOND half: w = 0x0004,
-    // h = 0x0010.
-    private static readonly uint DAT_80055a14 = 0x00100004;
+    // GHIDRA: g_FullFrameRect320x240 @ 0x80055A30, LibGpu.RECT
+    // .sdata. x=0, y=0, w=0x0140, h=0x00F0 (bytes 00 00 00 00 40 01 F0 00) — the whole 320x240 frame,
+    // which FUN_8002cc04 copies to VRAM (0x280, 0). Formerly two undefined4 words; Ghidra now poses
+    // one RECT.
+    private static readonly LibGpu.RECT g_FullFrameRect320x240 = new() { x = 0, y = 0, w = 0x0140, h = 0x00F0 };
 
-    // GHIDRA: g_FullFrameRect320x240 @ 0x80055A30
-    // .sdata, undefined4, image value 0x00000000 (bytes 00 00 00 00). First half of the RECT
-    // FUN_8002cc04 hands MoveImage: x = 0, y = 0.
-    private static readonly uint g_FullFrameRect320x240 = 0x00000000;
-
-    // GHIDRA: DAT_80055a34 @ 0x80055A34
-    // .sdata, undefined4, image value 0x00F00140 (bytes 40 01 F0 00). Second half: w = 0x0140,
-    // h = 0x00F0 — the whole 320x240 frame, which FUN_8002cc04 copies to VRAM (0x280, 0).
-    private static readonly uint DAT_80055a34 = 0x00F00140;
-
-    // GHIDRA: g_ChainLastIndexTable8 @ 0x80055A38
-    // .sdata, undefined4, image bytes FF 01 04 08.
-    // GHIDRA: DAT_80055a3c @ 0x80055A3C
-    // .sdata, undefined4, image bytes 0D 13 1A 22.
-    // TOGETHER THEY ARE ONE EIGHT-BYTE TABLE, and FUN_8002cc04 reads it back a BYTE at a time
+    // GHIDRA: g_ChainLastIndexTable8 @ 0x80055A38, byte[8]
+    // .sdata, image bytes FF 01 04 08 0D 13 1A 22. Formerly two separate undefined4 words at
+    // 0x80055A38 and 0x80055A3C; Ghidra now poses one eight-byte array, matching how FUN_8002cc04 already read
     // (`(byte)auStack_30[iVar14]`), which is why it is kept as bytes here rather than as two words.
     // WHAT THE EIGHT VALUES ARE: the LAST index, relative to GsSPRITE element 60, of each of the
     // seven chains FUN_80030698 built. Row i holds one leader plus i + 1 satellites, so the running
@@ -874,8 +864,8 @@ internal static class ScreenDecoration
     // It opens with the SAME digit blit ModeBranches.RunSpModeScreen does on every rebuild: decode the
     // halfword at +2 of each record as a decimal number and MoveImage its two digits out of the
     // 4-by-16 strip at (0x300 + digit * 4, 0xDD) to (0x3E4 + row * 8, 0x100) and
-    // (0x3E8 + row * 8, 0x100). The RECT constant is g_SpBuildDigitCellRect/DAT_80055a14, which is the same
-    // pair of words as ModeBranches.g_SpBranchDigitCellRect/DAT_80055a4c.
+    // (0x3E8 + row * 8, 0x100). The RECT constant is g_SpBuildDigitCellRect, which is the same
+    // image as ModeBranches.g_SpBranchDigitCellRect.
     //
     // The rest is the picker's own layout — six panel strips (1..6) sliding in from off-screen, the
     // three row icons (7, 8, 9), the three row labels (10, 11, 12), the two caption strips (14, 15)
@@ -896,13 +886,13 @@ internal static class ScreenDecoration
         ushort puVar2;
         RECT local_58 = new RECT();
 
-        // `local_58._0_4_ = g_SpBuildDigitCellRect; local_58._4_4_ = DAT_80055a14;` — Ghidra renders each word
-        // twice, once as the unaligned SWL/SWR pair the compiler emitted for the struct copy and
-        // once as the aligned store. Both write the same four bytes.
-        local_58.x = (short)(g_SpBuildDigitCellRect & 0xffff);
-        local_58.y = (short)(g_SpBuildDigitCellRect >> 16);
-        local_58.w = (short)(DAT_80055a14 & 0xffff);
-        local_58.h = (short)(DAT_80055a14 >> 16);
+        // Ghidra now shows this as a struct copy of g_SpBuildDigitCellRect field by field; the RECT
+        // class is a reference type in C#, so this stays a field-by-field copy into the local, not an
+        // aliasing assignment.
+        local_58.x = g_SpBuildDigitCellRect.x;
+        local_58.y = g_SpBuildDigitCellRect.y;
+        local_58.w = g_SpBuildDigitCellRect.w;
+        local_58.h = g_SpBuildDigitCellRect.h;
 
         iVar11 = 0;
         iVar12 = 0x3e4;
@@ -1356,10 +1346,11 @@ internal static class ScreenDecoration
         RECT auStack_38 = new RECT();
         byte[] auStack_30 = (byte[])g_ChainLastIndexTable8.Clone();
 
-        auStack_38.x = (short)(g_FullFrameRect320x240 & 0xffff);
-        auStack_38.y = (short)(g_FullFrameRect320x240 >> 16);
-        auStack_38.w = (short)(DAT_80055a34 & 0xffff);
-        auStack_38.h = (short)(DAT_80055a34 >> 16);
+        // Struct copy of g_FullFrameRect320x240, field by field — RECT is a reference type in C#.
+        auStack_38.x = g_FullFrameRect320x240.x;
+        auStack_38.y = g_FullFrameRect320x240.y;
+        auStack_38.w = g_FullFrameRect320x240.w;
+        auStack_38.h = g_FullFrameRect320x240.h;
 
         iVar14 = 0x104;
         uVar4 = 0x104;
