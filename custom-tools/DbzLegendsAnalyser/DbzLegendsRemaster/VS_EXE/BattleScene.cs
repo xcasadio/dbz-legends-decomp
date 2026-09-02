@@ -114,9 +114,11 @@ internal static class BattleScene
     // FUN_80055ee0 publishes the context address there, `sw s0,0x224(gp)` at 0x80055F04. Every read
     // in this file goes to THAT field, `BattleManager.DAT_8008d320`, rather than to a copy of my own.
     // A first draft of this file did declare one, which would have made three C# storages for a word
-    // the console holds one of — VS_EXE/AnimVmInterpreter.cs already holds a private copy at its
-    // line 246 that can never see the writer. Two is one too many already; three is the tranche-1
-    // defect happening again while its post-mortem is still in the file header. Reported upward.
+    // the console holds one of, AnimVmInterpreter en tenant alors une troisieme, privee et aveugle
+    // au seul ecrivain. Ne pas la declarer ici, et le signaler vers le haut, est ce qui a permis a
+    // la passe de couture de ramener le tout a UN SEUL stockage: la copie privee
+    // d'AnimVmInterpreter a ete supprimee et ce fichier comme celui-la lisent maintenant
+    // `BattleManager.DAT_8008d320`.
 
     // GHIDRA: g_cdFileBaseOffset @ 0x8008D26C (VS.EXE)
     // NOT DECLARED HERE either, for the same reason and with the roles reversed. RenderBattleScene3D
@@ -1911,11 +1913,12 @@ internal static class BattleScene
     // (2,4) from main. Two of those call sites READ THE RESULT and compare it against 7 —
     // RenderBattleScene3D's camera arm and phase 4's sub-step 3 — so the return value is live.
     //
-    // DUPLICATE STUB, declared rather than hidden: VS_EXE_exe.cs carries a private `void` stub for
-    // the same address, which is why two functions in this port now bear the same `GHIDRA:
-    // FUN_80042054` annotation. Neither is a real transliteration, so nothing is silently dead the
-    // way FUN_800511a8 was; but the signature differs (this one returns the value the callers read)
-    // and the two must become one when the function lands. Reported upward.
+    // SOUCHE JADIS EN TRIPLE, declaree plutot que cachee — et c'est ce qui l'a fait fusionner.
+    // VS_EXE_exe.cs et BattleManager.cs portaient chacun une souche `void` pour la meme adresse, si
+    // bien que trois fonctions du port arboraient l'annotation `GHIDRA: FUN_80042054`. Les octets
+    // ont tranche la signature: sur onze appelants dans l'image, DEUX lisent $v0 (0x80035918 et
+    // 0x800372E0), donc la fonction retourne bien une valeur et les deux copies `void` perdaient
+    // l'information. Les deux souches sont supprimees; celle-ci est la seule, en `internal`.
     //
     // CONSEQUENCE OF THE STUB, stated so it is not mistaken for a port defect: returning 0 makes
     // both `!= 7` tests fire, so the camera-mode arm of RenderBattleScene3D and the closing arm of
@@ -1975,7 +1978,7 @@ internal static class BattleScene
         _ = param_2;
     }
 
-    // GHIDRA: FUN_800602dc @ 0x800602DC @ (VS.EXE)
+    // GHIDRA: FUN_800602dc @ 0x800602DC (VS.EXE)
     // BLOCKED: a readiness query phase 4 sub-step 0 waits on. Zero means not ready.
     private static int FUN_800602dc()
     {

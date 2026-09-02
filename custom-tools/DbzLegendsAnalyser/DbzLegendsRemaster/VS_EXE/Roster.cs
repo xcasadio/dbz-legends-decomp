@@ -49,12 +49,13 @@ namespace DbzLegendsRemaster.VS_EXE;
 // The word matters — FUN_800512cc branches on it to place the fighters, as VS_EXE/BattleState.cs
 // records — but the branch is that function's, not this one's.
 //
-// NOT WIRED, and reported rather than patched around: VS_EXE_exe.cs still carries a private
-// `FUN_8005cbe0()` stub with the same `// GHIDRA: FUN_8005cbe0 @ 0x8005CBE0` annotation, and main
-// calls THAT one. Until the stub is removed and main calls Roster.FUN_8005cbe0, this file is dead
-// code and two functions in the port claim one address. That is exactly the defect
-// VS_EXE/FighterSetup.cs hit with FUN_800511a8, and the fix belongs in VS_EXE_exe.cs, which is not
-// this slice's file to touch.
+// CABLE DEPUIS, et le signaler plutot que de le contourner est ce qui l'a fait cabler. A la
+// livraison de cette tranche, VS_EXE_exe.cs portait encore une souche privee `FUN_8005cbe0()` avec
+// la meme annotation `// GHIDRA: FUN_8005cbe0 @ 0x8005CBE0`, et main appelait CELLE-LA: ce fichier
+// etait du code mort et deux fonctions du port revendiquaient une adresse. C'etait exactement le
+// defaut rencontre par FighterSetup avec FUN_800511a8, et le correctif appartenait a VS_EXE_exe.cs,
+// qui n'etait pas le fichier de cette tranche. La passe de couture l'a fait: la souche est
+// supprimee et main appelle Roster.FUN_8005cbe0.
 internal static class Roster
 {
     // =====================================================================================

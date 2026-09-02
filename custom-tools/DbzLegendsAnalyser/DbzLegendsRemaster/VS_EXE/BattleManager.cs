@@ -1601,11 +1601,14 @@ internal static class BattleManager
     //
     // OWNERSHIP CAVEAT, in the shape VS_EXE/FighterSetup.cs already uses for DAT_8008da48. This
     // global has 53 references and exactly ONE writer — FUN_80055ee0 above. The other 52 are reads,
-    // and one of them is already transliterated: VS_EXE/AnimVmInterpreter.cs declares its own
-    // `private static int DAT_8008d320` and reads it at its line 217. That copy can never see this
-    // one, so today the port holds two of a global the console holds one of. It is declared
-    // `internal` here so a sibling can at least reach the written copy, and reported upward as a
-    // symbol that belongs in BattleState.cs rather than being quietly forked a second time.
+    // and one of them is already transliterated. Cette tranche a ete ecrite quand
+    // VS_EXE/AnimVmInterpreter.cs declarait son propre `private static int DAT_8008d320`, une copie
+    // qui ne pouvait jamais voir celle-ci: le port en tenait deux la ou la console en tient une.
+    // ELLE A ETE SUPPRIMEE DEPUIS, par la passe de couture qui a integre cette tranche. Il n'existe
+    // plus qu'un seul stockage, celui-ci, et AnimVmInterpreter lit `BattleManager.DAT_8008d320`.
+    // Le `internal` reste necessaire pour cette raison meme. Le symbole appartient toujours a
+    // BattleState.cs sur le fond; il n'y est pas encore, et ce n'est plus un fork, juste un
+    // emplacement discutable.
     internal static int DAT_8008d320;
 
     // GHIDRA: DAT_8008d458 @ 0x8008D458 (VS.EXE)
@@ -1705,11 +1708,11 @@ internal static class BattleManager
     // no prototype for any of them, so the argument lists come from the a0/a1/a2 loads at each jal.
     // None is invented and none is a convenience API.
     //
-    // TWO OF THEM ALREADY EXIST ELSEWHERE IN THE PORT as private empty stubs — FUN_80042054 in
-    // VS_EXE/VS_EXE_exe.cs and FUN_8005ee5c in VS_EXE/AnimVmInterpreter.cs. Both are private, so
-    // they cannot be called from here, and both are empty, so a second empty declaration carries no
-    // state and cannot diverge. When either is really transliterated the duplicate must collapse
-    // onto it, which is why the duplication is stated here rather than left to be discovered.
+    // DEUX D'ENTRE ELLES EXISTAIENT AILLEURS dans le port sous forme de souches vides privees —
+    // FUN_80042054 dans VS_EXE_exe.cs et FUN_8005ee5c dans AnimVmInterpreter.cs. Les avoir declarees
+    // ici plutot que de les laisser decouvrir est ce qui a permis de les fusionner: LES DEUX
+    // DOUBLONS SONT SUPPRIMES. FUN_80042054 vit maintenant chez BattleScene (il RETOURNE une valeur,
+    // deux de ses onze appelants lisent $v0) et FUN_8005ee5c vit ici, en `internal`.
     // =====================================================================================
 
     // GHIDRA: FUN_8005a5b0 @ 0x8005A5B0 (VS.EXE)
