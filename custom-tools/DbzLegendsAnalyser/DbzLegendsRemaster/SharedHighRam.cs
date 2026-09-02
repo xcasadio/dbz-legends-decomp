@@ -49,6 +49,43 @@ internal static class SharedHighRam
         set => MipsMemory.WriteU16(RAM_801ff000, 0x0a, value);
     }
 
+    // GHIDRA: g_OptionsRecord64 @ 0x801FF018
+    // The 64-byte options block. SELECT.EXE's memory-card load path copies it out of the card
+    // record; the button-remap tables live inside it at +8 and +0x24. RunOptionsScreen reads bit 2
+    // of its first word, and that bit alone decides whether the sound test exists: the confirm on
+    // row 0 only reaches RunSoundTestScreen when `(g_OptionsRecord64 & 4) != 0`.
+    internal static int g_OptionsRecord64
+    {
+        get => MipsMemory.ReadI32(RAM_801ff000, 0x18);
+        set => MipsMemory.WriteI32(RAM_801ff000, 0x18, value);
+    }
+
+    // GHIDRA: DAT_801ff01c @ 0x801FF01C
+    // Field +4 of the options block: the difficulty, and the options screen cycles it over exactly
+    // three values. Right wraps 2 -> 0; left decrements and wraps 0 -> 2, which the original does by
+    // testing for zero BEFORE the decrement and overwriting the underflow afterwards.
+    // Row 1 of the screen (難易度) shows it, and the three value boxes it selects differ in width:
+    // x = {-40, 28, 93}, u = {176, 168, 168}, w = {64, 56, 56}, read live off the console.
+    internal static ushort DAT_801ff01c
+    {
+        get => MipsMemory.ReadU16(RAM_801ff000, 0x1c);
+        set => MipsMemory.WriteU16(RAM_801ff000, 0x1c, value);
+    }
+
+    // GHIDRA: _DAT_801ff01e @ 0x801FF01E
+    // Field +6 of the options block. Zero is STEREO, non-zero is MONO — closed by InitializeCdAudio
+    // @ 0x80025658, which on zero writes the crossed CdlATV {0x7F, 0x08, 0x7F, 0x08} and calls
+    // SsSetStereo(), and otherwise writes {0x3F, 0x3F, 0x3F, 0x3F} and calls SsSetMono().
+    // Measured on the console in this very screen: the word is 0 and row 0 shows ステレオ.
+    // The name stays raw. The meaning is closed, but the address is inside the block the three
+    // overlays share, so naming it belongs to the cross-overlay 0x801FFxxx pass, not to SELECT.EXE
+    // alone — the same reason g_UnlockTier @ 0x801FF002 was held back.
+    internal static ushort _DAT_801ff01e
+    {
+        get => MipsMemory.ReadU16(RAM_801ff000, 0x1e);
+        set => MipsMemory.WriteU16(RAM_801ff000, 0x1e, value);
+    }
+
     // GHIDRA: DAT_801ff058 @ 0x801FF058 .. DAT_801ff05d @ 0x801FF05D
     // Six bytes written as two groups of three, one per port, when a pad holds the 0x1d0 button
     // combination on the title screen.

@@ -303,26 +303,292 @@ internal sealed class SELECT_EXE_exe
     // ModeBranches.cs, with the menu driver RunModeMenu @ 0x800283A0 in ModeMenu.cs and the shared
     // list cursor RunListSelect @ 0x80033D34 in ListCursor.cs. main's switch calls them above.
 
+    // GHIDRA: g_OptionsCursor @ 0x80055B0C
+    // .sbss. The options screen's row cursor, and nothing else in the program touches it — sixteen
+    // references, all inside RunOptionsScreen. Four rows: down wraps 3 -> 0, up wraps 0 -> 3.
+    internal static int g_OptionsCursor;
+
+    // GHIDRA: DAT_80055b10 @ 0x80055B10
+    // .sbss. Row 2 (操作設定): which pad the button-config screen configures. Toggling it to 1 is
+    // gated on GetPadStatus(1) reporting a second pad; without one it can only ever be 0.
+    internal static uint DAT_80055b10;
+
+    // GHIDRA: DAT_80055b14 @ 0x80055B14
+    // .sbss. Row 3 (設定): the save/load toggle. It is a plain flip, ungated.
+    internal static uint DAT_80055b14;
+
+    // GHIDRA: DAT_80055a50 @ 0x80055A50, DAT_80055a58 @ 0x80055A58, DAT_80055a60 @ 0x80055A60
+    // .sdata. THREE PARALLEL TABLES, one entry per difficulty, that place row 1's value box: x,
+    // then u, then w. Ghidra had them as pairs of undefined4 and they were briefly typed RECT here
+    // — wrongly. The usage settles it: RunOptionsScreen indexes them as `(&RStack_40.x)[level]`
+    // with level in 0..2, so they are short tables, not rectangles. They are typed short[4] now.
+    // Values read live off the console, and they match the screen: three boxes of different widths.
+    private static readonly short[] DAT_80055a50 = { -40, 28, 93, 0 };
+
+    private static readonly short[] DAT_80055a58 = { 176, 168, 168, 0 };
+
+    private static readonly short[] DAT_80055a60 = { 64, 56, 56, 0 };
+
     // GHIDRA: RunOptionsScreen @ 0x800315C0
-    private static void RunOptionsScreen()
+    // main's case 3, reached from caseD_3 @ 0x80030638 and its only caller. 1668 bytes. It does NOT
+    // LoadExec: it owns a blocking do/while and returns into main's loop, like every other screen in
+    // this overlay.
+    //
+    // The screen has four rows, confirmed against the console:
+    //     0  音楽      stereo / mono          toggles _DAT_801ff01e
+    //     1  難易度    three difficulties     cycles DAT_801ff01c over 0..2
+    //     2  操作設定  1P / 2P                toggles DAT_80055b10, gated on a second pad
+    //     3  設定      save / load            toggles DAT_80055b14
+    //
+    // Left (0x8000) and right (0x2000) both adjust the current row's value and are NOT symmetric on
+    // row 1: right increments and wraps 2 -> 0, left tests for zero before decrementing and rewrites
+    // the underflow to 2. Confirm (0x20) enters a sub-screen on rows 2 and 3, and on row 0 only when
+    // bit 2 of g_OptionsRecord64 is set — that bit alone is what makes the sound test exist.
+    // Cancel (0x40) drops out of the loop.
+    //
+    // The repeat gate is the same shape the other screens use: a press is taken either on the frame
+    // the pad goes from idle to pressed, or once every thirteenth frame while it is held.
+    internal static void RunOptionsScreen()
     {
-        // BLOCKED: state 3, the in-place options sub-screen, 1668 bytes. It does NOT LoadExec — it
-        // returns to main's loop.
-        //
-        // THE REASON RE-MEASURED, not inherited. Its nine callees are GetPadStatus, FUN_80031c8c,
-        // DrawFrame, UnwindOptionsScreen, RunButtonConfigScreen, InitializeSpriteArray, RunSoundTestScreen, FUN_80026208 and
-        // BuildOptionsScreen. Four of those (GetPadStatus, DrawFrame, InitializeSpriteArray, FUN_80026208) are
-        // ported; FUN_80031c8c's own card call now lands on CardRecords.FUN_800276d8, which is
-        // ported too. THE BLOCKER IS RunSoundTestScreen @ 0x80026420 — 1788 bytes — which tail-calls
-        // InitializeSoundSystem @ 0x80022994, whose callee list (read today, 36 entries) carries SpuInit,
-        // SpuStInit, SpuSetVoiceAttr, SpuMallocWithStartAddr, SpuSetTransferMode,
-        // SpuSetTransferStartAddr, SpuWrite0, SpuIsTransferCompleted, SsSetReservedVoice,
-        // SsUtGetVBaddrInSB and the three SpuSt* callback registrations, alongside six
-        // CdSearchFile / CdRead / CdReadSync groups — the \SOUND\*.B VAB loads.
-        // PsxSdkMonogame/LibSnd.cs is 161 methods and all 161 bodies are `// Do nothing PSX SDK`
-        // (counted in the file: 163 declarations, two of which are delegates, and 161 stub markers).
-        // Three of its screen functions — UnwindOptionsScreen, RunButtonConfigScreen and BuildOptionsScreen — are also
-        // still unported.
+        // The original copies each eight-byte table into its own stack slot before the loop, through
+        // the unaligned-store dance the compiler emits for a struct copy. The copy is what matters.
+        short[] RStack_40 = { DAT_80055a50[0], DAT_80055a50[1], DAT_80055a50[2], DAT_80055a50[3] };
+        short[] RStack_38 = { DAT_80055a58[0], DAT_80055a58[1], DAT_80055a58[2], DAT_80055a58[3] };
+        short[] RStack_30 = { DAT_80055a60[0], DAT_80055a60[1], DAT_80055a60[2], DAT_80055a60[3] };
+
+        int iVar19 = 0;
+        int iVar20 = 0;
+        bool bVar4 = false;
+        bool bVar5 = true;
+
+        OptionsScreen.BuildOptionsScreen(g_OptionsCursor, DAT_80055b10, DAT_80055b14);
+
+        do
+        {
+            uint uVar16 = PadInput.FUN_80026208(3);
+            g_PadButtonWord = (ushort)(uVar16 & 0xffff);
+            if (g_PadButtonWord == 0)
+            {
+                bVar4 = true;
+                iVar19 = 0;
+                iVar20 = 0;
+            }
+
+            bool bVar2 = 0xc < iVar20;
+            iVar20 = iVar20 + 1;
+
+            // `(bVar2) && (iVar19 = iVar19 + 1, iVar19 == 1)` — C# has no comma operator, so the
+            // increment is written out. It still only happens when bVar2 holds, which is what the
+            // short-circuit in the original guarantees.
+            bool bVar6 = false;
+            if (bVar2)
+            {
+                iVar19 = iVar19 + 1;
+                bVar6 = iVar19 == 1;
+            }
+
+            if (bVar6 || (bVar4 && g_PadButtonWord != 0))
+            {
+                if (bVar4)
+                {
+                    bVar4 = false;
+                }
+
+                GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].r = 0x40;
+                GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].g = 0x40;
+                GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].b = 0x40;
+
+                if ((g_PadButtonWord & 0x4000) != 0)
+                {
+                    g_OptionsCursor = g_OptionsCursor + 1;
+                    if (3 < g_OptionsCursor)
+                    {
+                        g_OptionsCursor = 0;
+                    }
+                }
+
+                if ((g_PadButtonWord & 0x1000) != 0)
+                {
+                    g_OptionsCursor = g_OptionsCursor + -1;
+                    if (g_OptionsCursor < 0)
+                    {
+                        g_OptionsCursor = 3;
+                    }
+                }
+
+                if ((g_PadButtonWord & 0x8000) != 0)
+                {
+                    if (g_OptionsCursor == 1)
+                    {
+                        bVar2 = SharedHighRam.DAT_801ff01c == 0;
+                        SharedHighRam.DAT_801ff01c = (ushort)(SharedHighRam.DAT_801ff01c - 1);
+                        if (bVar2)
+                        {
+                            SharedHighRam.DAT_801ff01c = 2;
+                        }
+                    }
+                    else if (g_OptionsCursor < 2)
+                    {
+                        if (g_OptionsCursor == 0)
+                        {
+                            SharedHighRam._DAT_801ff01e =
+                                (ushort)(SharedHighRam._DAT_801ff01e == 0 ? 1 : 0);
+                        }
+                    }
+                    else if (g_OptionsCursor == 2)
+                    {
+                        if (DAT_80055b10 == 0)
+                        {
+                            byte uVar15 = PadInput.GetPadStatus(1);
+                            DAT_80055b10 = (uint)(uVar15 == 0 ? 1 : 0);
+                        }
+                        else
+                        {
+                            DAT_80055b10 = 0;
+                        }
+                    }
+                    else if (g_OptionsCursor == 3)
+                    {
+                        DAT_80055b14 = (uint)(DAT_80055b14 == 0 ? 1 : 0);
+                    }
+                }
+
+                if ((g_PadButtonWord & 0x2000) != 0)
+                {
+                    if (g_OptionsCursor == 1)
+                    {
+                        SharedHighRam.DAT_801ff01c = (ushort)(SharedHighRam.DAT_801ff01c + 1);
+                        if (2 < SharedHighRam.DAT_801ff01c)
+                        {
+                            SharedHighRam.DAT_801ff01c = 0;
+                        }
+                    }
+                    else if (g_OptionsCursor < 2)
+                    {
+                        if (g_OptionsCursor == 0)
+                        {
+                            SharedHighRam._DAT_801ff01e =
+                                (ushort)(SharedHighRam._DAT_801ff01e == 0 ? 1 : 0);
+                        }
+                    }
+                    else if (g_OptionsCursor == 2)
+                    {
+                        if (DAT_80055b10 == 0)
+                        {
+                            byte uVar15 = PadInput.GetPadStatus(1);
+                            DAT_80055b10 = (uint)(uVar15 == 0 ? 1 : 0);
+                        }
+                        else
+                        {
+                            DAT_80055b10 = 0;
+                        }
+                    }
+                    else if (g_OptionsCursor == 3)
+                    {
+                        DAT_80055b14 = (uint)(DAT_80055b14 == 0 ? 1 : 0);
+                    }
+                }
+
+                if (((g_PadButtonWord & 0x20) != 0) && (g_OptionsCursor != 1))
+                {
+                    if (g_OptionsCursor < 2)
+                    {
+                        if ((g_OptionsCursor == 0) && ((SharedHighRam.g_OptionsRecord64 & 4) != 0))
+                        {
+                            SoundTestScreen.RunSoundTestScreen();
+                        }
+                    }
+                    else if (g_OptionsCursor == 2)
+                    {
+                        ButtonConfigScreen.RunButtonConfigScreen(DAT_80055b10);
+                        g_PadButtonWord = 0;
+                    }
+                    else if (g_OptionsCursor == 3)
+                    {
+                        OptionsScreen.FUN_80031c8c(DAT_80055b14);
+                    }
+                }
+
+                if ((g_PadButtonWord & 0x40) != 0)
+                {
+                    bVar5 = false;
+                }
+            }
+
+            if (0xc < iVar20)
+            {
+                iVar19 = iVar19 % 5;
+            }
+
+            GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].r = 0x80;
+            GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].g = 0x80;
+            GsSPRITE_ARRAY_800654ec[g_OptionsCursor + 2].b = 0x80;
+
+            GsSPRITE_ARRAY_800654ec[6].x = -0x20;
+            if (SharedHighRam._DAT_801ff01e != 0)
+            {
+                GsSPRITE_ARRAY_800654ec[6].x = 0x3c;
+            }
+
+            GsSPRITE_ARRAY_800654ec[6].v = 0xd0;
+            if (SharedHighRam._DAT_801ff01e != 0)
+            {
+                GsSPRITE_ARRAY_800654ec[6].v = 0xe0;
+            }
+
+            uVar16 = SharedHighRam.DAT_801ff01c;
+            GsSPRITE_ARRAY_800654ec[9].x = RStack_40[uVar16];
+            GsSPRITE_ARRAY_800654ec[9].u = (byte)RStack_38[uVar16];
+            GsSPRITE_ARRAY_800654ec[9].v = (byte)((sbyte)SharedHighRam.DAT_801ff01c * 0x10 + 0x30);
+            GsSPRITE_ARRAY_800654ec[9].w = (ushort)RStack_30[uVar16];
+
+            GsSPRITE_ARRAY_800654ec[0xd].x = -0x20;
+            if (DAT_80055b10 != 0)
+            {
+                GsSPRITE_ARRAY_800654ec[0xd].x = 0x1c;
+            }
+
+            GsSPRITE_ARRAY_800654ec[0x10].x = -0x28;
+            GsSPRITE_ARRAY_800654ec[0xd].u = (byte)(DAT_80055b10 << 5);
+            if (DAT_80055b14 != 0)
+            {
+                GsSPRITE_ARRAY_800654ec[0x10].x = 0x14;
+            }
+
+            GsSPRITE_ARRAY_800654ec[0x10].v = (byte)(DAT_80055b14 << 4);
+
+            FrameStep.DrawFrame();
+        }
+        while (bVar5);
+
+        OptionsScreen.UnwindOptionsScreen();
+        SelectScreen.InitializeSpriteArray(GsSPRITE_ARRAY_800654ec, 1, 0x13);
+
+        // 0x80031B80-0x80031C3C: sprite 0x3B is copied wholesale onto sprite 0x28, then hidden. The
+        // compiler emitted it as a pointer walk in sixteen-byte steps plus a four-byte tail, which
+        // is why Ghidra shows the same field names twice; the effect is one thirty-six-byte copy.
+        LibGs.GsSPRITE pGVar17 = GsSPRITE_ARRAY_800654ec[0x3b];
+        LibGs.GsSPRITE pGVar18 = GsSPRITE_ARRAY_800654ec[0x28];
+        pGVar18.attribute = pGVar17.attribute;
+        pGVar18.x = pGVar17.x;
+        pGVar18.y = pGVar17.y;
+        pGVar18.w = pGVar17.w;
+        pGVar18.h = pGVar17.h;
+        pGVar18.tpage = pGVar17.tpage;
+        pGVar18.u = pGVar17.u;
+        pGVar18.v = pGVar17.v;
+        pGVar18.cx = pGVar17.cx;
+        pGVar18.cy = pGVar17.cy;
+        pGVar18.r = pGVar17.r;
+        pGVar18.g = pGVar17.g;
+        pGVar18.b = pGVar17.b;
+        pGVar18.mx = pGVar17.mx;
+        pGVar18.my = pGVar17.my;
+        pGVar18.scalex = pGVar17.scalex;
+        pGVar18.scaley = pGVar17.scaley;
+        pGVar18.rotate = pGVar17.rotate;
+
+        GsSPRITE_ARRAY_800654ec[0x3b].attribute = 0x80000000;
     }
 
     // GHIDRA: __main @ 0x8003486C

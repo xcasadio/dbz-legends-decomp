@@ -16,6 +16,98 @@ namespace DbzLegendsRemaster.Validation;
 // cleared, which GP0(0x02) now does.
 internal static class SelectIntroDiagnostic
 {
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: drives SELECT.EXE's options screen — main's case 3 — on its own frame budget, so the
+    // screen it draws can be looked at rather than inferred from the fact that it compiles. This
+    // port has nine defects on record that were correct code producing nothing, and every one of
+    // them was found by looking at the frame.
+    //
+    // It boots the overlay first, because BuildOptionsScreen draws against the sprite array, the
+    // ordering tables and the VRAM the boot arms. Then it re-arms the headless baton and calls
+    // RunOptionsScreen directly: the screen owns a blocking do/while and never returns on its own
+    // without a cancel press, so the budget is what ends it.
+    internal static int RunOptions(string[] args)
+    {
+        int budget = 120;
+        if (args.Length > 1 && int.TryParse(args[1], out int parsed))
+        {
+            budget = parsed;
+        }
+
+        PsxSdkBridges.Install();
+        PsxSdkBridges.ActivateSelectExe();
+
+        FrameBaton.ResetHeadless(240);
+        try
+        {
+            new SELECT_EXE_exe().start();
+        }
+        catch (GameShutdownException)
+        {
+        }
+        catch (LoadExecTransferException)
+        {
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"boot: {exception.GetType().Name}: {exception.Message}");
+        }
+
+        Console.WriteLine("=== boot termine, entree dans RunOptionsScreen ===");
+
+        FrameBaton.ResetHeadless(budget);
+        string stopped = "budget epuise";
+        try
+        {
+            SELECT_EXE_exe.RunOptionsScreen();
+            stopped = "RunOptionsScreen a rendu la main";
+        }
+        catch (GameShutdownException)
+        {
+        }
+        catch (Exception exception)
+        {
+            stopped = $"{exception.GetType().Name}: {exception.Message}";
+        }
+
+        Console.WriteLine($"=== {budget} frames, arret: {stopped}");
+        Console.WriteLine($"curseur de ligne g_OptionsCursor = {SELECT_EXE_exe.g_OptionsCursor}");
+        Console.WriteLine($"difficulte DAT_801ff01c = {SharedHighRam.DAT_801ff01c}   "
+            + $"mono _DAT_801ff01e = {SharedHighRam._DAT_801ff01e}");
+
+        LibGs.GsSPRITE[] sprites = SELECT_EXE_exe.GsSPRITE_ARRAY_800654ec;
+        int visible = 0;
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            if ((sprites[i].attribute & 0x80000000u) == 0 && sprites[i].w != 0 && sprites[i].h != 0)
+            {
+                visible++;
+            }
+        }
+
+        Console.WriteLine($"sprites affichables: {visible}");
+
+        int lit = 0;
+        long sum = 0;
+        for (int y = 0; y < 240; y++)
+        {
+            for (int x = 0; x < 320; x++)
+            {
+                ushort v = LibGpu.Vram[(y * 1024) + x];
+                if (v != 0)
+                {
+                    lit++;
+                    sum += (v & 0x1f) + ((v >> 5) & 0x1f) + ((v >> 10) & 0x1f);
+                }
+            }
+        }
+
+        Console.WriteLine($"=== VRAM page0: {lit} pixels allumes, moyenne {(lit == 0 ? 0 : sum / (double)(lit * 3)):F2}/31");
+        DumpBmp(0, 0, 320, 240, "options_page0.bmp");
+        DumpBmp(0, 240, 320, 240, "options_page1.bmp");
+        return 0;
+    }
+
     internal static int Run(string[] args)
     {
         int budget = 40;

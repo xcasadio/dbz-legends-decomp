@@ -53,11 +53,27 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // memorycard1/ and state 7 answers the other way: state 0xF runs six MemoryCard.ReadSaveRecord reads
 // against blocks 1..6 and fills both lists from the file.
 //
-// MODE 2 HAS NO CALL SITE ANYWHERE IN THE PROGRAM. find-cross-references on FUN_800276d8 reports
-// six callers: ModeBranches.RunDemoModeScreen twice with 0, ModeBranches.RunSpModeScreen twice with 1,
-// FUN_80031c8c with 3, and FUN_80031c8c's other call at 0x80031CB4 whose a0 is its own param_1,
-// which that arm has already tested as 0. So RunSaveWriteFlow and the five routines only it reaches are
-// transliterated and unreachable. They are here because the dispatcher's switch is here.
+// MODE 2 IS REACHED, and this header said the opposite until the options screen was ported.
+//
+// The old claim was that FUN_80031c8c's call at 0x80031CB4 passes its own param_1, which that arm
+// has already tested as zero. It does not. The instruction immediately before the call OVERWRITES
+// a0 with the literal 2:
+//     0x80031C90  beqz  a0, 0x80031CB0      param_1 == 0 branches forward
+//     0x80031CB0  li    a0, 0x0002          <- a0 is no longer param_1
+//     0x80031CB4  jal   0x800276D8
+//     0x80031CB8  addiu a1, sp, 0x10        (delay slot)
+// So param_1 == 0 selects MODE 2, the save side, and param_1 != 0 selects mode 3 at 0x80031CA0.
+//
+// Ghidra hid it, which is why the error was easy to make and hard to see: its decompilation of
+// FUN_80031c8c prints a bare `FUN_800276d8();` at that site, with no arguments at all, because the
+// callee's stored prototype is `undefined FUN_800276d8(void)`. Reading the C alone, no call site
+// passes 2. Reading the bytes, one does.
+//
+// RunOptionsScreen closes the loop: row 3 of the options screen calls FUN_80031c8c(DAT_80055b14),
+// and DAT_80055b14 == 0 is the value that draws セーブ. Saving reaches mode 2.
+//
+// RunSaveWriteFlow and the routines only it reaches are therefore live code, not transliterated
+// ballast.
 internal static class CardRecords
 {
     // GHIDRA: g_OptionsRecord64 @ 0x801FF018
@@ -165,7 +181,8 @@ internal static class CardRecords
 
         if (param_1 == 2)
         {
-            // UNREACHABLE — no call site in the program passes 2. See the header.
+            // The save side. FUN_80031c8c @ 0x80031CB0 loads the literal 2 into a0 and calls here,
+            // which the options screen reaches on row 3 when DAT_80055b14 == 0 (セーブ). See the header.
             MemoryCard.ShowCardMessage(5);
             iVar6 = 0;
             MemoryCard.ShutdownMemoryCard();
