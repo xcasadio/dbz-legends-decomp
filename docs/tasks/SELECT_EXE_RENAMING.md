@@ -164,12 +164,65 @@ donc un `FUN_800213b8` de TITLE.EXE serait une **autre** fonction au meme nom te
 symbole de la liste apparaissait hors du dossier SELECT_EXE de facon dangereuse - `DAT_801ff002`,
 justement celui qui a ete retire pour cette raison.
 
-## Ce qui reste ouvert
+## Le second lot: 26 types, poses et verifies
 
-- **26 applications de type** (`RECT`, `u_char[8]`, `GsOT[2]`, `GsBOXF[5]`, six `CdlFILE`,
-  `GsOT_TAG[8]`...): un lot separe, car `apply-data-type` est une operation differente, avec ses
-  propres risques - notamment sur une adresse portant deja un label interieur.
-- **Les huit retires**, tous nommables plus tard avec la preuve qui manque.
+`apply-data-type` etait une operation differente, dont je ne connaissais pas le comportement reel
+sur ce projet. Une sonde l'a etabli avant le lot, sur `RECT` @ 0x80055A10:
+
+1. le type s'applique;
+2. le nom existant est **preserve**;
+3. les symboles interieurs synthetises sont **absorbes**.
+
+Le troisieme point retire la crainte principale. Les noms interieurs (`DAT_80055a14`,
+`DAT_80055b85`...) sont **synthetises** par Ghidra, pas stockes: il n'y avait donc rien a ecraser.
+
+**Aucun type n'a eu besoin d'etre cree.** `RECT` 8, `CdlATV` 4, `GsOT_TAG` 4, `GsBOXF` 16, `GsOT` 20
+et `CdlFILE` 24 existaient deja dans l'archive psyq340 chargee dans le programme - et toutes ces
+tailles correspondent exactement aux modeles du portage C#.
+
+L'absorption a ete verifiee sur six formes differentes, en lisant les consommateurs:
+
+| avant | apres |
+|---|---|
+| `otp = (GsOT *)(&g_GsOtArray2 + iVar1 * 5)` | `otp = g_GsOtArray2 + iVar1` |
+| `(&DAT_80055b85)[iVar6]` | `g_ListRowAvailable4[iVar6 + 1]` |
+| `local_58._4_4_ = DAT_80055a14` | `g_SpBuildDigitCellRect._4_4_` |
+| `DAT_80055add = 8` | `g_CdMixVolume.val1 = '\b'` |
+| `CdSearchFile((CdlFILE *)&DAT_80055bd0, ...)` | `CdSearchFile(&CdlFILE_80055bd0, ...)` |
+| `*(int *)(&g_SpritePointerTable28 + ...)` | `g_SpritePointerTable28 + iVar7` |
+
+Plus un renommage: `DAT_80055b54` -> `g_SwCardEvents4`, avec son `long[4]`.
+
+### Cote portage
+
+Quatorze annotations nommaient desormais des symboles que Ghidra ne porte plus. Sept fichiers ont
+ete mis en accord: trois `RECT`, trois tables d'octets, un `CdlATV`, un `int[2]` d'adresses PSX, un
+`int[4]` de descripteurs d'evenement, et les quatre octets de disponibilite replies en un `byte[4]`.
+
+Deux points n'ont deliberement pas ete lisses. `RECT`, `CdlATV` et `CdlFILE` sont des **classes** en
+C#, donc une affectation aliaserait la ou l'original copie: chaque site garde sa copie champ par
+champ. Et l'index 4 de la table de disponibilite est un **overread d'un octet dans l'original**,
+reproduit et non corrige - avec une preuve plutot qu'une supposition: a curseur 3 et `param_3 = 4`,
+la branche « octet nul » et la branche « octet non nul » convergent sur le meme test
+`param_3 <= iVar6`.
+
+Changement purement representationnel, et mesure comme tel: `--diag-select 400` rend **49396 pixels
+allumes, moyenne 9,70/31, 43 sprites affichables** - identique au pixel pres a la lecture d'avant le
+lot.
+
+## Ce qui reste ouvert
+- **Les huit retires**, tous nommables plus tard avec la preuve qui manque. Deux d'entre eux ont
+  d'ailleurs vu leur preuve arriver depuis: `g_SoundIsMono` @ 0x801FF01E est ferme par
+  `InitializeCdAudio`, qui choisit `SsSetStereo()` quand le mot vaut 0 et `SsSetMono()` sinon, ce que
+  la console confirme - le mot y vaut 0 et l'ecran d'options affiche bien la stereo. Mais il est
+  dans le bloc d'options partage par les trois overlays, donc il releve de la passe croisee
+  0x801FFxxx, comme `g_UnlockTier` @ 0x801FF002 retire pour la meme raison.
+- **Cinq descripteurs CD** portent depuis le second lot un nom SYNTHETISE par leur type -
+  `CdlFILE_80055ba0`, `CdlFILE_80055bd0`, `CdlFILE_80055c18`, `CdlFILE_80055c48`,
+  `CdlFILE_80055c78`. Chacun est ferme par son propre litteral: `CdSearchFile(&CdlFILE_80055c18,
+  "\\SOUND\\ATB.B;1")`. Les nommer par analogie avec `g_UsagiBCdlFile`, qui porte deja un vrai nom,
+  serait aussi certain que les meilleures entrees du premier lot - mais ce n'etait pas dans le lot
+  approuve, et un label reste definitif.
 - **`0x800206A8` et `0x800206CC`**, qui portent chacune deux labels, residu de l'ajout non
   destructif: `g_UsagiChunk18TileIndexMap36` et `...35`, `g_UsagiSelectionValueMap36` et `...35`. Le
   C# et le label primaire de Ghidra tranchent tous deux pour la forme « 35 »; les deux « 36 » sont
