@@ -31,6 +31,10 @@ else if (args.Length >= 1 && args[0] == "--diag-select")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SelectIntroDiagnostic.Run(args);
 }
+else if (args.Length == 1 && args[0] == "--validate-vs-ram")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.VsRamValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-sortsprite")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SortSpriteValidation.Run();

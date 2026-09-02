@@ -67,6 +67,36 @@ internal sealed class VS_EXE_exe
         RamRegion(Ot800b0f28Address, OT_800b0f28);
     }
 
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: THE OVERLAY'S ADDRESS RESOLVER, and without it none of this port does anything.
+    //
+    // PsxRam holds ONE installed resolver, swapped per overlay by PsxSdkBridges, and every
+    // PsxRam.Read/Write in VS_EXE goes through it. Until this method existed there was no VS.EXE
+    // line in that bridge at all: SELECT.EXE's resolver stayed installed, VS.EXE's addresses matched
+    // nothing, and every read returned zero while every write was dropped — silently. Ten thousand
+    // lines across three tranches were correct and inert, which is the ninth defect of this port's
+    // running tally at the scale of a whole overlay.
+    //
+    // The order matters. LibGpu's own region table is consulted FIRST because every RamRegion this
+    // overlay declares registers there — AnimVm's 0x8C48 workspace, the ordering table, the two
+    // scratch locals the anim VM models for stack arguments, FighterSetup's six 0x1E58 slots — so
+    // one lookup covers them all and no file has to be listed by hand. The explicit chains follow
+    // for the spans that are not RamRegion-backed, then the cross-overlay block, then the heap
+    // last, exactly as SELECT_EXE_exe.ResolveAddress orders its own.
+    internal static (byte[] Buffer, int Offset)? ResolveAddress(int address)
+    {
+        if (RamResolve(address, out byte[] buffer, out int offset))
+        {
+            return (buffer, offset);
+        }
+
+        return FileIo.Resolve(address)
+               ?? FighterSetup.Resolve(address)
+               ?? AnimVm.Resolve(address)
+               ?? SharedHighRam.Resolve(address)
+               ?? PsxHeap.Resolve(address);
+    }
+
     // =====================================================================================
     // .sbss / .bss scalars main touches
     // =====================================================================================
@@ -288,7 +318,7 @@ internal sealed class VS_EXE_exe
 
         FUN_8005cbe0();
         FUN_80034d98();
-        FUN_800511a8(uVar6);
+        FighterSetup.FUN_800511a8(uVar6);
         FUN_80026a68();
 
         DAT_8008d444 = 0;
@@ -442,13 +472,15 @@ internal sealed class VS_EXE_exe
     {
     }
 
-    // GHIDRA: FUN_800511a8 @ 0x800511A8 (VS.EXE)
-    // BLOCKED: it fills the twelve-slot fighter array at battleContext + 0x1520. Six fighters are
-    // created, in slots 0/1/2 and 6/7/8 — the two teams of a three-on-three.
-    private static void FUN_800511a8(int param_1)
-    {
-        _ = param_1;
-    }
+    // FUN_800511a8 @ 0x800511A8 stood here as a BLOCKED stub. It is transliterated in
+    // VS_EXE/FighterSetup.cs now, and main calls THAT one — see the call above.
+    //
+    // The stub had to go rather than merely be left unused: while it existed, two functions in this
+    // port carried the same `// GHIDRA: FUN_800511a8 @ 0x800511A8` annotation, and main called the
+    // empty one. That is tranche 1's duplicate-shared-state defect in its function form — everything
+    // compiles, the real code is dead, and nothing says so. The slice that wrote FighterSetup
+    // spotted it and reported it rather than editing this file, which is what the ownership rule
+    // asks for.
 
     // GHIDRA: FUN_80026a68 @ 0x80026A68 (VS.EXE)
     // BLOCKED.

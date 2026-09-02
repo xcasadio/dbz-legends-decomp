@@ -91,6 +91,26 @@ internal static class PsxSdkBridges
         TraceOverlay("SELECT.EXE");
     }
 
+    // VS.EXE — the versus battle overlay, reached by LoadExec from SELECT.EXE's mode menu.
+    //
+    // This line was MISSING while the whole VS_EXE port was written. PsxRam holds one resolver and
+    // this bridge is what installs it, so with no VS.EXE entry the previous overlay's resolver
+    // stayed in place: every VS.EXE address matched nothing, every read returned zero, every write
+    // was dropped, and none of it raised anything. Three tranches and ten thousand lines were
+    // correct and inert. Three separate files had already recorded the hole in their own comments —
+    // AnimVm.cs, AnimCmdMesh.cs and FileIo.cs — each assuming another slice owned the fix; the
+    // slice that finally reported it up could not close it either, because closing it means editing
+    // this file and VS_EXE_exe.cs, and neither was its to touch.
+    //
+    // Worth keeping as a note about the method rather than only about the bug: a hole that every
+    // slice can see and no slice owns is exactly what the ownership rule produces if nobody is
+    // holding the seam. That is the main session's job.
+    internal static void ActivateVsExe()
+    {
+        PsxRam.AddressResolver = VS_EXE.VS_EXE_exe.ResolveAddress;
+        TraceOverlay("VS.EXE");
+    }
+
     // JUSTIFICATION: backend MonoGame only
     // RELATION: makes the overlay switch observable for acceptance, opt-in through
     // DBZ_OVERLAY_DIAG=1, mirroring the SDK's PE_AUDIO_DIAG pattern. No runtime control flow
