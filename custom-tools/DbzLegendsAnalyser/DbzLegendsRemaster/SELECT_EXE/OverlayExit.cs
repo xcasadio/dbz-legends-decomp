@@ -10,9 +10,10 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 // PadMaskToButtonIndex, the frame step DrawFrame and the shutdown/LoadExec path ShutdownAndLoadExecutable, with
 // SNMAIN's start immediately behind it at 0x800347C4.
 //
-// This file carries the two of them that are on the boot chain. The frame step is in FrameStep.cs;
-// PadMaskToButtonIndex @ 0x800343A4 (a bit-to-index helper the button-remap path feeds) has no caller on
-// this slice's path and is not modelled.
+// This file carries three of them; the frame step is in FrameStep.cs. PadMaskToButtonIndex was left
+// unmodelled while the boot chain was the only slice being ported — it has no caller there. The
+// options screen is that caller: BuildButtonConfigScreen @ 0x8002C048 feeds it entries of the remap
+// tables, so it is transliterated below.
 internal static class OverlayExit
 {
     // GHIDRA: g_PadRemapTable0 @ 0x801FF020
@@ -49,6 +50,91 @@ internal static class OverlayExit
     {
         g_PadRemapTablePointers2 = g_PadRemapTable0_Address;
         DAT_80055b48 = g_PadRemapTable1_Address;
+    }
+
+    // GHIDRA: PadMaskToButtonIndex @ 0x800343A4
+    // Two hundred and fifty-six bytes, no callees: a binary search over exactly eleven pad masks,
+    // transliterated branch for branch from 0x800343A4..0x800344A0. Read from the image through
+    // PCSX-Redux rather than Ghidra — ReVa was unavailable — so the evidence here is the assembly
+    // itself, not a decompilation.
+    //
+    //     0x0001 -> 9    0x0002 -> 7    0x0004 -> 8    0x0008 -> 5
+    //     0x0010 -> 6    0x0020 -> 4    0x0040 -> 3    0x0080 -> 2
+    //     0x0100 -> 10   0x1000 -> 1    0x4000 -> 0
+    //
+    // The two range splits are signed `slti` against 0x21 and 0x101, and the eleven results are
+    // carried in the branch delay slots, which is why every arm here is a plain assignment.
+    //
+    // PARTIAL: the original never initialises $v1 before the tree, and its four default paths —
+    // 0x800343D8, 0x800343F4, 0x80034424, 0x80034440 — jump straight to the epilogue, which does
+    // `move $v0, $v1`. On an unrecognised mask it therefore returns whatever the caller happened to
+    // leave in $v1. C# cannot read an unassigned local, so this returns 0, which is ALSO the
+    // legitimate answer for 0x4000: the two cases are distinguishable in the original and are not
+    // here.
+    //
+    // That default path is reachable, not hypothetical. The remap tables measured on the console at
+    // 0x801FF020 and 0x801FF03C hold fourteen masks each, and three of them — 0x0800, 0x2000 and
+    // 0x8000 — have no arm in this tree. Rule 12: an original that answers garbage for three of its
+    // own table entries is not corrected here.
+    internal static int PadMaskToButtonIndex(int param_1)
+    {
+        int iVar1 = 0;
+
+        if (param_1 == 0x20)
+        {
+            iVar1 = 4;
+        }
+        else if (param_1 < 0x21)
+        {
+            if (param_1 == 4)
+            {
+                iVar1 = 8;
+            }
+            else if (param_1 < 5)
+            {
+                if (param_1 == 1)
+                {
+                    iVar1 = 9;
+                }
+                else if (param_1 == 2)
+                {
+                    iVar1 = 7;
+                }
+            }
+            else if (param_1 == 8)
+            {
+                iVar1 = 5;
+            }
+            else if (param_1 == 0x10)
+            {
+                iVar1 = 6;
+            }
+        }
+        else if (param_1 == 0x100)
+        {
+            iVar1 = 10;
+        }
+        else if (param_1 < 0x101)
+        {
+            if (param_1 == 0x40)
+            {
+                iVar1 = 3;
+            }
+            else if (param_1 == 0x80)
+            {
+                iVar1 = 2;
+            }
+        }
+        else if (param_1 == 0x1000)
+        {
+            iVar1 = 1;
+        }
+        else if (param_1 == 0x4000)
+        {
+            iVar1 = 0;
+        }
+
+        return iVar1;
     }
 
     // GHIDRA: ShutdownAndLoadExecutable @ 0x8003472C
