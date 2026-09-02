@@ -19,6 +19,10 @@ else if (args.Length == 1 && args[0] == "--validate-title-task")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TitleScreenTaskValidation.Run();
 }
+else if (args.Length >= 1 && args[0] == "--diag-saveload")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SelectIntroDiagnostic.RunSaveLoad(args);
+}
 else if (args.Length >= 1 && args[0] == "--diag-options")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SelectIntroDiagnostic.RunOptions(args);

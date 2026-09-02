@@ -26,6 +26,90 @@ internal static class SelectIntroDiagnostic
     // ordering tables and the VRAM the boot arms. Then it re-arms the headless baton and calls
     // RunOptionsScreen directly: the screen owns a blocking do/while and never returns on its own
     // without a cancel press, so the budget is what ends it.
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: drives the save and the load arms of the options screen's row 3 directly, because
+    // the question they answer cannot be settled by reading: does the ported card path actually
+    // COMPLETE, or does it enter the flow and stall on a stubbed BIOS handshake?
+    //
+    // It calls OptionsScreen.FUN_80031c8c, which is the row-3 confirm: 0 selects mode 2, the write
+    // side, and any other value selects mode 3, the read side. Each arm gets its own frame budget,
+    // because both own blocking do/while loops with VSync waits and neither returns on a desktop
+    // without one.
+    internal static int RunSaveLoad(string[] args)
+    {
+        int budget = 400;
+        if (args.Length > 1 && int.TryParse(args[1], out int parsed))
+        {
+            budget = parsed;
+        }
+
+        PsxSdkBridges.Install();
+        PsxSdkBridges.ActivateSelectExe();
+
+        FrameBaton.ResetHeadless(240);
+        try
+        {
+            new SELECT_EXE_exe().start();
+        }
+        catch (GameShutdownException)
+        {
+        }
+        catch (LoadExecTransferException)
+        {
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"boot: {exception.GetType().Name}: {exception.Message}");
+        }
+
+        Console.WriteLine("=== boot termine");
+        Console.WriteLine($"carte presente port 0: {LibMcrd.CardIsPresent(0)}");
+        Console.WriteLine($"g_CardProbeResult = {SharedHighRam.g_CardProbeResult}");
+
+        Drive("SAUVEGARDE  FUN_80031c8c(0) -> mode 2", 0, budget);
+        Drive("CHARGEMENT  FUN_80031c8c(1) -> mode 3", 1, budget);
+        return 0;
+    }
+
+    // JUSTIFICATION: backend MonoGame only
+    private static void Drive(string label, uint arg, int budget)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"########## {label}");
+        MemoryCard.g_CardOperationState = 0;
+        MemoryCard.g_CardReprobeRequest = 0;
+
+        FrameBaton.ResetHeadless(budget);
+        string stopped = "budget epuise";
+        try
+        {
+            OptionsScreen.FUN_80031c8c(arg);
+            stopped = "REVENU NORMALEMENT";
+        }
+        catch (GameShutdownException)
+        {
+        }
+        catch (Exception exception)
+        {
+            stopped = $"{exception.GetType().Name}: {exception.Message}";
+        }
+
+        Console.WriteLine($"  arret            : {stopped}");
+        Console.WriteLine($"  g_CardOperationState = {MemoryCard.g_CardOperationState}");
+        Console.WriteLine($"  g_CardReprobeRequest = {MemoryCard.g_CardReprobeRequest}");
+        Console.WriteLine($"  g_CardProbeResult    = {SharedHighRam.g_CardProbeResult}");
+
+        // The six save records the load side fills, at 0x801FF200 and 0x801FF218. All zero means
+        // the read found nothing; non-zero means a record came back off the card.
+        string records = string.Empty;
+        for (int i = 0; i < 6; i++)
+        {
+            records += $" {SharedHighRam.INT_ARRAY_801ff200[i]:X8}";
+        }
+
+        Console.WriteLine($"  enregistrements      :{records}");
+    }
+
     internal static int RunOptions(string[] args)
     {
         int budget = 120;
