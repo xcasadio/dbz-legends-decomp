@@ -630,10 +630,12 @@ internal static class OptionsScreen
     // is a two-way shim, and naming it would mean choosing between "save" and "load" for something
     // that is both.
     //
-    // GHIDRA'S C OUTPUT FOR THIS FUNCTION IS WRONG AND THE DISASSEMBLY IS WHAT IS PORTED. Because
-    // FUN_800276d8's recovered prototype is `void (void)`, the decompiler dropped the argument setup
-    // on the taken branch and printed a bare `FUN_800276d8();`. The bytes at 0x80031C8C say
-    // otherwise (read with read-memory, 80 bytes):
+    // THIS IS PORTED FROM THE DISASSEMBLY, and it was worth doing. At the time it was written the
+    // decompiler printed a bare `FUN_800276d8();` on the taken branch, with no arguments; after a
+    // re-analysis of the same unchanged program it prints `FUN_800276d8(2);`. Both readings are
+    // Ghidra's, hours apart. A decompiler view is derived and can move; the bytes do not.
+    //
+    // The bytes at 0x80031C8C (read with read-memory, 80 bytes):
     //     0x80031C8C  27BDFFA8  addiu sp, sp, -0x58
     //     0x80031C90  10800007  beq   a0, zero, 0x80031CB0     <- param_1 == 0 jumps FORWARD
     //     0x80031C98  34040003  ori   a0, zero, 3              <- the FALL-THROUGH arm is mode 3

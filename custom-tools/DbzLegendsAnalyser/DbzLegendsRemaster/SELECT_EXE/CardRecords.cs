@@ -64,10 +64,18 @@ namespace DbzLegendsRemaster.SELECT_EXE;
 //     0x80031CB8  addiu a1, sp, 0x10        (delay slot)
 // So param_1 == 0 selects MODE 2, the save side, and param_1 != 0 selects mode 3 at 0x80031CA0.
 //
-// Ghidra hid it, which is why the error was easy to make and hard to see: its decompilation of
-// FUN_80031c8c prints a bare `FUN_800276d8();` at that site, with no arguments at all, because the
-// callee's stored prototype is `undefined FUN_800276d8(void)`. Reading the C alone, no call site
-// passes 2. Reading the bytes, one does.
+// The decompilation shows `FUN_800276d8(2);` there today, so the C alone is enough to see it now.
+// It was not always: a reading taken an hour before this correction printed a bare
+// `FUN_800276d8();` at the same site, with no arguments at all, and a re-analysis is what changed
+// it. That is worth recording, because the whole error rests on it — a decompiler view is a
+// derived artefact and can differ between two readings of the same unchanged program. Only the
+// bytes at 0x80031CB0 are stable.
+//
+// FUN_800276d8 takes ONE parameter and that is not damage. Its prologue destroys the incoming a1
+// before reading it — `lui a1, 0x8002` / `addiu a1, 0x05ac` at 0x800276E8 — so the pointer every
+// caller sets up in a1 is dead on arrival. The stored `undefined FUN_800276d8(void)` is the state
+// of every function in this image, not a wiped prototype, and forcing a two-parameter signature
+// would assert an argument the bytes disprove.
 //
 // RunOptionsScreen closes the loop: row 3 of the options screen calls FUN_80031c8c(DAT_80055b14),
 // and DAT_80055b14 == 0 is the value that draws セーブ. Saving reaches mode 2.
