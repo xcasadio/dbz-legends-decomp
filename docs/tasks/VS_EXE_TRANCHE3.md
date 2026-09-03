@@ -1,87 +1,157 @@
 # VS.EXE — tranche 3 : les données de l'image
 
-État : plan, mesuré, non implémenté. Décidé avec l'utilisateur le 2026-09-02 :
+État : mesuré et réfuté, non implémenté. Décision prise avec l'utilisateur :
 **région adossée aux octets de l'image**, et non transcription à la main table par table.
+
+La mesure a été faite par quatre surfaces indépendantes, puis attaquée par deux réfuteurs par
+surface (une lentille « octets », une lentille « usage »), puis relue par un critique de
+complétude. **67 réfutations : 4 bloquantes, 27 majeures, 36 mineures.** Aucune des quatre
+surfaces n'a survécu intacte. Ce document ne consigne que l'état APRÈS réfutation.
 
 ## Le constat qui déclenche la tranche
 
-Aucune donnée `.rodata` ou `.sdata` des trois overlays n'est lue aujourd'hui. Chaque
-`LibGpu.RamRegion(adresse, taille)` alloue un `new byte[taille]` à zéro, et il n'existe nulle part
-de chemin qui recopie les octets du fichier EXE dedans. Les tables de l'image lisent donc zéro,
-en silence, exactement comme les adresses VS.EXE lisaient zéro avant que `PsxSdkBridges` ne
-connaisse l'overlay.
+Aucun chemin du portage n'ouvre un fichier `.EXE` pour en recopier des octets dans une région.
+Confirmé deux fois indépendamment.
 
-Deux conséquences déjà mesurées, et la seconde est plus large que la première :
+Attention à la formulation, qui a été corrigée : `LibGpu.RamRegion` a **deux surcharges**. Celles
+déclarées `(adresse, longueur)` allouent un tampon à zéro ; celles déclarées `(adresse, tampon)`
+portent un littéral transcrit à la main. Deux régions du portage sont dans le second cas —
+`Roster.cs` à `0x80083CF0` (300 o) et `0x80084184` (144 o) — et leurs octets ont été recomparés à
+l'image : **exacts au bit près**. Dire « toutes les régions sont à zéro » est faux.
 
-1. La scène de combat est bloquée dessus. Sa phase 0 choisit un identifiant de scène en indexant
-   `0x8008222C`, sa phase 1 charge un fichier en indexant `0x80081A50` ; avec des tables nulles,
-   la phase 0 choisit toujours 0 et la phase 1 charge toujours l'index 0.
+Deux conséquences mesurées :
 
-2. `Roster` a établi que l'original **n'efface pas** l'enregistrement de 0x80083CF0 avant de le
-   remplir, et que ses deux séries de drapeaux sont **ORées, pas affectées** — l'image livre un 1v1
-   (identifiants 1 et 9) et tout ce qui dépasse le roster garde le contenu livré. Sur une région à
-   zéro, ce comportement est strictement inobservable : le OR ne peut rien conserver.
+1. La scène de combat est bloquée dessus. Sa phase 0 indexe `0x8008222C` pour choisir une scène,
+   sa phase 1 indexe `0x80081A50` pour charger un fichier ; tables nulles, donc scène 0 et
+   index 0 toujours.
+2. `Roster` n'efface pas son enregistrement de 300 octets avant de le remplir et **ORe** ses
+   drapeaux dans le contenu livré. Sur une région à zéro le OR ne peut rien conserver.
 
-## Ce qui existe déjà et n'est pas à réinventer
+## Étendues, en-têtes, et la frontière .bss
 
-`LibGpu.RamRegion(int psxAddress, byte[] buffer)` accepte un tampon **déjà rempli** et le déclare
-tel quel. Le mécanisme est donc en place ; seul le remplissage manque.
+Lire `t_addr` à l'offset 0x18 et `t_size` à l'offset 0x1C ; le corps commence à l'offset 0x800.
+Pour les neuf images de `data/`, `0x800 + t_size == taille du fichier` exactement.
 
-`Roster.cs` s'en sert déjà, en codant ses deux tables en dur :
-`DAT_80083cf0` (300 o) et `DAT_80084184` (144 o). Les 444 octets ont été recomparés à
-`data/VS.EXE` : **identiques au bit près**. La transcription à la main marche donc, et surtout
-elle se vérifie par script — ce qui reste vrai quel que soit le mécanisme retenu.
+| image | chargement | corps | étendue |
+|---|---|---|---|
+| VS.EXE, TITLE.EXE, GAME.EXE, SP.EXE | `0x80020000` | `0x0E5800` | `[0x80020000, 0x80105800)` |
+| SELECT.EXE | `0x80020000` | `0x036000` | `[0x80020000, 0x80056000)` |
+| MOVIE.EXE | `0x80020000` | `0x020000` | — |
+| DEMO.EXE | `0x80020000` | `0x026800` | — |
+| SLPS_003.55 | `0x80020000` | `0x02D000` | — |
+| **ENDING.EXE** | **`0x80010000`** | `0x049800` | `[0x80010000, 0x80059800)` |
 
-## Étendues mesurées
+**`ENDING.EXE` ne se charge pas à `0x80020000`.** Toute formule
+`offset = adresse - 0x80020000 + 0x800` codée en dur sera fausse pour elle, et son étendue
+chevauche celle de `SELECT.EXE`. L'en-tête doit être lu, jamais supposé.
 
-En-tête PSX de `data/VS.EXE` : adresse de chargement `0x80020000`, corps `0xE5800` octets à partir
-de l'offset fichier `0x800`. La conversion est donc `offset = adresse - 0x80020000 + 0x800`.
+### Les bornes du .bss — corrigées, elles étaient fausses par extension de signe
 
-### Le bloc de tables 0x80081A50..0x80082720 — 3280 octets, 28,6 % de bourrage
+L'immédiat d'un `addiu` est **signé**. La première mesure a lu `addiu v0,v0,0xD254` comme une
+concaténation (`0x8009` | `0xD254`) au lieu d'une addition, ce qui décalait la borne de 64 Ko.
+C'est la même faute que celle qui avait donné deux signatures fausses à `FUN_8003f540` en
+tranche 2 : un demi-mot signé lu comme non signé.
 
-| adresse | forme | contenu lu dans l'image |
+| image | boucle crt0 | plage effacée |
 |---|---|---|
-| `0x80081A50` | pas 0x1B, chaînes | les 53 chemins `\CH_BIN1..3\*.BIN;1`, complétés de zéros |
-| `0x80082164` | pas 3 | paires de petits identifiants (`01 00 00`, `01 02 00`, `31 01 00`…) |
-| `0x800821DC` | pas 2 | `40 00` comme sentinelle, sinon des paires (`36 06`, `37 05`, `38 03`) |
-| `0x8008222C` | octets | valeurs 0..7, indexées par identifiant de scène |
-| `0x80082264` | shorts | 0, 500, 650, 600, 650, 400, 600, 650, 0, 400, 550… — une valeur par personnage |
-| `0x800822D0` | pas 6 | triplets de shorts (`400,0,0`), (`500,0,-400`), (`400,0,400`) — des positions |
-| `0x800826E0` | 16 demi-mots | palette 16 couleurs, BGR 15 bits (`0000 FFFF 873A 9B5A 	…`) |
-| `0x80082700` | 16 demi-mots | seconde palette de même forme |
+| VS.EXE | PC `0x80072F50` | `[0x8008D254, 0x800C3DD4)` |
+| TITLE.EXE | PC `0x80068FF4` | `[0x80083310, 0x800B9EF0)` |
+| SELECT.EXE | PC `0x800347C4` | `[0x80055A78, 0x8006929C)` |
 
-Attention : `0x800822F0` et au-delà contient `0x80037374`, `0x8003737C`, `0x800373A0` — des
-**pointeurs**, donc la table à pas 6 s'arrête avant. L'étendue exacte reste à fermer par l'usage,
-pas par la forme.
+Trois corroborations indépendantes pour VS : le dernier octet non nul de la donnée est à
+`0x8008D214`, soit `0x3F` octets d'alignement avant la borne ; `gp` vaut `0x8008D0FC`, placement
+canonique en tête de `.sdata`/`.sbss` ; et les quatre globales qu'`InitHeap` écrit
+(`0x8008D2E0`..`0x8008D2F8`) tombent au-dessus de la borne corrigée et sous l'ancienne.
 
-### Les autres blocs de chemins CD
+Il n'existe **pas** de « queue de `.data` nulle » de 64 Ko : c'est `0x3F` octets d'alignement.
 
-140 chemins terminés par `;1` au total dans l'image (la reconnaissance en annonçait 136 ; c'est
-140, recomptés). Ils forment cinq groupes contigus :
+**Le nettoyage `.bss` du crt0 est un no-op vis-à-vis des octets d'image, pour les trois overlays.**
+VS : 224 128 octets dans l'image sur la plage effacée, **0 non nul**. TITLE : 224 224 octets,
+**0 non nul**. SELECT : 1 416 octets tombent dans l'image, **tous nuls**. Un mécanisme
+d'adossement n'a donc pas à modéliser ce nettoyage.
 
-| adresse | nombre | contenu |
-|---|---|---|
-| `0x80020424` | 9 | `\SUB\*.B` et les cinq `cdrom:\*.EXE` |
-| `0x800208E0` | 10 | `\CHR_DATA\*` et `\SOUND\*` |
-| `0x80081A50` | 53 | `\CH_BIN1..3\*.BIN`, pas 0x1B — la table des personnages |
-| `0x80082B10` | 16 | `\STG\STG1..8MD.B` puis `\STG\STG1..8TX.B`, pas 0x12 |
-| `0x80083320` | 38 | `\AT1\*.B` et `\AT2\*.B`, pas 0x12 — une entrée par personnage |
+La queue de fichier n'est pas du `.bss` : c'est du bourrage de secteur, `0x6BD` octets pour VS et
+TITLE, `0x589` pour SELECT — chacun strictement sous 2048, et chaque `t_size` est multiple de
+`0x800`.
 
-Les 38 entrées AT et les valeurs de `0x80082264` ont le même cardinal, et le plafond
-d'identifiant de personnage de 38 que `Roster` a repris de la reconnaissance est fermé une
-troisième fois ici. La table `CH_BIN` en compte 53, dont trois `CH_NO.BIN` en position 0, 8 et 40 :
-ce sont des emplacements vides, pas des personnages.
+## Les contraintes de conception, chacune fermée par une mesure
 
-## Ce qu'il reste à décider dans l'implémentation
+1. **Les octets de l'image sont ÉCRITS par le jeu.** Prouvé sur `0x80082164` : `lbu` / `ori 0x80`
+   / `sb` à `0x80035428`-`38`, et le bit est rabaissé par `lbu` / `andi 0x7F` / `sb` à
+   `0x800354B4`-`C0`. C'est le verrou « déjà pris » que la scène de combat décrivait.
+   → l'adossement doit fournir une **copie mutable, réarmée à chaque `Activate*`**, jamais un
+   `static readonly` initialisé une fois. La console recharge l'image à chaque `LoadExec`.
 
-- **Où vit la propriété de l'image.** Un seul fichier doit posséder `data/VS.EXE` et servir les
-  tranches d'octets ; aucune tranche de portage ne doit ouvrir le fichier.
-- **Pas de région chevauchante.** `LibGpu` apparie les régions par référence de tampon et une
-  seconde déclaration sur la même adresse *ajoute une ligne* au lieu de remplacer — la résolution
-  peut alors élire le mauvais stockage. L'adossement doit donc **remplir les régions existantes**,
-  pas en superposer de nouvelles.
-- **Quelles régions adosser.** Seules celles dont l'adresse tombe dans l'étendue du fichier. La RAM
-  de travail (0x801Fxxxx, 0x8008Dxxx, le tas) reste à zéro : sur console elle n'est pas initialisée
-  par l'image non plus.
-- **La même question se pose pour TITLE.EXE et SELECT.EXE**, dont les tables lisent zéro aujourd'hui
-  sans que ce soit visible. À traiter comme une conséquence, pas comme une extension de portée.
+2. **Il y a deux cartes d'adresses, et une seule des cinq les consulte toutes les deux.**
+   `VS_EXE_exe.ResolveAddress` appelle `LibGpu.RamResolve` en premier ; ceux de TITLE, SELECT,
+   MOVIE et SLPS ne l'appellent **jamais**. Adosser les régions `RamRegion` ne changerait donc
+   rien pour quatre overlays sur cinq.
+   → l'adossement doit passer par la chaîne `??` de chaque `ResolveAddress`, uniformément.
+
+3. **Dans une chaîne `??` c'est le PREMIER qui gagne ; dans `RamResolve` c'est la BASE LA PLUS
+   HAUTE.** Une ligne d'image posée à `0x80020000` se comporterait comme un fond de carte qui ne
+   préempte rien dans le registre — mais elle gagnerait sur `FileIo`, `FighterSetup`, `AnimVm`,
+   `SharedHighRam` et `PsxHeap`, qui sont chaînés APRÈS `RamResolve` et dont certains spans
+   tombent dans l'image (`0x8008DA48`).
+   → chaîner l'image **en dernier**, après `PsxHeap`, et **ne pas** la déclarer en `RamRegion`.
+
+4. **Le registre de régions est plafonné à 64 lignes et le dépassement est SILENCIEUX**
+   (`LibGpu.cs:1605` et `:1635` — le tampon est renvoyé sans être enregistré, sans exception).
+   23 sites d'appel à `RamRegion` aujourd'hui dans tout l'arbre : 16 dans les trois dossiers
+   d'overlay, 3 dans `LibGs.cs`, 1 dans `PsxHeap.cs`, 1 dans `SharedHighRam.cs`, 2 dans
+   `Validation/`.
+   → une ligne par overlay, jamais une par symbole.
+
+5. **Le tas de VS.EXE recouvre le haut de l'image.** `start` arme `[0x800C3DD8, ...)` et `main`
+   le réarme à `0x00010000` ; `PsxHeap` n'en tient qu'un. Aucun des deux ne recouvre le bloc de
+   tables `0x80081A50..0x80082720`. Mais tant que l'arme de `start` tient, le tas recouvre
+   268 840 octets de l'image dont 7 635 non nuls — tout le bloc de queue de 16 Ko.
+
+6. **La bascule d'overlay était rompue sur le seul chemin de jeu vers VS.EXE.** Corrigé et gardé
+   par `custom-tools/scripts/check_overlay_handover.py`. Sans cela, tout mécanisme branché sur
+   `Activate*` serait resté inerte pour VS.EXE.
+
+## Ce qui est fermé, et où ne pas remettre de travail
+
+- **SELECT.EXE est intégralement clos** : ses douze régions modélisées ont **0 octet** de
+  recouvrement avec son étendue d'image. Aucun adossement ne peut y toucher une région déclarée.
+- **MOVIE.EXE et SLPS_003.55 sont clos** : seul `g_MovieVlcBuffer0` mord l'image (208 et 1 900
+  octets), **tous nuls**.
+- **Les régions déclarées de VS et TITLE ne changeraient pas** : sur les 11 qui tombent dans
+  l'étendue de leur image, 9 recouvrent des octets tous nuls et les 2 autres portent déjà les
+  octets exacts de l'image.
+
+Autrement dit : **l'adossement n'a pas de moitié « pré-remplir les régions déclarées »**. Il se
+réduit au repli en fin de chaîne. C'est le contraire de ce que j'avais annoncé avant la mesure.
+
+## Ce qui reste ouvert
+
+- **Volume réel de l'adossement** : plancher mesuré d'adresses formées par le code, tombant dans
+  la donnée initialisée non nulle et couvertes par aucune région — VS **436**, TITLE **417**,
+  SELECT **369**. Plancher seulement : le décodeur ne suit ni le gp-relatif, ni une base chargée
+  depuis la mémoire, ni une construction en plus de deux instructions.
+- **Le bloc de 16 Ko `[0x80101800, 0x80105800)`**, identique octet pour octet entre VS, TITLE,
+  GAME et SP. Deux sites par image chargent `0x80101BA4` ; la surface qui l'a trouvé le dit
+  « vivant », sa réfutation dit que la valeur est rangée et jamais relue. **Non tranché.**
+- **Les littéraux transcrits n'ont pas été audités** : 4 vérifiés sur 75 déclarations. Un
+  adossement les remplacerait, donc il faut d'abord savoir qu'ils sont tous exacts.
+- **Une collision de base latente** : `Validation/RenderPipelineValidation.cs:22` déclare
+  `0x800B0000` en la disant « clear of every buffer this port declares », alors que
+  `SELECT_EXE/SelectScreen.cs:26` déclare la même base sur `0x50000` octets. Latent parce que les
+  deux vivent dans des cartes différentes ; un adossement qui unifie les cartes le réveillerait.
+
+## Les tables, après réfutation
+
+Ce que la réfutation a corrigé sur les formes annoncées :
+
+- `0x80082264` compte **au plus 54 entrées** (`0x80082264`..`0x800822D0`), pas 72 — ce qui
+  correspond exactement aux emplacements CH_BIN 0..53. Au-delà les valeurs deviennent négatives
+  (`0xFE70` = −400), donc d'un autre type.
+- Le **plafond d'identifiant de personnage de 38** ne repose plus que sur la table AT elle-même.
+  L'affirmation qu'il pilotait aussi la table d'octets de `0x800835CC` est réfutée : l'index de
+  celle-ci est un `u16` lu à l'offset 0 de `*(0x8008D16C)`, sans lien montré avec `+0x15BC`.
+- La « structure de caméra » n'a **aucun site de lecture** et les octets montrent que la cible est
+  le même objet que celui qui porte `+0x74`. Nom spéculatif, à ne pas reprendre.
+- Le balayage exhaustif des 235 008 mots du corps confirme qu'aucun mot ne vaut une adresse de
+  `[0x80081900, 0x80082800)` : les tables ne sont atteintes que par construction `lui`/`addiu`.
+- Aucun site n'atteint `[0x800823C0, 0x800826E0)` — cette table-là est **morte**.
