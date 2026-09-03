@@ -1,4 +1,5 @@
-﻿using PsxSdkMonogame;
+﻿using System;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
@@ -173,10 +174,26 @@ internal static class OverlayExit
     // LibApi.LoadExec is a no-op, so the port models the transfer at the game layer, exactly as
     // SLPS_003_55, MOVIE_EXE and TITLE_EXE already do.
     //
-    // PARTIAL: none of the three targets is transliterated, so there is nothing to hand over to.
-    // DEMO.EXE, VS.EXE and SP.EXE are all present under data/ (159744, 942080 and 942080 bytes),
-    // and WaitDiscLoad below reproduces the drive time each would take, so when one of them is
-    // ported the dispatch goes here and nowhere else.
+    // VS.EXE EST DESORMAIS TRANSLITEREE, ET CE POINT DE BASCULE EST LE SEUL CHEMIN DE JEU QUI Y MENE.
+    // Le commentaire qui tenait ici disait « aucune des trois cibles n'est transliteree, il n'y a
+    // donc rien a qui passer la main ». C'etait vrai quand il a ete ecrit et faux depuis trois
+    // commits, et cette phrase est precisement ce qui a fait que personne ne l'a rouvert.
+    //
+    // CE QUE CA COUTAIT. PsxRam ne tient QU'UN SEUL resolveur d'adresses, echange par overlay via
+    // PsxSdkBridges. Sans l'echange ici, le resolveur de SELECT.EXE restait installe apres la
+    // bascule: toute adresse de VS.EXE ne correspondait a rien, chaque lecture rendait zero, chaque
+    // ecriture etait jetee, et rien ne le signalait. C'est le meme defaut que celui deja corrige
+    // dans PsxSdkBridges — et il n'etait ferme QUE pour le banc --validate-vs-ram, qui appelle
+    // ActivateVsExe lui-meme. Le jeu, lui, n'appelait personne. Quatrieme instance de la meme
+    // classe dans ce portage, et la seule que ni le build, ni les dix bancs, ni la verification
+    // en contexte neuf ne pouvaient voir, parce qu'aucun d'eux n'emprunte le chemin de jeu.
+    //
+    // La forme est celle de TITLE_EXE/FrameLoop.cs:194, qui fait deja exactement cela pour
+    // SELECT.EXE: installer le resolveur de la cible, puis entrer dans son start().
+    //
+    // PARTIAL: DEMO.EXE et SP.EXE ne sont pas transliterees. Elles sont presentes sous data/
+    // (159744 et 942080 octets) et WaitDiscLoad reproduit le temps de lecture que chacune
+    // prendrait, mais il n'y a toujours rien a qui passer la main pour elles.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
         _ = param_2;
@@ -186,6 +203,16 @@ internal static class OverlayExit
         // RELATION: see LibCd.WaitDiscLoad — the drive spends real time fetching the overlay, and
         // without it a held button carries straight into the next screen.
         WaitDiscLoad(exeFileName);
+
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: A0(0x51) remplace l'executable resident et transfere le controle. Sur console
+        // le nouvel overlay est charge a son adresse et son start s'execute; ici cela se modelise
+        // en installant sa carte d'adresses puis en entrant dans son start.
+        if (string.Equals(exeFileName, "cdrom:\\VS.EXE;1", StringComparison.Ordinal))
+        {
+            PsxSdkBridges.ActivateVsExe();
+            new VS_EXE.VS_EXE_exe().start();
+        }
 
         throw new LoadExecTransferException();
     }
