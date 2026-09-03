@@ -60,7 +60,18 @@ internal static class PsxSdkBridges
     private static void ArmImage(string exeFileName)
     {
         string path = Path.Combine(s_discRoot, exeFileName);
-        PsxExeImage.Arm(File.Exists(path) ? path : null);
+        if (!File.Exists(path))
+        {
+            // LOUD ON PURPOSE. A missing image used to disarm in silence, and silence is how every
+            // hole in this port has stayed open: data/ is not tracked by git and the csproj copies
+            // the images by name, so a missing one reopens the very defect the mechanism closes
+            // with nothing to say so. This is not behind DBZ_OVERLAY_DIAG.
+            Console.Error.WriteLine($"[overlay] image absente: {path} — {exeFileName} lira zero dans ses tables");
+            PsxExeImage.Disarm();
+            return;
+        }
+
+        PsxExeImage.Arm(path);
     }
 
     // JUSTIFICATION: PSX hardware adaptation only

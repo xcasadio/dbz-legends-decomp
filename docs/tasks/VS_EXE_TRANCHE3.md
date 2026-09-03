@@ -11,6 +11,21 @@ l'intervalle — deux stockages pour une adresse, dans cette fenêtre seulement.
 portage (le `main` touche la classe avant de lire) la couvre ; elle est nommée dans
 `PsxExeImage.cs` plutôt que fermée, parce que rien là-bas ne peut la fermer.
 
+**La vérification adverse du commit a rendu REFUTED, sur un P1 que le banc ne pouvait pas voir.**
+Sur le chemin de jeu, `SELECT.start` arme un tas de `0x78ED5C` octets à `0x800692A0` ; `VS.start`
+armait ensuite avec une taille **négative** (ses deux mots crt0 `0x800858DC/E0` étaient des
+statiques C# à zéro alors que l'image porte `0x00008000` / `0x00800000`) et `PsxHeap.InitHeap`
+prenait son chemin de désarmement — qui vidait le stockage **sans libérer sa ligne du registre**.
+Le tas de SELECT survivait en zombie, et comme la chaîne de VS consulte `RamResolve` en premier,
+tout ce qui est au-dessus de `0x800692A0` sans région de base plus haute lisait des zéros dans un
+tas mort : les tables de l'image, mais aussi `FighterSetup` et `FileIo`. Deux correctifs, chacun
+juste seul : le SDK libère au désarmement (sous-module `35f3b78`), et `VS.start` n'arme plus en
+négatif. Le banc rejoue désormais la séquence de tas de production et porte un contrôle dédié au
+désarmement ; sans la libération, six de ses quinze contrôles tombent.
+
+Non traité, et à traiter : le sous-module n'est **pas poussé** (`origin/main` = `4cd2548`, local en
+avance de deux). Un clone frais du superprojet ne construit pas tant qu'il ne l'est pas.
+
 La mesure a été faite par quatre surfaces indépendantes, puis attaquée par deux réfuteurs par
 surface (une lentille « octets », une lentille « usage »), puis relue par un critique de
 complétude. **67 réfutations : 4 bloquantes, 27 majeures, 36 mineures.** Aucune des quatre

@@ -97,9 +97,9 @@ internal sealed class VS_EXE_exe
                ?? PsxHeap.Resolve(address)
         // THE IMAGE, LAST. Answers only for an address nothing above claims: a table in .data or
         // .rodata that the original reads straight out of its own executable. Chained after the
-        // heap because on the console the heap overwrote the image where the two overlapped, and
-        // never declared as a RamRegion because RamResolve would then have shadowed every link
-        // above that lies inside the image extent. See PsxExeImage.
+        // heap by convention — the heap is a span the program armed on purpose, so it outranks
+        // bytes it merely inherited — and never declared as a RamRegion because RamResolve would
+        // then have shadowed every link above that lies inside the image extent. See PsxExeImage.
                ?? PsxExeImage.Resolve(address);
     }
 
@@ -214,10 +214,19 @@ internal sealed class VS_EXE_exe
     }
 
     // GHIDRA: DAT_800858e0 @ 0x800858E0, DAT_800858dc @ 0x800858DC (VS.EXE)
-    // The two crt0 words the heap formula reads. PARTIAL: nothing in this slice writes them.
-    private static uint DAT_800858e0;
+    // The two crt0 words the heap formula reads. They are .data, initialised by the image:
+    //     0x800858DC = 00 80 00 00  ->  0x00008000   the stack size
+    //     0x800858E0 = 00 00 80 00  ->  0x00800000   the stack-top offset
+    // the same two values SELECT.EXE transcribes for its own pair (DAT_8004f828 / DAT_8004f82c),
+    // and the same crt0. The PARTIAL that stood here — "nothing in this slice writes them" — was
+    // true and misleading: nothing writes them because the loader does, and at zero the formula
+    // below went negative, which sent InitHeap down its disarm path instead of arming the
+    // 0x734224-byte heap the console arms at 0x800C3DD8. That disarm is where the SELECT heap was
+    // left registered as a zombie (see PsxHeap.InitHeap). Two fixes for one defect, each right on
+    // its own: the SDK releases on disarm, and this overlay no longer disarms.
+    private static uint DAT_800858e0 = 0x00800000;
 
-    private static uint DAT_800858dc;
+    private static uint DAT_800858dc = 0x00008000;
 
     // GHIDRA: main @ 0x80062134 (VS.EXE)
     // 1320 bytes, 42 distinct callees, single caller `start`.

@@ -621,9 +621,9 @@ internal sealed class SELECT_EXE_exe
                ?? PsxHeap.Resolve(address)
         // THE IMAGE, LAST. Answers only for an address nothing above claims: a table in .data or
         // .rodata that the original reads straight out of its own executable. Chained after the
-        // heap because on the console the heap overwrote the image where the two overlapped, and
-        // never declared as a RamRegion because RamResolve would then have shadowed every link
-        // above that lies inside the image extent. See PsxExeImage.
+        // heap by convention — the heap is a span the program armed on purpose, so it outranks
+        // bytes it merely inherited — and never declared as a RamRegion because RamResolve would
+        // then have shadowed every link above that lies inside the image extent. See PsxExeImage.
                ?? PsxExeImage.Resolve(address);
     }
 }

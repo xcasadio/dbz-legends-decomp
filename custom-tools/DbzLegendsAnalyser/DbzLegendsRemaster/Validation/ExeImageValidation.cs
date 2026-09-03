@@ -31,7 +31,28 @@ internal static class ExeImageValidation
         Console.WriteLine("=== l'image de l'executable comme derniere carte d'adresses ===");
 
         // ------------------------------------------------------------------ VS.EXE
+        // THE PRODUCTION HEAP SEQUENCE FIRST, because the first version of this bench did not
+        // replay it and passed 14/14 over a mechanism that was dead on the game path. SELECT.EXE's
+        // start arms 0x78ED5C bytes at 0x800692A0; VS.EXE's start then arms at 0x800C3DD8 with the
+        // size its crt0 words give (or, with those words at zero as they were, a negative size
+        // that sent InitHeap down its disarm path); VS.EXE's main re-arms 0x10000 at 0x00010000.
+        // A refuter replayed exactly this and five of the checks below fell: SELECT's heap row had
+        // survived the disarm as a zombie, and VS_EXE's resolver consults the registry first.
+        PsxHeap.InitHeap(unchecked((int)0x800692A0), 0x78ED5C);
         PsxSdkBridges.ActivateVsExe();
+
+        // THE DISARM PATH MUST RELEASE ITS ROW — asserted on its own, before start's real
+        // sequence, so that it is guarded whether or not VS.start ever disarms again.
+        PsxHeap.InitHeap(unchecked((int)0x800C3DD8), -802268);
+        var afterDisarm = PsxRam.AddressResolver(unchecked((int)0x80081A50));
+        Expect("un InitHeap qui desarme LIBERE la ligne du tas precedent",
+            afterDisarm.HasValue && PsxExeImage.IsImageBuffer(afterDisarm.Value.buffer),
+            afterDisarm.HasValue
+                ? $"servi par un autre tampon de {afterDisarm.Value.buffer.Length} octets: le tas de SELECT a survecu"
+                : "non resolu");
+
+        PsxHeap.InitHeap(unchecked((int)0x800C3DD8), 0x734224);
+        PsxHeap.InitHeap(0x10000, 0x10000);
 
         int vsLoad = BitConverter.ToInt32(vsFile, 0x18);
         int vsSize = BitConverter.ToInt32(vsFile, 0x1C);
@@ -78,17 +99,19 @@ internal static class ExeImageValidation
         int lockAddress = unchecked((int)0x80082164);
         byte fileByte = vsFile[0x800 + (lockAddress - vsLoad)];
         PsxRam.WriteBytes(lockAddress, new[] { (byte)(fileByte | 0x80) });
-        byte afterWrite = PsxRam.ReadBytes(lockAddress, 1)[0];
-        Expect("l'image est une copie MUTABLE", afterWrite == (byte)(fileByte | 0x80),
-            $"ecrit 0x{fileByte | 0x80:X2}, relu 0x{afterWrite:X2}");
+        byte[] afterWriteBytes = PsxRam.ReadBytes(lockAddress, 1);
+        Expect("l'image est une copie MUTABLE",
+            afterWriteBytes != null && afterWriteBytes[0] == (byte)(fileByte | 0x80),
+            afterWriteBytes == null ? "non resolu" : $"ecrit 0x{fileByte | 0x80:X2}, relu 0x{afterWriteBytes[0]:X2}");
 
         PsxSdkBridges.ActivateVsExe();
-        byte afterRearm = PsxRam.ReadBytes(lockAddress, 1)[0];
-        Expect("un nouvel Activate rearme une copie FRAICHE", afterRearm == fileByte,
-            $"fichier 0x{fileByte:X2}, relu apres rearmement 0x{afterRearm:X2}");
+        byte[] afterRearmBytes = PsxRam.ReadBytes(lockAddress, 1);
+        Expect("un nouvel Activate rearme une copie FRAICHE",
+            afterRearmBytes != null && afterRearmBytes[0] == fileByte,
+            afterRearmBytes == null ? "non resolu" : $"fichier 0x{fileByte:X2}, relu apres rearmement 0x{afterRearmBytes[0]:X2}");
 
         // NEGATIVE CONTROLS. One byte past the extent, and the null page.
-        Expect("0x80105800 (un octet apres la fin) ne se resout pas",
+        Expect($"0x{vsLoad + vsSize:X8} (un octet apres la fin) ne se resout pas",
             !PsxRam.AddressResolver(vsLoad + vsSize).HasValue, "resolu");
         Expect("0x00000000 ne se resout pas",
             !PsxRam.AddressResolver(0).HasValue, "resolu");
