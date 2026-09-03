@@ -62,12 +62,48 @@ Trois jumelles existent dans TITLE mais y sont BLOCKED (`LAB_80040f78`, `LAB_800
 `FUN_80027670` ~ `LAB_80027f5c`, 1650/1650) : elles ne comptent pas, mais **une seule
 transliteration doit servir les deux overlays**.
 
-**En cours à l'arrêt** : un agent calcule la liste **exhaustive** (toutes les fonctions non
-portées de VS contre toutes les fonctions de TITLE/SELECT/MOVIE/SLPS, avec « la jumelle a-t-elle
-un corps réel »). Livrable attendu : `scratchpad/twins/twins.tsv` et un rapport avec totaux par
-issue (PORTEE_AILLEURS / JUMELLE_NON_PORTEE / SANS_JUMELLE), plus la liste des fonctions
-**portées deux fois** (VS et TITLE) — la règle est déjà violée si cette liste n'est pas vide.
-Reprendre par ce résultat : il réduit les groupes ci-dessous avant tout découpage.
+### Le balayage exhaustif, rendu après la demande d'arrêt
+
+Toutes les fonctions VS sans corps réel contre toutes les fonctions de TITLE/SELECT/MOVIE/SLPS,
+masquage strict (celui de ma contre-vérification) et masquage étendu (teinte `lui` propagée à
+travers `addu`, offsets `gp`-relatifs). Tables dans `VS_EXE_TRANCHE4_twins.tsv` (768 lignes) et
+`VS_EXE_TRANCHE4_twins_jeu.tsv` (zone jeu seule, 310). Scripts reproductibles :
+`custom-tools/scripts/twins/` — **à ranger là depuis le scratch de session avant qu'il ne
+disparaisse** (`psxfn.py`, `csport.py`, `twins.py`, `verify.py`, `disasm.py`).
+
+| zone jeu, 310 non portées | fonctions | octets |
+|---|---|---|
+| PORTEE_AILLEURS — jumelle avec corps réel, **à réutiliser** | 31 | 10 776 |
+| JUMELLE_NON_PORTEE — jumelle dans TITLE, non portée là non plus | 260 | 153 148 |
+| SANS_JUMELLE — propre à VS | 19 | 42 380 |
+
+Ajouts à la liste des réutilisables ci-dessus : `0x80040F30` → `StageBackdrop.FUN_80037104` ;
+**`0x80042054` → `TITLE_EXE/DisplayMachine.cs ControlScreenFade`** et `0x800424B0` →
+`UpdateScreenFade` (la fonction que trois fichiers portaient en souche vide, et dont le type de
+retour a été tranché sur les octets, existe déjà en corps réel dans TITLE — 19 mots `gp`
+diffèrent, 0 en masquage étendu, 15/15 appelés cohérents). Réserve sur la carte mémoire : quatre
+des dix-sept fonctions ont des appelés qui diffèrent (`_card_clear`, `FUN_800229a4`) — le port
+SELECT n'y est pas un remplacement direct, à vérifier site par site.
+
+**La conséquence structurelle** : 153 Ko du reliquat ont une jumelle exacte dans TITLE.EXE, elle
+aussi non portée. Chacune de ces fonctions doit être transliterée **une fois pour les deux
+overlays**, sinon la tranche 4 fabrique 260 doublons de plus. Cela impose un emplacement partagé
+(le moteur commun) avant d'écrire la vague 1 — **décision d'architecture, à prendre avec
+l'utilisateur.**
+
+**Règle déjà violée dans le livré : 22 fonctions portées deux fois** (VS_EXE et TITLE_EXE,
+aucune référence croisée) : `TaskSystem.CreateTask / DeleteTask / ExecuteTaskList` ;
+`PrimitivePools.ResetPrimitivePoolCursors / CreatePrimitivePools / AllocatePrimitivePool /
+FreePrimitivePool / InitializePrimitivePool / InitializePolyFt4` ; `FileIo.ReadFile / ReadCDData
+/ WaitSearchFile / DecompressLZSS / ClearVram / SetupGeometry / DecompressAndLoadImage /
+LoadImage_ReturnTPageOrClutId` ; `FighterSetup.FUN_8003478c / FUN_800511a8 / FUN_800512cc` ;
+`PadInput.ProcessPadInput` ; `Heap.ShutdownAndLoadExecutable` — plus `start` (↔ SELECT) et
+`LoadExec`. Ce sont les tranches 0 et 2. Résorber = même décision d'emplacement que ci-dessus.
+
+Sans jumelle, propre à VS : les cinq blocs des écrans de fin (`0x80029200`, `0x80029A98`,
+`0x8002B1B8`, `0x8002C504`, `0x8002ECC0`, non découpés par Ghidra — nombre réel de fonctions
+INCONNU), `FUN_8005a5b0` (8 500 o), `FUN_800594b4`, `FUN_8005a104`, les trois écrans de
+démarrage de `main`, et le module son (25 fonctions : ce n'est pas la même version que TITLE).
 
 ## Le socle à écrire AVANT tout fan-out
 
