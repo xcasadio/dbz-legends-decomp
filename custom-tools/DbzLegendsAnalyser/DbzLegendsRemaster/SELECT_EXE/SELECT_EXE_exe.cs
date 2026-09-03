@@ -618,6 +618,12 @@ internal sealed class SELECT_EXE_exe
     {
         return SelectScreen.Resolve(address)
                ?? SharedHighRam.Resolve(address)
-               ?? PsxHeap.Resolve(address);
+               ?? PsxHeap.Resolve(address)
+        // THE IMAGE, LAST. Answers only for an address nothing above claims: a table in .data or
+        // .rodata that the original reads straight out of its own executable. Chained after the
+        // heap because on the console the heap overwrote the image where the two overlapped, and
+        // never declared as a RamRegion because RamResolve would then have shadowed every link
+        // above that lies inside the image extent. See PsxExeImage.
+               ?? PsxExeImage.Resolve(address);
     }
 }

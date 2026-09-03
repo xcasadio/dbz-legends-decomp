@@ -55,6 +55,10 @@ else if (args.Length == 1 && args[0] == "--validate-tasks")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TaskSystemValidation.Run();
 }
+else if (args.Length == 1 && args[0] == "--validate-exe-image")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.ExeImageValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-heap")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.HeapValidation.Run();

@@ -1,7 +1,15 @@
 # VS.EXE — tranche 3 : les données de l'image
 
-État : mesuré et réfuté, non implémenté. Décision prise avec l'utilisateur :
-**région adossée aux octets de l'image**, et non transcription à la main table par table.
+État : **implémenté** — `PsxSdkMonogame/PsxExeImage.cs`, chaîné en dernier dans les cinq
+`ResolveAddress`, armé par chaque `Activate*` de `PsxSdkBridges`, gardé par
+`--validate-exe-image` (14 contrôles, dont deux témoins négatifs). Décision prise avec
+l'utilisateur : **région adossée aux octets de l'image**, et non transcription à la main.
+
+Un aléa que le banc a trouvé à son premier passage : une région déclarée par un initialiseur
+statique n'existe pas tant que sa classe n'a pas été touchée, et l'image répond dans
+l'intervalle — deux stockages pour une adresse, dans cette fenêtre seulement. La convention du
+portage (le `main` touche la classe avant de lire) la couvre ; elle est nommée dans
+`PsxExeImage.cs` plutôt que fermée, parce que rien là-bas ne peut la fermer.
 
 La mesure a été faite par quatre surfaces indépendantes, puis attaquée par deux réfuteurs par
 surface (une lentille « octets », une lentille « usage »), puis relue par un critique de

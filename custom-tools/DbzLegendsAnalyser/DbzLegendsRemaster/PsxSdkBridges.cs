@@ -21,6 +21,7 @@ internal static class PsxSdkBridges
         PsxRam.AddressResolver = SLPS_003_55_exe.ResolveAddress;
 
         string discRoot = Path.Combine(AppContext.BaseDirectory, "data");
+        s_discRoot = discRoot;
         LibDs.DiscFileResolver = isoPath =>
         {
             if (string.IsNullOrEmpty(isoPath))
@@ -42,6 +43,24 @@ internal static class PsxSdkBridges
             string candidate = Path.Combine(discRoot, relative);
             return File.Exists(candidate) ? candidate : null;
         };
+
+        // The resident executable's own image. The BIOS loaded SLPS_003.55 the same way LoadExec
+        // loads every overlay after it, so its .data is modelled the same way.
+        ArmImage("SLPS_003.55");
+    }
+
+    private static string s_discRoot = string.Empty;
+
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: the half of LoadExec that PsxRam.AddressResolver does not cover. Swapping the
+    // resolver installs the overlay's MAP of addresses; arming the image installs the BYTES the
+    // console would have copied to the load address. Both happen on every switch, in this order,
+    // and each Activate* below does both — an overlay with the map and not the bytes reads zero
+    // out of its own tables, which is what every overlay in this port did until now.
+    private static void ArmImage(string exeFileName)
+    {
+        string path = Path.Combine(s_discRoot, exeFileName);
+        PsxExeImage.Arm(File.Exists(path) ? path : null);
     }
 
     // JUSTIFICATION: PSX hardware adaptation only
@@ -49,6 +68,7 @@ internal static class PsxSdkBridges
     internal static void ActivateMovieExe()
     {
         PsxRam.AddressResolver = MOVIE_EXE_exe.ResolveAddress;
+        ArmImage("MOVIE.EXE");
         TraceOverlay("MOVIE.EXE");
     }
 
@@ -57,6 +77,7 @@ internal static class PsxSdkBridges
     internal static void ActivateTitleExe()
     {
         PsxRam.AddressResolver = TITLE_EXE_exe.ResolveAddress;
+        ArmImage("TITLE.EXE");
         TraceOverlay("TITLE.EXE");
     }
 
@@ -88,6 +109,7 @@ internal static class PsxSdkBridges
     internal static void ActivateSelectExe()
     {
         PsxRam.AddressResolver = SELECT_EXE_exe.ResolveAddress;
+        ArmImage("SELECT.EXE");
         TraceOverlay("SELECT.EXE");
     }
 
@@ -108,6 +130,7 @@ internal static class PsxSdkBridges
     internal static void ActivateVsExe()
     {
         PsxRam.AddressResolver = VS_EXE.VS_EXE_exe.ResolveAddress;
+        ArmImage("VS.EXE");
         TraceOverlay("VS.EXE");
     }
 

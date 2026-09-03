@@ -625,6 +625,11 @@ internal sealed class SLPS_003_55_exe
             return (g_MovieStreamRing, address - MovieStreamRingAddress);
         }
 
-        return null;
+        // THE IMAGE, LAST. Answers only for an address nothing above claims: a table in .data or
+        // .rodata that the original reads straight out of its own executable. Chained after the
+        // heap because on the console the heap overwrote the image where the two overlapped, and
+        // never declared as a RamRegion because RamResolve would then have shadowed every link
+        // above that lies inside the image extent. See PsxExeImage.
+        return PsxExeImage.Resolve(address);
     }
 }
