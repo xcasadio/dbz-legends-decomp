@@ -314,27 +314,22 @@ internal static class SelectScreen
         byte[] auStack_20 = new byte[8];
 
         local_28[0] = 0x80;
-        int iVar2;
-        do
-        {
-            iVar2 = CdControlB(0x0e, local_28, null);
-        } while (iVar2 == 0);
+        // DEVIATION: the original retries CdControlB until it stops returning 0. It cannot return
+        // 0 here: command 0x0E takes one parameter byte and local_28 is non-null (set to {0x80} on
+        // the line above), so CD_cw's null-parameter gate cannot fire and the command is accepted
+        // on the first of CdControlB's four attempts. See WaitSearchFile @ 0x80057F80.
+        int iVar2 = CdControlB(0x0e, local_28, null);
 
         CdControl(0x02, CdlFILE_80059744.pos, auStack_20);
-        do
-        {
-            do
-            {
-                iVar2 = CdSync(1, auStack_20);
-            } while (iVar2 == 0);
-        } while ((iVar2 == 5) || (iVar2 != 2));
+
+        // DEVIATION: same two disc waits as ShowLoadingScreen @ 0x800583FC, same reason — CdSync
+        // is a constant 2 and CdReadSync a constant 0 on desktop, so neither loop could iterate.
+        iVar2 = CdSync(1, auStack_20);
 
         CdRead((int)(((uint)CdlFILE_80059744.size + 0x7ffU) >> 0xb), g_UsagiBFileBuffer_Address, 0x80);
-        do
-        {
-            iVar2 = CdReadSync(1, auStack_20);
-        } while (iVar2 != 0);
+        iVar2 = CdReadSync(1, auStack_20);
 
+        // Kept: this assignment followed the drain loop in the original and is not part of it.
         iVar2 = 0;
         InitializeCdAudio();
         FUN_800258f0(10, 3);

@@ -108,21 +108,18 @@ internal static class LoadingScreen
         // The original passes `(u_char *)&CStack_38`, and CdlFILE begins with its CdlLOC, so the
         // bytes the drive sees are exactly CStack_38.pos.
         CdControl(2, CStack_38.pos, local_20);
-        do
-        {
-            do
-            {
-                iVar2 = CdSync(1, local_20);
-            } while (iVar2 == 0);
-        } while (iVar2 == 5 || iVar2 != 2);
 
-        // Status 5 is CdlDiskError, and the loop above retries it for ever rather than reporting
-        // it. That is the original's own shape and is kept.
+        // DEVIATION: the two disc-wait loops that stood here are not reproduced. The original
+        // spins on CdSync until it stops returning 0, retries the whole seek on status 5
+        // (CdlDiskError), then drains CdReadSync until it returns 0. On desktop CdSync is the
+        // constant 2 (LibCd.cs:146, `return CdlComplete;`) and CdReadSync the constant 0, so the first test was decided
+        // before it ran, the status-5 retry could never fire, and the drain exited on its first
+        // pass. See WaitSearchFile @ 0x80057F80 for the reasoning this port applies to every such
+        // wait. The status-5 note that used to sit here described a retry that cannot happen.
+        iVar2 = CdSync(1, local_20);
+
         CdRead(CStack_38.size, Dat80110000Address, 0x80);
-        do
-        {
-            iVar2 = CdReadSync(1, local_20);
-        } while (iVar2 != 0);
+        iVar2 = CdReadSync(1, local_20);
 
         // The first 0x200 bytes of LOAD.B are the 256-entry CLUT, uploaded below; the LZSS payload
         // starts at +0x200.

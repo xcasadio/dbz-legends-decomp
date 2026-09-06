@@ -152,13 +152,15 @@ internal static class CdAudio
 
                     if ((DAT_80055ac0 & 2) != 0)
                     {
-                        do
-                        {
-                            DAT_80055ae0 = 3;
+                        // DEVIATION: the original retries this until CdControl stops returning 0.
+                        // Command 3 is not in CD_cw's parameter-gated set and the parameter is
+                        // non-null, so it is accepted on the first attempt and 0 is unreachable.
+                        // DAT_80055ae0 = 3 was INSIDE the loop body and is hoisted out, so it still
+                        // runs exactly once before the call. See WaitSearchFile @ 0x80057F80.
+                        DAT_80055ae0 = 3;
 
-                            // `&g_CdTocLocations + g_CdPlayTocIndex * 4` on a char *, i.e. &toc[track].
-                            iVar1 = CdControl(3, g_CdTocLocations[g_CdPlayTocIndex], auStack_18);
-                        } while (iVar1 == 0);
+                        // `&g_CdTocLocations + g_CdPlayTocIndex * 4` on a char *, i.e. &toc[track].
+                        iVar1 = CdControl(3, g_CdTocLocations[g_CdPlayTocIndex], auStack_18);
                     }
                 }
             }

@@ -559,43 +559,39 @@ internal sealed class TITLE_EXE_exe
     {
         uint sectors = (uint)(cdlFile.size + 0x7ff) >> 0xb;
         byte[] result = new byte[8];
-        int readBytes;
-        int status;
 
-        while (true)
+        // DEVIATION: the original's four nested disc-wait loops are not reproduced. This function
+        // is FUN_80061d98 @ 0x80061D98 (VS.EXE) to the word, and takes the same departure for the
+        // same reason, recorded in full there. Against the desktop primitives — CdSync a constant
+        // 2, CdReadSync a constant 0, CdRead a pure function of the latched seek target and the
+        // registry — not one of the four can iterate. The CdRead retry is the only one with a real
+        // failure value, and it carried no VSync, so a failed read froze the host outright.
+        CdControl(2, cdlFile.pos, result);
+
+        // The status is no longer tested, but the call stays: it is the original's.
+        CdSync(0, result);
+
+        if (CdRead((int)sectors, buffer, 0x80) != 1)
         {
-            do
-            {
-                CdControl(2, cdlFile.pos, result);
-                do
-                {
-                    status = CdSync(0, result);
-                } while (status == 0);
-            } while (status == 5);
+            throw new IOException(
+                $"CdRead delivered fewer than {sectors} sector(s) into 0x{buffer:X8} from " +
+                $"{cdlFile.pos?.minute:X2}:{cdlFile.pos?.second:X2}:{cdlFile.pos?.sector:X2}");
+        }
 
-            do
-            {
-                readBytes = CdRead((int)sectors, buffer, 0x80);
-            } while (readBytes != 1);
+        if (mode != 0)
+        {
+            return 0;
+        }
 
-            if (mode != 0)
-            {
-                break;
-            }
+        // The original spells this as `while (readBytes = CdReadSync(0, result), 0 < readBytes)`;
+        // C# has no comma operator, so the assignment was lifted out. The loop it guarded is gone
+        // with the rest — CdReadSync is a constant 0, so `0 < readBytes` was never true and the
+        // VSync(0) inside it has never run in this port. No frame yield is lost.
+        int readBytes = CdReadSync(0, result);
 
-            // The original spells this as `while (readBytes = CdReadSync(0, result), 0 < readBytes)`;
-            // C# has no comma operator, so the assignment is lifted out unchanged.
-            readBytes = CdReadSync(0, result);
-            while (0 < readBytes)
-            {
-                VSync(0);
-                readBytes = CdReadSync(0, result);
-            }
-
-            if (readBytes != -1)
-            {
-                return sectors;
-            }
+        if (readBytes != -1)
+        {
+            return sectors;
         }
 
         return 0;

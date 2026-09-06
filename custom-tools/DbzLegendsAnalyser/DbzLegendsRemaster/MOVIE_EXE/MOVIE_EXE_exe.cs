@@ -253,11 +253,21 @@ internal sealed class MOVIE_EXE_exe
     // GHIDRA: DecodeNextMovieFrameVlc @ 0x80020F98
     private static int DecodeNextMovieFrameVlc(ref MoviePlaybackState state)
     {
-        int timeout = 0x800000;
-        do
+        // DEVIATION: the original polls up to 0x800000 times, waiting for the CD interrupt to
+        // refill the streaming ring while it spins. There is no such interrupt here: StGetNext
+        // ingests its sectors synchronously inside the call (StCdInterrupt is an empty stub), so
+        // one call already does everything the whole loop was waiting for. Retrying is not merely
+        // inert — a refused call has already consumed and discarded a real video sector, so a
+        // spinning loop would eat the film rather than wait for it.
+        //
+        // The failure value is DELIBERATELY not turned into an exception, unlike the rest of this
+        // batch: "no next frame" is a routine outcome, not a fault. The -1 is the original's own
+        // contract and is preserved as such — though note that every caller DISCARDS it, and a
+        // movie actually ends through g_MovieStatus = 1, set on the SUCCESS path of
+        // GetNextMovieFrame when the frame number passes 0x3a1. Throwing here would therefore not
+        // merely be unfaithful, it would fire on a path the game treats as ordinary.
         {
             int frameAddress = GetNextMovieFrame(ref state);
-            timeout--;
             if (frameAddress != 0)
             {
                 state.vlcBufferIndex = state.vlcBufferIndex == 0 ? 1u : 0u;
@@ -266,7 +276,7 @@ internal sealed class MOVIE_EXE_exe
                 StFreeRing(frameAddress);
                 return 0;
             }
-        } while (timeout != 0);
+        }
 
         return -1;
     }
@@ -274,11 +284,10 @@ internal sealed class MOVIE_EXE_exe
     // GHIDRA: GetNextMovieFrame @ 0x80021020
     private static int GetNextMovieFrame(ref MoviePlaybackState state)
     {
-        int timeout = 0x800000;
-        do
+        // DEVIATION: same 0x800000 ring poll as DecodeNextMovieFrameVlc above, same reason, same
+        // treatment — one unconditional call, and "not ready" stays a plain 0 rather than a throw.
         {
             int status = StGetNext(out int frameAddress, out int headerAddress);
-            timeout--;
             if (status == 0)
             {
                 byte[] header = PsxRam.ReadBytes(headerAddress, 0x20);
@@ -317,7 +326,7 @@ internal sealed class MOVIE_EXE_exe
                 state.mdecOutputRect.h = frameHeight;
                 return frameAddress;
             }
-        } while (timeout != 0);
+        }
 
         return 0;
     }
@@ -353,12 +362,28 @@ internal sealed class MOVIE_EXE_exe
     // GHIDRA: SeekAndStartMovieStream @ 0x80021228
     private static void SeekAndStartMovieStream(CdlLOC startLocation)
     {
-        while (CdControl(0x15, startLocation, null) == 0)
+        // DEVIATION: neither empty-bodied retry is reproduced, and neither is dropped silently.
+        //
+        // CdControl(0x15) is guarded rather than assumed. Command 0x15 is not in CD_cw's
+        // parameter-gated set, so a 0 return is not expected — but a seek that was never issued
+        // leaves LibCd's s_lastSeekTarget holding the PREVIOUS position, and the CdRead2 below
+        // would then arm the stream at the wrong place and play the wrong bytes with no error.
+        // That is the one failure in this batch that would corrupt rather than stop.
+        if (CdControl(0x15, startLocation, null) == 0)
         {
+            throw new IOException(
+                "CdControl(CdlSeekL) refused the seek to " +
+                $"{startLocation.minute:X2}:{startLocation.second:X2}:{startLocation.sector:X2}");
         }
 
-        while (CdRead2(0x1c0) == 0)
+        // CdRead2 is decided by the latched seek target and the mode alone, so retrying cannot
+        // change its answer — and retrying after a SUCCESS is destructive: a second call disposes
+        // the stream source it just armed and reopens it, rewinding the movie.
+        if (CdRead2(0x1c0) == 0)
         {
+            throw new IOException(
+                "CdRead2 could not arm the movie stream at " +
+                $"{startLocation.minute:X2}:{startLocation.second:X2}:{startLocation.sector:X2}");
         }
     }
 

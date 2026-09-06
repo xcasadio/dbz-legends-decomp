@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
@@ -440,43 +440,49 @@ internal static class FileIo
     {
         uint sectors = (uint)(cdlFile.size + 0x7ff) >> 0xb;
         byte[] auStack_30 = new byte[8];
-        int iVar1;
-        int local_28;
 
-        while (true)
+        // DEVIATION: the original's four nested disc-wait loops are not reproduced. Each is
+        // measured against the desktop primitive it polls, and not one of them can iterate:
+        //
+        //   do { st = CdSync(0, buf); } while (st == 0)   CdSync (LibCd.cs:146) is `return CdlComplete;`, a const 2
+        //   } while (st == 5)                             so both tests are decided on the constant
+        //   do { r = CdRead(...); } while (r != 1)        CdRead is a pure function of the latched
+        //                                                 seek target, the sector count and the
+        //                                                 registry — a second identical call
+        //                                                 cannot answer differently
+        //   while (true) { ... }                          re-ran only when CdReadSync returned -1,
+        //                                                 and CdReadSync (LibCd.cs) is `return 0;`
+        //
+        // The CdRead retry is the one with a real failure value, so it is guarded rather than
+        // dropped: with no VSync in its body it was an unyielding freeze of the MonoGame window on
+        // a failed read, exactly like the CdSearchFile loops removed before it.
+        CdControl(2, cdlFile.pos, auStack_30);
+
+        // The status is no longer tested, but the call stays: it is the original's, and dropping a
+        // transliterated SDK call would be a bigger departure than dropping a test of a constant.
+        CdSync(0, auStack_30);
+
+        if (CdRead((int)sectors, buffer, 0x80) != 1)
         {
-            do
-            {
-                CdControl(2, cdlFile.pos, auStack_30);
-                do
-                {
-                    local_28 = CdSync(0, auStack_30);
-                } while (local_28 == 0);
-            } while (local_28 == 5);
+            throw new IOException(
+                $"CdRead delivered fewer than {sectors} sector(s) into 0x{buffer:X8} from " +
+                $"{cdlFile.pos?.minute:X2}:{cdlFile.pos?.second:X2}:{cdlFile.pos?.sector:X2}");
+        }
 
-            do
-            {
-                iVar1 = CdRead((int)sectors, buffer, 0x80);
-            } while (iVar1 != 1);
+        if (mode != 0)
+        {
+            return 0;
+        }
 
-            if (mode != 0)
-            {
-                break;
-            }
+        // The original spells this as `while (iVar1 = CdReadSync(0, auStack_30), 0 < iVar1)`;
+        // C# has no comma operator, so the assignment was lifted out. The loop it guarded is gone
+        // with the rest — CdReadSync is a constant 0, so `0 < iVar1` was never true and the
+        // VSync(0) inside it has never run in this port. No frame yield is lost.
+        int iVar1 = CdReadSync(0, auStack_30);
 
-            // The original spells this as `while (iVar1 = CdReadSync(0, auStack_30), 0 < iVar1)`;
-            // C# has no comma operator, so the assignment is lifted out unchanged.
-            iVar1 = CdReadSync(0, auStack_30);
-            while (0 < iVar1)
-            {
-                VSync(0);
-                iVar1 = CdReadSync(0, auStack_30);
-            }
-
-            if (iVar1 != -1)
-            {
-                return sectors;
-            }
+        if (iVar1 != -1)
+        {
+            return sectors;
         }
 
         return 0;
