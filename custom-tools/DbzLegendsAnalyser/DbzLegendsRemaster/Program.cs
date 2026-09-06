@@ -55,6 +55,10 @@ else if (args.Length == 1 && args[0] == "--validate-pad-mute")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.PadMuteValidation.Run();
 }
+else if (args.Length == 1 && args[0] == "--validate-gte-rotavg")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.GteRotAverageValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-tasks")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TaskSystemValidation.Run();
