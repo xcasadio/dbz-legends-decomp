@@ -1,4 +1,5 @@
-﻿using PsxSdkMonogame;
+﻿using System.IO;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibGpu;
 
@@ -73,7 +74,6 @@ internal static class LoadingScreen
     {
         DeclareOrderingTableAddress();
 
-        CdlFILE pCVar1;
         int iVar2;
         POLY_FT4Ref p;
         short sVar3;
@@ -83,10 +83,16 @@ internal static class LoadingScreen
 
         local_20[0] = 0x80;
         CdControlB(0x0e, local_20, null);
-        do
+        // DEVIATION: the original retries this search until it stops returning NULL, waiting for
+        // the drive. See WaitSearchFile @ 0x80057F80 (TITLE_EXE_exe.cs) for why that retry can
+        // never change its answer on desktop. The CdlFILE is read on the very next lines — pos goes
+        // through CdPosToInt — so a miss cannot be allowed to fall through unfilled.
+        if (CdSearchFile(CStack_38, "\\CHR_DATA\\LOAD.B;1".ToCharArray()) == null)
         {
-            pCVar1 = CdSearchFile(CStack_38, "\\CHR_DATA\\LOAD.B;1".ToCharArray());
-        } while (pCVar1 == null);
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\CHR_DATA\\LOAD.B;1 under the deployed data tree",
+                "\\CHR_DATA\\LOAD.B;1");
+        }
 
         CStack_38.size = 10;
         iVar2 = CdPosToInt(CStack_38.pos);

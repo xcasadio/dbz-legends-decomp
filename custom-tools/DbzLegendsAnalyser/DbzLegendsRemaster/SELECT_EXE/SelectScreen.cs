@@ -1,4 +1,5 @@
-﻿using PsxSdkMonogame;
+﻿using System.IO;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
 using static PsxSdkMonogame.LibGpu;
@@ -161,13 +162,22 @@ internal static class SelectScreen
         SetDispMask(0);
         CdInit();
 
-        CdlFILE pCVar1;
         int iVar7;
-        do
+
+        // DEVIATION: the original retries this search until it stops returning NULL, waiting for
+        // the drive. See WaitSearchFile @ 0x80057F80 (TITLE_EXE_exe.cs) for why that retry can
+        // never change its answer on desktop. `iVar7 = 0` sat inside the loop body and is kept
+        // where the body put it, after the search; the loop ran it once on every terminating path
+        // anyway. CdlFILE_80059744 is a global that LoadUSAGI_B @ 0x80030908 reads back for both
+        // its pos and its size, so a miss must not fall through with it unfilled.
+        if (CdSearchFile(CdlFILE_80059744, "\\SUB\\USAGI.B;1".ToCharArray()) == null)
         {
-            pCVar1 = CdSearchFile(CdlFILE_80059744, "\\SUB\\USAGI.B;1".ToCharArray());
-            iVar7 = 0;
-        } while (pCVar1 == null);
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\SUB\\USAGI.B;1 under the deployed data tree",
+                "\\SUB\\USAGI.B;1");
+        }
+
+        iVar7 = 0;
 
         // THE TRIANGULAR POINTER TABLE. Seven records at g_SpriteChainTable7; record i gets a row pointer
         // at +4 into g_SpritePointerTable28 at word offset T(i) = i(i+1)/2, the row holds i + 1 entries, and
@@ -295,8 +305,9 @@ internal static class SelectScreen
     // THE DEPLOYMENT GAP THIS NOTE USED TO RECORD IS CLOSED. LibDs resolves the file through
     // PsxSdkBridges' DiscFileResolver, which looks under <output>/data, and
     // DbzLegendsRemaster.csproj now carries `<Content Include="..\..\..\data\SUB\USAGI.B">` with
-    // CopyToOutputDirectory=PreserveNewest. So CdSearchFile finds it and FUN_80030698's
-    // `do { ... } while (p == NULL)` terminates. The file is data/SUB/USAGI.B, 301056 bytes.
+    // CopyToOutputDirectory=PreserveNewest. So CdSearchFile finds it on FUN_80030698's single
+    // search — the retry loop that used to stand around it is gone, see the DEVIATION note there.
+    // The file is data/SUB/USAGI.B, 301056 bytes.
     internal static void LoadUSAGI_B()
     {
         byte[] local_28 = new byte[8];

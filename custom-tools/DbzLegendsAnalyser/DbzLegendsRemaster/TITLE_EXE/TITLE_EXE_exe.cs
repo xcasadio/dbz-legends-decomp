@@ -1,4 +1,5 @@
-﻿using PsxSdkMonogame;
+﻿using System.IO;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.Kernel;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
@@ -97,11 +98,19 @@ internal sealed class TITLE_EXE_exe
         PadInit(0);
         CdInit();
 
-        CdlFILE pCVar1;
-        do
+        // DEVIATION: the original spins here — do { p = CdSearchFile(...); } while (p == NULL) —
+        // waiting for the drive to find SELECT.EXE. WaitSearchFile @ 0x80057F80 below carries the
+        // full reason that retry cannot help on desktop; it applies unchanged to this site.
+        // The returned pointer is discarded on the console too, but the call is not idle: it fills
+        // the global CdlFILE_800a8860, whose pos UpdateTitleScreen @ 0x80021E28 (TitleScreenTask.cs)
+        // later hands to CdControl(CdlSetloc). That global is `new()`, so its pos is still null
+        // until this call succeeds — one more reason a miss must not be allowed to fall through.
+        if (CdSearchFile(CdlFILE_800a8860, "\\SELECT.EXE;1".ToCharArray()) == null)
         {
-            pCVar1 = CdSearchFile(CdlFILE_800a8860, "\\SELECT.EXE;1".ToCharArray());
-        } while (pCVar1 == null);
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\SELECT.EXE;1 under the deployed data tree",
+                "\\SELECT.EXE;1");
+        }
 
         ReadFile("\\SUB\\TITLE.B;1".ToCharArray(), TitleBBufferAddress, 0);
         uint uVar2 = 0x10000;
@@ -505,13 +514,42 @@ internal sealed class TITLE_EXE_exe
     // Internal for the same reason as ReadFile above: LoadFACE_B @ 0x80052D68 (FaceImages.cs) calls
     // it directly, twice, instead of going through ReadFile — it needs the CdlFILE back so it can
     // convert the position with CdPosToInt.
+    //
+    // DEVIATION, and this is the reference copy of it: the same departure is made at every
+    // CdSearchFile site in the port, and the other six point back here. The original is a retry
+    // loop, and the function's name is the whole of its behaviour:
+    //
+    //     do { result = CdSearchFile(cdlFile, fileName); } while (result == NULL);
+    //
+    // On the console that loop earns its keep. CdSearchFile can come back NULL while the drive is
+    // still seeking, so spinning is how the caller waits for the lens to settle and the directory
+    // to be read. There is no lens here. The desktop CdSearchFile (LibCd.cs:1055) goes to
+    // LibDs.DsSearchFile, which asks the DiscFileResolver PsxSdkBridges installs — a File.Exists
+    // probe under <output>/data — and memoises the hit in LibDs's registry, base LBA included. The
+    // answer is a pure function of two arguments the loop never changes and of a directory this
+    // process never writes to, so a second identical call cannot return what the first did not.
+    // The loop has exactly two possible lives: exit on its first pass, or never exit at all.
+    //
+    // "Never" is not theoretical, and it is not a slow load either. The body carries no VSync, so
+    // it never yields the frame baton back to the host: a file missing from the deployed data tree
+    // freezes the MonoGame window outright, with no message and no way out. data/CHR_DATA/FACE.B
+    // and data/CHR_DATA/OV_CHR_A.B — both reached through this function from LoadFACE_B @
+    // 0x80052D68 — are still absent from DbzLegendsRemaster.csproj's Content list today.
+    //
+    // So the retry is gone and the miss is named instead. A file the drive cannot find yet is a
+    // disc condition worth waiting on; a file that is not on disk at all is a deployment error, and
+    // it is now reported as one rather than spun on. Nothing else moves: on the path that matters —
+    // the file is there — this is the single call the loop already made, and the CdlFILE is filled
+    // exactly as before.
     internal static void WaitSearchFile(char[] fileName, CdlFILE cdlFile)
     {
-        CdlFILE result;
-        do
+        if (CdSearchFile(cdlFile, fileName) == null)
         {
-            result = CdSearchFile(cdlFile, fileName);
-        } while (result == null);
+            string isoPath = new string(fileName).TrimEnd('\0');
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve " + isoPath + " under the deployed data tree",
+                isoPath);
+        }
     }
 
     // GHIDRA: ReadCDData @ 0x80057E40

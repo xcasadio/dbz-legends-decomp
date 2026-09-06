@@ -222,9 +222,12 @@ inchange.
 ## Limites explicites
 
 - `BLOCKED`: tout le runtime de `TITLE.EXE` au-dela du point d'entree. Aucun des
-  appeles `FUN_` du chemin d'ouverture de `main` n'est ferme. Porter un prefixe
-  tronque entrerait dans la boucle de reessai `CdSearchFile` sans sortie ni
-  `VSync`.
+  appeles `FUN_` du chemin d'ouverture de `main` n'est ferme. Le motif donne ici
+  a l'origine — porter un prefixe tronque entrerait dans la boucle de reessai
+  `CdSearchFile` sans sortie ni `VSync` — ne tient plus: cette boucle a ete
+  retiree du port, voir `CD_WAIT_REMOVAL.md`. Un fichier manquant est desormais
+  nomme au lieu de figer l'hote. Le `BLOCKED` lui-meme tient toujours, sur les
+  appeles non fermes.
 - `PARTIAL`: la semantique des deux arguments de pile de `A0(0x51)` n'est pas
   fermee; ils gardent des noms bruts des deux cotes, meme si le prototype est
   desormais pose dans Ghidra.

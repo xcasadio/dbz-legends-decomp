@@ -1,3 +1,4 @@
+using System.IO;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
@@ -390,24 +391,34 @@ internal static class FileIo
     }
 
     // GHIDRA: FUN_80061ed8 @ 0x80061ED8 (VS.EXE)
-    // This is the WaitSearchFile of TITLE.EXE @ 0x80057F80 to the word — same 68 bytes, same loop.
-    // The C# name comes from there; the Ghidra symbol here is still raw.
+    // In the image this is the WaitSearchFile of TITLE.EXE @ 0x80057F80 to the word — same 68
+    // bytes, same retry loop. The C# name comes from there; the Ghidra symbol here is still raw.
     //
-    // Retries CdSearchFile forever until it stops returning null. Internal rather than private
-    // because two of its three call sites are outside this file: FUN_8005cbe0 @ 0x8005CBE0 calls it
-    // directly, twice (0x8005CD10 for \CHR_DATA\FACE.B;1 and 0x8005CE4C for
-    // \CHR_DATA\OV_CHR_A.B;1), because it needs the CdlFILE back — once to convert the position
-    // with CdPosToInt, once to overwrite the size CdSearchFile just filled in with a hard 0x3800.
+    // Internal rather than private because two of its three call sites are outside this file:
+    // FUN_8005cbe0 @ 0x8005CBE0 calls it directly, twice (0x8005CD10 for \CHR_DATA\FACE.B;1 and
+    // 0x8005CE4C for \CHR_DATA\OV_CHR_A.B;1), because it needs the CdlFILE back — once to convert
+    // the position with CdPosToInt, once to overwrite the size CdSearchFile just filled in with a
+    // hard 0x3800.
     //
     // Note the argument order: the original is FUN_80061ed8(name, fp) but CdSearchFile is
     // CdSearchFile(fp, name), so the two are swapped at the call, exactly as below.
+    //
+    // DEVIATION: the original's `do { p = CdSearchFile(...); } while (p == NULL)` is not
+    // reproduced. Being byte-identical to 0x80057F80 in the image, it takes the same departure for
+    // the same reason, recorded in full at WaitSearchFile @ 0x80057F80 (TITLE_EXE_exe.cs): the
+    // desktop CdSearchFile resolves through a File.Exists probe that no second call can answer
+    // differently, so the retry either exits on its first pass or spins forever without a VSync,
+    // freezing the host. VS.EXE has more to lose here than TITLE.EXE does — this is the search
+    // behind every \CH_BIN1\CH_xx.BIN;1 fighter load through ReadFile @ 0x80061D4C.
     internal static void WaitSearchFile(char[] fileName, CdlFILE cdlFile)
     {
-        CdlFILE pCVar1;
-        do
+        if (CdSearchFile(cdlFile, fileName) == null)
         {
-            pCVar1 = CdSearchFile(cdlFile, fileName);
-        } while (pCVar1 == null);
+            string isoPath = new string(fileName).TrimEnd('\0');
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve " + isoPath + " under the deployed data tree",
+                isoPath);
+        }
     }
 
     // GHIDRA: FUN_80061d98 @ 0x80061D98 (VS.EXE)

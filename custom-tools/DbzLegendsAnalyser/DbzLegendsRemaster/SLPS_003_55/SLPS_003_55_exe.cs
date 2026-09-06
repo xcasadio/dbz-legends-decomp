@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.IO;
 using DbzLegendsRemaster.MOVIE_EXE;
 using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
@@ -94,13 +95,21 @@ internal sealed class SLPS_003_55_exe
     // GHIDRA: PlayBandaiMovie @ 0x80020DE8
     private static void PlayBandaiMovie()
     {
-        CdlFILE movieFile;
         // PARTIAL: the managed CdSearchFile adapter represents failure as null; it has no pointer
         // value corresponding to the original secondary (CdlFILE *)-1 sentinel.
-        do
+        //
+        // DEVIATION: the original retries this search until it stops returning NULL, waiting for
+        // the drive to find the stream. See WaitSearchFile @ 0x80057F80 (TITLE_EXE_exe.cs) for why
+        // that retry can never change its answer on desktop. This is the boot executable's very
+        // first disc access, so the loop was also the game's first opportunity to hang before
+        // drawing a single frame. The three lines below dereference movieFile.pos immediately.
+        CdlFILE movieFile = CdSearchFile(new CdlFILE(), "\\MOVIE\\BANDAI.STR;1".ToCharArray());
+        if (movieFile == null)
         {
-            movieFile = CdSearchFile(new CdlFILE(), "\\MOVIE\\BANDAI.STR;1".ToCharArray());
-        } while (movieFile == null);
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\MOVIE\\BANDAI.STR;1 under the deployed data tree",
+                "\\MOVIE\\BANDAI.STR;1");
+        }
 
         g_MovieStartLocation.minute = movieFile.pos.minute;
         g_MovieStartLocation.second = movieFile.pos.second;

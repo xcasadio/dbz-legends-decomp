@@ -89,6 +89,12 @@ de `main` ne contiennent **aucun `VSync`**. Sur le baton de frame desktop, ces
 deux boucles ne rendraient jamais la main a l'hote si le fichier n'etait pas
 resolu. `ReadCDData`, lui, appelle `VSync(0)` et ne pose pas ce probleme.
 
+Les deux lignes ci-dessus decrivent la ROM et restent exactes; le port, lui, ne
+les reproduit plus. Les deux boucles ont ete retirees, voir `CD_WAIT_REMOVAL.md`:
+sur desktop `CdSearchFile` se resout par un `File.Exists` memoise, donc un second
+appel identique ne peut pas repondre autrement que le premier, et le reessai
+n'a que deux vies possibles — sortir au premier tour, ou ne jamais sortir.
+
 ## Architecture du runtime
 
 `CreateTask @ 0x80049504`, 540 octets et **42 appelants**, est la fonction
@@ -147,10 +153,8 @@ brutes.
   `TITLE_EXE_TASK_SYSTEM.md`.
 - `BLOCKED`: `FUN_80038228` conditionne l'affichage; son etat `DAT_80083454`
   n'est pas ferme.
-- Les deux boucles d'attente disque sans `VSync` ne posent pas de probleme de
-  fidelite: l'adaptation desktop de `CdSearchFile` repond immediatement, donc la
-  boucle sort au premier tour des que le fichier est resolu. Elle ne gelerait
-  l'hote que si le fichier etait absent de la sortie de build. `data/SELECT.EXE`
-  et `data/SUB/TITLE.B` existent bien, `TITLE.B` faisant exactement les `0x25000`
-  octets annonces par `TITLE_B_FILE_FORMAT_ANALYSIS.md`, mais le `.csproj` ne
-  copie aujourd'hui que les deux `.STR`. Le prochain lot devra etendre la copie.
+- `RESOLVED`: les deux boucles d'attente disque sans `VSync` n'existent plus dans
+  le port. Le pari qui figurait ici — la boucle sort au premier tour, elle ne
+  gelerait l'hote que si le fichier etait absent de la sortie de build — a ete
+  perdu: `data/CHR_DATA/LOAD.B` n'est toujours pas copie par le `.csproj`, et le
+  gel a ete observe. Voir `CD_WAIT_REMOVAL.md` pour la mesure avant/apres.

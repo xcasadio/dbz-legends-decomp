@@ -161,6 +161,13 @@ do {
 } while (result == 0);
 ```
 
+This is the shape to *recognise* in the image, and the one shape the C# port
+deliberately does not reproduce. On desktop the search resolves through a
+memoised `File.Exists`, so a second identical call cannot answer differently from
+the first: the retry either exits on its first pass or never exits at all, and it
+carries no `VSync` to yield the host with. The port makes the single call and
+names a missing file instead. See `docs/tasks/CD_WAIT_REMOVAL.md`.
+
 **Double-buffered display init:**
 ```c
 SetDefDispEnv(&dispEnv[0], 0, 0, 320, 240);

@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
+using System.IO;
 using DbzLegendsRemaster.TITLE_EXE;
 using DbzLegendsRemaster.Types;
 using PsxSdkMonogame;
@@ -80,13 +81,22 @@ internal sealed class MOVIE_EXE_exe
     // GHIDRA: PlayDbzOpeningMovie @ 0x80020A90
     private static void PlayDbzOpeningMovie()
     {
-        CdlFILE movieFile;
         // PARTIAL: the managed CdSearchFile adapter represents failure as null; it has no pointer
         // value corresponding to the original secondary (CdlFILE *)-1 sentinel.
-        do
+        //
+        // DEVIATION: the original retries this search until it stops returning NULL, waiting for
+        // the drive to find the stream. See WaitSearchFile @ 0x80057F80 (TITLE_EXE_exe.cs) for why
+        // that retry can never change its answer on desktop. The three lines below dereference
+        // movieFile.pos immediately, so on a miss the loop was the only thing standing between a
+        // missing DBZ_OP.STR and a NullReferenceException — a frozen window instead of a crash.
+        // Now it is neither: the missing file is named.
+        CdlFILE movieFile = CdSearchFile(new CdlFILE(), "\\MOVIE\\DBZ_OP.STR;1".ToCharArray());
+        if (movieFile == null)
         {
-            movieFile = CdSearchFile(new CdlFILE(), "\\MOVIE\\DBZ_OP.STR;1".ToCharArray());
-        } while (movieFile == null);
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\MOVIE\\DBZ_OP.STR;1 under the deployed data tree",
+                "\\MOVIE\\DBZ_OP.STR;1");
+        }
 
         g_MovieStartLocation.minute = movieFile.pos.minute;
         g_MovieStartLocation.second = movieFile.pos.second;
