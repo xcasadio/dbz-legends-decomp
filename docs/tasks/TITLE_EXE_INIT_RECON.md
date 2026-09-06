@@ -156,5 +156,10 @@ brutes.
 - `RESOLVED`: les deux boucles d'attente disque sans `VSync` n'existent plus dans
   le port. Le pari qui figurait ici — la boucle sort au premier tour, elle ne
   gelerait l'hote que si le fichier etait absent de la sortie de build — a ete
-  perdu: `data/CHR_DATA/LOAD.B` n'est toujours pas copie par le `.csproj`, et le
-  gel a ete observe. Voir `CD_WAIT_REMOVAL.md` pour la mesure avant/apres.
+  perdu: `data/CHR_DATA/LOAD.B` n'etait pas copie par le `.csproj`, et le gel a
+  ete observe. Voir `CD_WAIT_REMOVAL.md` pour la mesure avant/apres.
+- `RESOLVED`: le `.csproj` deploie desormais `data/CHR_DATA/*.B`, `data/STG/*.B`
+  et `data/CH_BIN1/*.BIN`, en plus de `data/SELECT.EXE` et `data/SUB/TITLE.B`
+  qui l'etaient deja. Le chemin de boot va au bout. `data/SOUND` (119 Mo) et
+  `data/tracks` (211 Mo) restent volontairement hors sortie: aucun site d'appel
+  ne les nomme aujourd'hui.

@@ -46,12 +46,22 @@ arguments, `--validate-xa-transition` en exige trois et `--validate-str-v2` deux
 Lances nus ils traversent tous les `else if` et **demarrent le jeu**, ce qui donne
 l'illusion d'un banc en echec alors que c'est le boot qui echoue.
 
-Le fichier existe dans le depot (`data/CHR_DATA/LOAD.B`), il n'est simplement pas
-dans la liste `Content` de `DbzLegendsRemaster.csproj`. Le retrait des boucles n'a donc
-pas casse le chemin de boot: il a nomme un defaut de deploiement que la
+Le fichier existait dans le depot (`data/CHR_DATA/LOAD.B`) sans figurer dans la
+liste `Content` de `DbzLegendsRemaster.csproj`. Le retrait des boucles n'a donc
+pas casse le chemin de boot: il a **nomme** un defaut de deploiement que la
 boucle rendait invisible depuis le debut. `TITLE_EXE_INIT_RECON.md` avait parie
 l'inverse (« elle ne gelerait l'hote que si le fichier etait absent de la sortie
 de build »); le pari est perdu et le document est corrige.
+
+DEPUIS CORRIGE. Le `.csproj` deploie maintenant `data/CHR_DATA/*.B`,
+`data/STG/*.B` et `data/CH_BIN1/*.BIN`, et le chemin de boot va au bout sans
+exception. Le diagnostic a valu la peine d'etre fait deux fois: le symptome se
+lit naturellement comme un defaut de traitement du nom de fichier — le message
+cite `\CHR_DATA\LOAD.B;1`, suffixe ISO compris — alors que la traduction du
+nom etait correcte de bout en bout et que seul le fichier manquait. Le resolveur
+de `PsxSdkBridges` retire `cdrom:`, tronque au premier `;` et enleve le
+separateur de tete avant `Path.Combine`; ce `TrimStart` n'est pas cosmetique,
+sans lui `Path.Combine` jetterait la racine devant un second argument absolu.
 
 ## Les sept sites
 
@@ -89,9 +99,6 @@ Il ne survit pas pour autant: le lot suivant le retire entierement, sur decision
 de l'utilisateur — le port ne simule pas de temps de chargement — et corrige a
 sa place le defaut qu'il masquait, cote entree, par un verrou de manette dans
 `PadInputBackend`. Voir `DISC_LOAD_LATENCY.md`.
-
-`data/CHR_DATA/` contient six fichiers, aucun deploye: `CH_EF_P0.B`, `CRDD.B`,
-`EFF_AUTO.B`, `FACE.B`, `LOAD.B`, `OV_CHR_A.B`.
 
 ## Inventaire du lot 2
 

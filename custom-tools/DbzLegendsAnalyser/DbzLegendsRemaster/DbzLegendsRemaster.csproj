@@ -71,6 +71,32 @@
       <Link>data\ENDING.EXE</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+
+    <!-- The archives the runtime asks the disc for by name. Until these were deployed, every one
+         of them made CdSearchFile miss on a perfectly translated host path, which read like a
+         filename bug and was a deployment gap: \CHR_DATA\LOAD.B;1 froze the boot before the loops
+         were removed, and named itself afterwards. Globs rather than one entry per file, so a new
+         archive in one of these directories does not need this list edited again.
+
+         CHR_DATA  the loading picture, the portraits, the shared effect textures
+         STG       the eight stage archives, STGxTX.B, reached through ReadFile @ 0x80057DF4
+         CH_BIN1   the per-fighter \CH_BIN1\CH_xx.BIN;1, whose name VS.EXE builds at runtime
+
+         DELIBERATELY NOT DEPLOYED: data/SOUND (119 MB) and data/tracks (211 MB, the CD audio) —
+         no call site names either today. data/SUB carries sixteen archives but only the two the
+         runtime actually asks for are listed above, to keep the output small. -->
+    <Content Include="..\..\..\data\CHR_DATA\*.B">
+      <Link>data\CHR_DATA\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\data\STG\*.B">
+      <Link>data\STG\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\data\CH_BIN1\*.BIN">
+      <Link>data\CH_BIN1\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Target Name="RestoreDotnetTools" BeforeTargets="CollectPackageReferences">
     <Message Text="Restoring dotnet tools (this might take a while depending on your internet speed and should only happen upon building your project for the first time, or after upgrading MonoGame, or clearing your nuget cache)" Importance="High" />
