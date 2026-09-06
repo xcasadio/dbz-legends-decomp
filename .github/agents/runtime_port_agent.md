@@ -6,7 +6,7 @@ tools:
   [vscode, execute, read, agent, edit, search, web, browser, 'pcsx-redux/*', 'reva/*', vscode.mermaid-chat-features/renderMermaidDiagram, todo]
 ---
 
-# Agent Specification: Parasite Eve 1 Global C to C# Transliteration
+# Agent Specification: DRAGON BALL Z LEGENDS Global C to C# Transliteration
 
 ## Mission
 
@@ -253,7 +253,7 @@ public static short g_CurrentMapId;
 Si utile, une ligne supplémentaire peut être ajoutée juste après:
 
 ```csharp
-// SOURCE: SLUS_006.62 / Ghidra / docs/...
+// SOURCE: SLPS_003.55 / Ghidra / docs/...
 ```
 
 Mais la ligne `GHIDRA:` reste obligatoire.
@@ -398,8 +398,8 @@ Toute sémantique doit être classée comme:
 Fermée par preuve explicite provenant de:
 
 - Ghidra
-- `SLUS_006.62`
-- `PE.IMG`
+- `SLPS_003.55`
+- le dossier `data`
 - PCSX-Redux
 - `docs/`
 - `/memories/repo/`

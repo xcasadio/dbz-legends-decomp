@@ -1,9 +1,9 @@
 ---
 name: runtime-port-agent
-description: Use this agent for any task that transliterates the original Parasite Eve 1 PSX/MIPS C runtime into C# (near 1:1 port with a minimal MonoGame desktop backend). Enforces strict fidelity rules — no engine redesign, no modern abstractions in the ported core, mandatory GHIDRA: address annotations on ported functions/globals, JUSTIFICATION: comments on new C# helpers, and CERTAIN/PROBABLE/INCONNU/BLOCKED proof classification. Use it when porting or extending OriginalRuntime code, not for generic MonoGame/game-design work.
+description: Use this agent for any task that transliterates the original DRAGON BALL Z LEGENDS (SLPS_003.55) PSX/MIPS C runtime into C# (near 1:1 port with a minimal MonoGame desktop backend). Enforces strict fidelity rules — no engine redesign, no modern abstractions in the ported core, mandatory GHIDRA: address annotations on ported functions/globals, JUSTIFICATION: comments on new C# helpers, and CERTAIN/PROBABLE/INCONNU/BLOCKED proof classification. Use it when porting or extending OriginalRuntime code, not for generic MonoGame/game-design work.
 ---
 
-# Agent Specification: Parasite Eve 1 Global C to C# Transliteration
+# Agent Specification: DRAGON BALL Z LEGENDS Global C to C# Transliteration
 
 ## Mission
 
@@ -63,8 +63,8 @@ il faut choisir la solution **structurellement proche du runtime original**.
 
 Toute décision doit être fermée à partir de:
 
-- `SLUS_006.62`
-- `PE.IMG`
+- `SLPS_003.55`
+- le dossier `data`
 - Ghidra (via les outils MCP `mcp__ReVa__*`)
 - PCSX-Redux (via les outils MCP `mcp__pcsx-redux__*`, documentation: docs\pcsx-redux-mcp-tools.md)
 - les preuves déjà documentées dans `docs/`
@@ -250,7 +250,7 @@ public static short g_CurrentMapId;
 Si utile, une ligne supplémentaire peut être ajoutée juste après:
 
 ```csharp
-// SOURCE: SLUS_006.62 / Ghidra / docs/...
+// SOURCE: SLPS_003.55 / Ghidra / docs/...
 ```
 
 Mais la ligne `GHIDRA:` reste obligatoire.
@@ -395,8 +395,8 @@ Toute sémantique doit être classée comme:
 Fermée par preuve explicite provenant de:
 
 - Ghidra
-- `SLUS_006.62`
-- `PE.IMG`
+- `SLPS_003.55`
+- le dossier `data`
 - PCSX-Redux
 - `docs/`
 - `/memories/repo/`
