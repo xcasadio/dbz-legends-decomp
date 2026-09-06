@@ -170,8 +170,9 @@ se compose de :
 
 Dépendances par **pointeur** que le graphe `jal` ne voyait pas (réfutation) : V→X1, X1→X2/X3/X4,
 X3→X4 ; V n'est donc pas une feuille pure. Cycles S↔R et A↔S : se résolvent par signatures dans
-le socle, pas par lecture croisée. `FUN_8003f6c0` (A, 724 o) est bloquée par le SDK :
-`RotAverage3` manque à `PsxSdkMonogame.LibGte` — décision d'architecture, hors portage.
+le socle, pas par lecture croisée. `FUN_8003f6c0` (A, 724 o) **n'est plus bloquée** : `RotAverage3` a été ajoutée à
+`PsxSdkMonogame.LibGte`, marquée `PARTIAL` (reconstruite : aucun corps compilé n'existe dans
+les images) et épinglée par le banc `--validate-gte-rotavg`. Voir `VS_EXE_SOCLE.md`.
 
 Frontière du groupe S à corriger : remplacer `GAP_80026738` (100 o, boucle morte) par
 `LAB_80026784` (260 o, handler de la table `0x80083C6C`) ; recaler `GAP_80055780` sur
@@ -183,6 +184,19 @@ Ce qui a coûté trois défauts en tranche 2 et un P1 en tranche 3. Avant tout c
 `check_task_registration.py`, `check_overlay_handover.py`, `check_vs_dispatch.py`, le balayage
 des doublons **avec les `const`** (`scratchpad/dupes2.py` à ranger dans `custom-tools/scripts/`),
 les onze bancs, `--diag-select 400` = 49396. Et un témoin négatif pour tout nouveau banc.
+
+## État du socle — voir `VS_EXE_SOCLE.md`
+
+Trois des sept points du socle sont faits et vérifiés (scratchpad, doublons intra-VS,
+`RotAverage3`), plus l'outillage de couture que ce document supposait présent et qui ne l'était
+pas. **La directive « déplacer les 124 symboles du scratchpad » est révisée** : la vérification
+adresse par adresse a trouvé trois conflits réels et un défaut d'aliasing, et les 17 doublons
+inter-overlay sont des homonymes à des adresses différentes, pas des doublons.
+
+Le point 2 du socle, `SoundState.cs`, est le prochain, et il est prérequis à `FUN_8005f704`.
+
+Ghidra n'est plus le seul chemin de preuve : la RAM de PCSX-Redux contient VS.EXE chargé, et
+`gp = 0x8008D0FC` résout tous les accès relatifs.
 
 ## Ce qui n'est pas de la tranche 4 mais attend
 
