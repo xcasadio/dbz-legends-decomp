@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
@@ -154,9 +154,12 @@ internal static class AnimCmdMesh
     // AnimCmd_LoadTexture takes an image pointer out of the same table.
     //
     // The BYTES behind this address are FileIo.g_cdFileBufferTable, declared by tranche 0 and NOT
-    // redeclared here; only the address constant is repeated, because this file addresses it rather
-    // than indexing the array.
-    private const int g_cdFileBufferTable = unchecked((int)0x801D2000);
+    // redeclared here. The ADDRESS is not redeclared either any more: it used to be a second
+    // `private const int g_cdFileBufferTable` in this file, which gave one PSX symbol two C#
+    // declarations of DIFFERENT KINDS under ONE NAME -- a `byte[]` storage over there, an `int`
+    // address here. Nothing broke, because a const address and the array it points at are not two
+    // storages, but the shared name made them look interchangeable when they are not. This file now
+    // uses FileIo's address constant, so the symbol has exactly one name per meaning.
 
     // GHIDRA: DAT_801d2004 @ 0x801D2004 (VS.EXE)
     // Ghidra types it undefined2. The docs close 0x801D2004 as the CH.BIN header's entry_count
@@ -240,7 +243,7 @@ internal static class AnimCmdMesh
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
             // (&g_cdFileBufferTable)[uVar3 >> 8] — undefined4 element, so +index*4.
-            puStack_98 = PsxRam.ReadI32(g_cdFileBufferTable + (uVar3 >> 8) * 4);
+            puStack_98 = PsxRam.ReadI32(FileIo.g_cdFileBufferTableAddress + (uVar3 >> 8) * 4);
             // (&DAT_801d2004)[(uVar3 >> 8) * 2] — undefined2 element, so +index*2*2. See the
             // overlap note on DAT_801d2004.
             sVar4 = (short)PsxRam.ReadU16(DAT_801d2004 + (int)(uint)(uVar3 >> 8) * 2 * 2);
@@ -521,7 +524,7 @@ internal static class AnimCmdMesh
             if (((int)(sbyte)(PsxRam.ReadU16(streamPtr) >> 8) & 1) == 0)
             {
                 FileIo.LoadImage_ReturnTPageOrClutId(
-                    PsxRam.ReadI32(g_cdFileBufferTable + (short)PsxRam.ReadU16(streamPtr + 5 * 2) * 4),
+                    PsxRam.ReadI32(FileIo.g_cdFileBufferTableAddress + (short)PsxRam.ReadU16(streamPtr + 5 * 2) * 4),
                     PsxRam.ReadU16(streamPtr + 1 * 2),
                     PsxRam.ReadU16(streamPtr + 2 * 2),
                     (short)PsxRam.ReadU16(streamPtr + 3 * 2),
@@ -532,7 +535,7 @@ internal static class AnimCmdMesh
             else
             {
                 FileIo.DecompressAndLoadImage(
-                    PsxRam.ReadI32(g_cdFileBufferTable + (short)PsxRam.ReadU16(streamPtr + 5 * 2) * 4),
+                    PsxRam.ReadI32(FileIo.g_cdFileBufferTableAddress + (short)PsxRam.ReadU16(streamPtr + 5 * 2) * 4),
                     PsxRam.ReadU16(streamPtr + 1 * 2),
                     PsxRam.ReadU16(streamPtr + 2 * 2),
                     (short)PsxRam.ReadU16(streamPtr + 3 * 2),

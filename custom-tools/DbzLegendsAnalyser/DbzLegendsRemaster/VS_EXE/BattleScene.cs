@@ -156,7 +156,15 @@ internal static class BattleScene
     // zero, which is what main leaves the word at and what VS_EXE_exe's field also holds. The two
     // agree today; when the scratchpad gets its VS_EXE/GteScratch.cs the address read becomes the
     // live one.
-    private const int DAT_1f80012c = 0x1F80012C;
+    // Renamed from DAT_1f80012c: that name is VS_EXE_exe's `static int` field, the actual storage
+    // for this word in this overlay. One PSX symbol had two C# declarations of different kinds
+    // under one name -- storage there, address here. This is the address.
+    //
+    // NOTE for whoever wires the scratchpad: 0x1F80012C is one of the three addresses the root
+    // Scratchpad.cs deliberately does NOT hold, because TITLE.EXE uses this same word for its
+    // 0..2 loading-picture counter and VS uses it for something else. Reusable fast RAM, two
+    // meanings, two declarations -- correctly.
+    private const int Dat1f80012cAddress = 0x1F80012C;
 
     // GHIDRA: DAT_1f80009c @ 0x1F80009C (VS.EXE)
     // A GTE scratchpad word the dispatcher multiplies the sine by. VS_EXE/FileIo.cs models the
@@ -617,7 +625,7 @@ internal static class BattleScene
                     pbVar6 = DAT_800821dc + (int)uVar7 * 2;
                     uVar12 = PsxRam.ReadU8(pbVar6);
                     if (((PsxRam.ReadU8(pbVar6) & 0x80) == 0)
-                        && (PsxRam.ReadU8(DAT_800821dd + (int)uVar7 * 2) == PsxRam.ReadI32(DAT_1f80012c)))
+                        && (PsxRam.ReadU8(DAT_800821dd + (int)uVar7 * 2) == PsxRam.ReadI32(Dat1f80012cAddress)))
                     {
                         PsxRam.WriteU8(pbVar6, (byte)(PsxRam.ReadU8(pbVar6) | 0x80));
                     }
