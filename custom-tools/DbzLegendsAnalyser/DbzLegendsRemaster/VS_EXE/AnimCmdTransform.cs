@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
@@ -86,14 +86,19 @@ internal static class AnimCmdTransform
     private const int DAT_801faaac = unchecked((int)0x801FAAAC);
 
     // GHIDRA: DAT_1f800084 @ 0x1F800084 (VS.EXE)
-    // The scratchpad halfword FUN_8003f2b0 falls back to. It is the first of the three at 0x1F800084,
-    // 0x1F800086 and 0x1F800088 — the vx/vy/vz triple VS_EXE/FileIo.cs already declares for
-    // SetupGeometry — which is exactly the three-short rotation vector rotate_set then walks.
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: the ADDRESS of the scratchpad halfword FUN_8003f2b0 falls back to, not its value.
+    // The datum itself is Scratchpad.DAT_1f800084, first of the vx/vy/vz triple at 0x1F800084/86/88
+    // that SetupGeometry writes and rotate_set walks.
     //
-    // PARTIAL: FileIo.cs models those three as plain C# fields, so no PSX address resolves to them
-    // and this fallback path reads and writes nothing here. Reconciling the scratchpad model is the
-    // business of the slice that owns it, not of this one; nothing in FileIo.cs was touched.
-    private const int DAT_1f800084 = 0x1F800084;
+    // The name carries `Address` deliberately. This used to be a second `DAT_1f800084` declared as
+    // `const int` while the data was a `short` elsewhere -- one of the two type-divergent duplicates
+    // the tranche-4 plan lists. They were never the same thing: this site assigns a raw PSX address
+    // into a pointer-shaped local, the other holds a rotation component. Two names, two meanings.
+    //
+    // PARTIAL, unchanged from before: the scratchpad is modelled as plain C# fields, so no PSX
+    // address resolves to it and this fallback path still reads and writes nothing.
+    private const int Dat1f800084Address = 0x1F800084;
 
     // ===================================================================================
     // Opcode 6 — trans_set
@@ -1215,7 +1220,7 @@ internal static class AnimCmdTransform
             }
             else
             {
-                puVar2 = DAT_1f800084;
+                puVar2 = Dat1f800084Address;
             }
         }
         else

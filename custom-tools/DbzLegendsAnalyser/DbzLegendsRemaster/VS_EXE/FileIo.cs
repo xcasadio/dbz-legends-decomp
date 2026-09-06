@@ -100,45 +100,6 @@ internal static class FileIo
     // `RotMatrix((SVECTOR *)&DAT_1f800104, (MATRIX *)&DAT_1f800000)` — and the SDK's GTE entry
     // points take MATRIX / SVECTOR directly.
 
-    // GHIDRA: DAT_1f800000 @ 0x1F800000 (VS.EXE)
-    // RotMatrix's output and the matrix handed to both SetLightMatrix and SetRotMatrix.
-    internal static readonly MATRIX MATRIX_1f800000 = new();
-
-    // GHIDRA: DAT_1f80007c @ 0x1F80007C (VS.EXE)
-    // vx / vy / vz at 0x7C, 0x7E and 0x80; the original writes the three halfwords separately and
-    // then casts the address to SVECTOR * for RotMatrix.
-    internal static readonly SVECTOR SVECTOR_1f80007c = new();
-
-    // GHIDRA: DAT_1f800084 @ 0x1F800084 (VS.EXE)
-    internal static short DAT_1f800084;
-
-    // GHIDRA: DAT_1f800086 @ 0x1F800086 (VS.EXE)
-    internal static short DAT_1f800086;
-
-    // GHIDRA: DAT_1f800088 @ 0x1F800088 (VS.EXE)
-    internal static short DAT_1f800088;
-
-    // GHIDRA: _DAT_1f8000b4 @ 0x1F8000B4 (VS.EXE)
-    internal static int _DAT_1f8000b4;
-
-    // GHIDRA: DAT_1f8000b8 @ 0x1F8000B8 (VS.EXE)
-    internal static int DAT_1f8000b8;
-
-    // GHIDRA: _DAT_1f8000bc @ 0x1F8000BC (VS.EXE)
-    internal static int _DAT_1f8000bc;
-
-    // GHIDRA: _DAT_1f8000c0 @ 0x1F8000C0 (VS.EXE)
-    internal static int _DAT_1f8000c0;
-
-    // GHIDRA: DAT_1f8000c4 @ 0x1F8000C4 (VS.EXE)
-    internal static int DAT_1f8000c4;
-
-    // GHIDRA: DAT_1f8000c8 @ 0x1F8000C8 (VS.EXE)
-    internal static int DAT_1f8000c8;
-
-    // GHIDRA: DAT_1f8000cc @ 0x1F8000CC (VS.EXE)
-    internal static int DAT_1f8000cc;
-
     // GHIDRA: DAT_1f8000d0 @ 0x1F8000D0 (VS.EXE)
     internal static int DAT_1f8000d0;
 
@@ -154,34 +115,8 @@ internal static class FileIo
     // GHIDRA: DAT_1f8000e0 @ 0x1F8000E0 (VS.EXE)
     internal static int DAT_1f8000e0;
 
-    // GHIDRA: DAT_1f8000e4 @ 0x1F8000E4 (VS.EXE)
-    // The colour matrix handed to SetColorMatrix. Its nine shorts sit at 0xE4, 0xE6, 0xE8, 0xEA,
-    // 0xEC, 0xEE, 0xF0, 0xF2 and 0xF4 — Ghidra prints them as nine separate DAT_ labels — which is
-    // the m[0..8] order used in SetupGeometry below.
-    internal static readonly MATRIX MATRIX_1f8000e4 = new();
-
-    // GHIDRA: DAT_1f800104 @ 0x1F800104 (VS.EXE)
-    // Written as DAT_1f800104 / DAT_1f800106 / DAT_1f800108 and then cast to SVECTOR * by the
-    // original when it reaches RotMatrix.
-    internal static readonly SVECTOR SVECTOR_1f800104 = new();
-
-    // GHIDRA: DAT_1f800110 @ 0x1F800110 (VS.EXE)
-    internal static int DAT_1f800110;
-
-    // GHIDRA: DAT_1f800114 @ 0x1F800114 (VS.EXE)
-    internal static int DAT_1f800114;
-
-    // GHIDRA: DAT_1f800118 @ 0x1F800118 (VS.EXE)
-    internal static int DAT_1f800118;
-
-    // GHIDRA: DAT_1f80011c @ 0x1F80011C (VS.EXE)
-    internal static int DAT_1f80011c;
-
     // GHIDRA: DAT_1f800120 @ 0x1F800120 (VS.EXE)
     internal static int DAT_1f800120;
-
-    // GHIDRA: DAT_1f800124 @ 0x1F800124 (VS.EXE)
-    internal static int DAT_1f800124;
 
     // ==== functions ============================================================================
 
@@ -224,46 +159,46 @@ internal static class FileIo
         SetGeomScreen(h);
         SetFarColor(0x80, 0x80, 0x80);
         SetBackColor(0x80, 0x80, 0x80);
-        MATRIX_1f8000e4.m[6] = 0x1000;
-        MATRIX_1f8000e4.m[3] = 0x1000;
-        MATRIX_1f8000e4.m[0] = 0x1000;
-        MATRIX_1f8000e4.m[8] = 0;
-        MATRIX_1f8000e4.m[7] = 0;
-        MATRIX_1f8000e4.m[5] = 0;
-        MATRIX_1f8000e4.m[4] = 0;
-        MATRIX_1f8000e4.m[2] = 0;
-        MATRIX_1f8000e4.m[1] = 0;
-        SetColorMatrix(MATRIX_1f8000e4);
-        SVECTOR_1f800104.vx = 0;
-        SVECTOR_1f800104.vy = 0;
-        SVECTOR_1f800104.vz = 0;
-        RotMatrix(SVECTOR_1f800104, MATRIX_1f800000);
-        SetLightMatrix(MATRIX_1f800000);
-        SVECTOR_1f80007c.vx = rx;
-        SVECTOR_1f80007c.vy = ry;
-        SVECTOR_1f80007c.vz = rz;
-        DAT_1f800084 = rx;
-        DAT_1f800086 = ry;
-        DAT_1f800088 = rz;
-        RotMatrix(SVECTOR_1f80007c, MATRIX_1f800000);
-        SetRotMatrix(MATRIX_1f800000);
-        _DAT_1f8000b4 = param_4;
-        DAT_1f8000b8 = param_5;
-        _DAT_1f8000bc = param_6;
-        DAT_1f8000c4 = param_4;
-        DAT_1f8000c8 = param_5;
-        DAT_1f8000cc = param_6;
+        Scratchpad.MATRIX_1f8000e4.m[6] = 0x1000;
+        Scratchpad.MATRIX_1f8000e4.m[3] = 0x1000;
+        Scratchpad.MATRIX_1f8000e4.m[0] = 0x1000;
+        Scratchpad.MATRIX_1f8000e4.m[8] = 0;
+        Scratchpad.MATRIX_1f8000e4.m[7] = 0;
+        Scratchpad.MATRIX_1f8000e4.m[5] = 0;
+        Scratchpad.MATRIX_1f8000e4.m[4] = 0;
+        Scratchpad.MATRIX_1f8000e4.m[2] = 0;
+        Scratchpad.MATRIX_1f8000e4.m[1] = 0;
+        SetColorMatrix(Scratchpad.MATRIX_1f8000e4);
+        Scratchpad.SVECTOR_1f800104.vx = 0;
+        Scratchpad.SVECTOR_1f800104.vy = 0;
+        Scratchpad.SVECTOR_1f800104.vz = 0;
+        RotMatrix(Scratchpad.SVECTOR_1f800104, Scratchpad.MATRIX_1f800000);
+        SetLightMatrix(Scratchpad.MATRIX_1f800000);
+        Scratchpad.SVECTOR_1f80007c.vx = rx;
+        Scratchpad.SVECTOR_1f80007c.vy = ry;
+        Scratchpad.SVECTOR_1f80007c.vz = rz;
+        Scratchpad.DAT_1f800084 = rx;
+        Scratchpad.DAT_1f800086 = ry;
+        Scratchpad.DAT_1f800088 = rz;
+        RotMatrix(Scratchpad.SVECTOR_1f80007c, Scratchpad.MATRIX_1f800000);
+        SetRotMatrix(Scratchpad.MATRIX_1f800000);
+        Scratchpad._DAT_1f8000b4 = param_4;
+        Scratchpad.DAT_1f8000b8 = param_5;
+        Scratchpad._DAT_1f8000bc = param_6;
+        Scratchpad.DAT_1f8000c4 = param_4;
+        Scratchpad.DAT_1f8000c8 = param_5;
+        Scratchpad.DAT_1f8000cc = param_6;
         DAT_1f8000d4 = param_4;
         DAT_1f8000d8 = param_5;
         DAT_1f8000dc = param_6;
-        DAT_1f800114 = ofx;
-        DAT_1f800124 = ofx;
-        DAT_1f80011c = ofx;
-        DAT_1f800110 = ofy;
+        Scratchpad.DAT_1f800114 = ofx;
+        Scratchpad.DAT_1f800124 = ofx;
+        Scratchpad.DAT_1f80011c = ofx;
+        Scratchpad.DAT_1f800110 = ofy;
         DAT_1f800120 = ofy;
-        DAT_1f800118 = ofy;
+        Scratchpad.DAT_1f800118 = ofy;
         DAT_1f8000d0 = param_7;
-        _DAT_1f8000c0 = param_7;
+        Scratchpad._DAT_1f8000c0 = param_7;
         DAT_1f8000e0 = param_7;
     }
 

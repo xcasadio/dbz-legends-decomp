@@ -7,7 +7,7 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 //
 // The task that owns the camera is LAB_80027f5c @ 0x80027F5C, registered by FUN_80058a9c as
 // `CreateTask(&LAB_80027f5c, 0x55, 0x13, 0, 0, DAT_800798a0)`. It is the PRODUCER for the nine
-// scratchpad words FUN_80037388 consumes at the top of every frame (GteScratch.DAT_1f800084/86/88,
+// scratchpad words FUN_80037388 consumes at the top of every frame (Scratchpad.DAT_1f800084/86/88,
 // DAT_1f8000c4/c8/cc/d0, DAT_1f800120/124). It is NOT transliterated here. What blocks it, and the
 // evidence for each blocker, is recorded at the bottom of this file under "WHY LAB_80027f5c IS NOT
 // HERE". Nothing in this file guesses at it.

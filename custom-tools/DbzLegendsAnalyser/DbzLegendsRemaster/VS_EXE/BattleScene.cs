@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibGte;
@@ -338,14 +338,14 @@ internal static class BattleScene
                 // NOT gated on DAT_800b305a — the only arm that is not. ExecuteAnimStreamBatch does
                 // its own gating, and it is the statement that moves the phase on to 4.
                 AnimVmInterpreter.ExecuteAnimStreamBatch();
-                sVar1 = FileIo.DAT_1f800084;
+                sVar1 = Scratchpad.DAT_1f800084;
                 goto LAB_80034fb0;
             case 4:
-                sVar1 = FileIo.SVECTOR_1f80007c.vx;
+                sVar1 = Scratchpad.SVECTOR_1f80007c.vx;
                 if ((AnimVm.DAT_800b305a & 1) == 0)
                 {
                     FUN_80036a64();
-                    sVar1 = FileIo.SVECTOR_1f80007c.vx;
+                    sVar1 = Scratchpad.SVECTOR_1f80007c.vx;
                 }
 
             LAB_80034fb0:
@@ -367,7 +367,7 @@ internal static class BattleScene
                     FileIo.DAT_1f800120 = 0;
                 }
 
-                FileIo.DAT_1f800124 = 0xa0;
+                Scratchpad.DAT_1f800124 = 0xa0;
                 break;
         }
     }
@@ -1041,9 +1041,9 @@ internal static class BattleScene
             }
             while (uVar17 < 6);
 
-            FileIo.DAT_1f8000c4 = unchecked((int)0xffffb1e0);
-            FileIo.DAT_1f8000c8 = 0;
-            FileIo.DAT_1f8000cc = unchecked((int)0xffff98f1);
+            Scratchpad.DAT_1f8000c4 = unchecked((int)0xffffb1e0);
+            Scratchpad.DAT_1f8000c8 = 0;
+            Scratchpad.DAT_1f8000cc = unchecked((int)0xffff98f1);
             FUN_80042054(4, 0x20);
             PsxRam.WriteU16(PsxRam.ReadI32(local_b8 + 0x18) + 4, 0);
             PsxRam.WriteU8(PsxRam.ReadI32(local_b8 + 0x18) + 0x16a, 0);

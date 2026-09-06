@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 using static PsxSdkMonogame.LibGte;
 
 namespace DbzLegendsRemaster.VS_EXE;
@@ -427,9 +427,9 @@ internal static class AnimCmdControl
                     PushMatrix();
                     ApplyMatrixLV(MStack_40, VStack_80, VStack_70);
                     PopMatrix();
-                    iVar14 = (short)PsxRam.ReadU16(psVar8) - FileIo._DAT_1f8000b4;
+                    iVar14 = (short)PsxRam.ReadU16(psVar8) - Scratchpad._DAT_1f8000b4;
                     iVar10 = -(int)(short)PsxRam.ReadU16(psVar8 + 2) - VStack_70.vy;
-                    iVar7 = -((short)PsxRam.ReadU16(psVar8 + 4) - FileIo._DAT_1f8000bc) - VStack_70.vz;
+                    iVar7 = -((short)PsxRam.ReadU16(psVar8 + 4) - Scratchpad._DAT_1f8000bc) - VStack_70.vz;
                     lVar6 = ratan2(-iVar10, iVar7);
                     lVar4 = SquareRoot0(iVar7 * iVar7 + iVar10 * iVar10);
                     lVar4 = ratan2(-iVar14 - VStack_70.vx, lVar4);
@@ -446,7 +446,7 @@ internal static class AnimCmdControl
                     // The second halfword of the scratchpad SVECTOR at 0x1F80007C, which FileIo
                     // already declares and RotMatrix already consumes as an SVECTOR — 0x7C + 2 is
                     // its vy. Read through FileIo rather than re-declared here.
-                    uVar11 = (uint)((FileIo.SVECTOR_1f80007c.vy - (short)PsxRam.ReadU16(iVar10 + 2)) & 0xfff);
+                    uVar11 = (uint)((Scratchpad.SVECTOR_1f80007c.vy - (short)PsxRam.ReadU16(iVar10 + 2)) & 0xfff);
                     if (0x800 < uVar11 - 0x400)
                     {
                         uVar11 = 0x1000 - uVar11;

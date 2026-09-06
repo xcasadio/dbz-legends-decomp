@@ -88,13 +88,13 @@ internal static class TitleInitValidation
         }
 
         // SetupGeometry(0xa8, 0x80, 0x1000, 0,0,0, 0x1000, 0,0,0) remplit le scratchpad.
-        Check(GteScratch.DAT_1f800114 == 0xa8, $"offset X 0xa8, lu 0x{GteScratch.DAT_1f800114:X}");
-        Check(GteScratch.DAT_1f800110 == 0x80, $"offset Y 0x80, lu 0x{GteScratch.DAT_1f800110:X}");
-        Check(GteScratch._DAT_1f8000c0 == 0x1000,
-            $"distance 0x1000, lu 0x{GteScratch._DAT_1f8000c0:X}");
-        Check(GteScratch.MATRIX_1f8000e4.m[0] == 0x1000
-              && GteScratch.MATRIX_1f8000e4.m[3] == 0x1000
-              && GteScratch.MATRIX_1f8000e4.m[6] == 0x1000,
+        Check(Scratchpad.DAT_1f800114 == 0xa8, $"offset X 0xa8, lu 0x{Scratchpad.DAT_1f800114:X}");
+        Check(Scratchpad.DAT_1f800110 == 0x80, $"offset Y 0x80, lu 0x{Scratchpad.DAT_1f800110:X}");
+        Check(Scratchpad._DAT_1f8000c0 == 0x1000,
+            $"distance 0x1000, lu 0x{Scratchpad._DAT_1f8000c0:X}");
+        Check(Scratchpad.MATRIX_1f8000e4.m[0] == 0x1000
+              && Scratchpad.MATRIX_1f8000e4.m[3] == 0x1000
+              && Scratchpad.MATRIX_1f8000e4.m[6] == 0x1000,
             "matrice couleur chargee a 0x1000 sur ses trois positions");
 
         // FUN_80037388 derive cette valeur de la profondeur projetee, bornee a zero.

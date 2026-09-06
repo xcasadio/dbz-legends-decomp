@@ -190,10 +190,10 @@ internal static class SecondScreenSetup
                     SpriteRenderer.DrawSpriteGroup(
                         PsxRam.ReadI32(puVar2),
                         unchecked((short)((uint)PsxRam.ReadU16(puVar2 + -8)
-                                          - (uint)(ushort)GteScratch._DAT_1f8000b4)),
+                                          - (uint)(ushort)Scratchpad._DAT_1f8000b4)),
                         unchecked((short)PsxRam.ReadU16(puVar2 + -6)),
                         unchecked((short)((uint)PsxRam.ReadU16(puVar2 + -4)
-                                          - (uint)(ushort)GteScratch._DAT_1f8000bc)),
+                                          - (uint)(ushort)Scratchpad._DAT_1f8000bc)),
                         PsxRam.ReadU16(puVar2 + 8),
                         0,
                         0,

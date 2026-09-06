@@ -278,17 +278,17 @@ internal static class SpriteRenderer
                 GteScratch.SVECTOR_1f800058.vy = local_98;
                 GteScratch.SVECTOR_1f800058.vx = (short)(param_5 & 0xfff);
                 GteScratch.SVECTOR_1f800058.vz = local_90;
-                LibGte.RotMatrix(GteScratch.SVECTOR_1f800058, GteScratch.MATRIX_1f800000);
-                LibGte.TransMatrix(GteScratch.MATRIX_1f800000, local_a8);
-                LibGte.ScaleMatrix(GteScratch.MATRIX_1f800000, GteScratch.VECTOR_1f800060);
+                LibGte.RotMatrix(GteScratch.SVECTOR_1f800058, Scratchpad.MATRIX_1f800000);
+                LibGte.TransMatrix(Scratchpad.MATRIX_1f800000, local_a8);
+                LibGte.ScaleMatrix(Scratchpad.MATRIX_1f800000, GteScratch.VECTOR_1f800060);
 
                 // The flip matrix is composed as m1 of the first CompMatrix and its translation was
                 // just nulled, so the 180-degree flips turn the quad about its own local origin, not
                 // about the group origin.
-                LibGte.CompMatrix(GteScratch.MATRIX_1f800000, MStack_f0, MStack_110);
-                LibGte.CompMatrix(MStack_d0, MStack_110, GteScratch.MATRIX_1f800000);
-                LibGte.SetTransMatrix(GteScratch.MATRIX_1f800000);
-                LibGte.SetRotMatrix(GteScratch.MATRIX_1f800000);
+                LibGte.CompMatrix(Scratchpad.MATRIX_1f800000, MStack_f0, MStack_110);
+                LibGte.CompMatrix(MStack_d0, MStack_110, Scratchpad.MATRIX_1f800000);
+                LibGte.SetTransMatrix(Scratchpad.MATRIX_1f800000);
+                LibGte.SetRotMatrix(Scratchpad.MATRIX_1f800000);
                 int p = local_30 + (int)(uVar14 & 0xffff) * 0x28;
 
                 // JUSTIFICATION: C# language bridge only

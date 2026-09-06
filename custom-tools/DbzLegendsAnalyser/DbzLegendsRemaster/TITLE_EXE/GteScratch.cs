@@ -14,8 +14,6 @@ namespace DbzLegendsRemaster.TITLE_EXE;
 // `RotMatrix((SVECTOR *)&DAT_1f800104, ...)`.
 internal static class GteScratch
 {
-    // GHIDRA: MATRIX_1f800000 @ 0x1F800000
-    internal static readonly LibGte.MATRIX MATRIX_1f800000 = new();
 
     // GHIDRA: SVECTOR_1f800020 @ 0x1F800020
     // 0x1F800020..0x1F80003F is one contiguous four-element SVECTOR array: DrawSpriteGroup
@@ -63,18 +61,6 @@ internal static class GteScratch
     // DrawSpriteGroup @ 0x80048F88 passes it to RotAverage4 in the same role.
     internal static readonly int[] DAT_1f800078 = new int[1];
 
-    // GHIDRA: SVECTOR_1f80007c @ 0x1F80007C
-    internal static readonly LibGte.SVECTOR SVECTOR_1f80007c = new();
-
-    // GHIDRA: DAT_1f800084 @ 0x1F800084
-    internal static short DAT_1f800084;
-
-    // GHIDRA: DAT_1f800086 @ 0x1F800086
-    internal static short DAT_1f800086;
-
-    // GHIDRA: DAT_1f800088 @ 0x1F800088
-    internal static short DAT_1f800088;
-
     // GHIDRA: DAT_1f80008c @ 0x1F80008C
     internal static short DAT_1f80008c;
 
@@ -86,27 +72,6 @@ internal static class GteScratch
 
     // GHIDRA: VECTOR_1f800094 @ 0x1F800094
     internal static readonly LibGte.VECTOR VECTOR_1f800094 = new();
-
-    // GHIDRA: _DAT_1f8000b4 @ 0x1F8000B4
-    internal static int _DAT_1f8000b4;
-
-    // GHIDRA: DAT_1f8000b8 @ 0x1F8000B8
-    internal static int DAT_1f8000b8;
-
-    // GHIDRA: _DAT_1f8000bc @ 0x1F8000BC
-    internal static int _DAT_1f8000bc;
-
-    // GHIDRA: _DAT_1f8000c0 @ 0x1F8000C0
-    internal static int _DAT_1f8000c0;
-
-    // GHIDRA: DAT_1f8000c4 @ 0x1F8000C4
-    internal static int DAT_1f8000c4;
-
-    // GHIDRA: DAT_1f8000c8 @ 0x1F8000C8
-    internal static int DAT_1f8000c8;
-
-    // GHIDRA: DAT_1f8000cc @ 0x1F8000CC
-    internal static int DAT_1f8000cc;
 
     // GHIDRA: DAT_1f8000d0 @ 0x1F8000D0
     internal static int DAT_1f8000d0;
@@ -123,33 +88,8 @@ internal static class GteScratch
     // GHIDRA: DAT_1f8000e0 @ 0x1F8000E0
     internal static int DAT_1f8000e0;
 
-    // GHIDRA: MATRIX_1f8000e4 @ 0x1F8000E4
-    // The colour matrix SetupGeometry hands to SetColorMatrix. Its nine shorts sit at 0xE4, 0xE6,
-    // 0xE8, 0xEA, 0xEC, 0xEE, 0xF0, 0xF2 and 0xF4, which is the m[0..8] order used below.
-    internal static readonly LibGte.MATRIX MATRIX_1f8000e4 = new();
-
-    // GHIDRA: SVECTOR_1f800104 @ 0x1F800104
-    // Written as DAT_1f800104 / DAT_1f800106 / DAT_1f800108 then cast to SVECTOR * by the original
-    // when it reaches RotMatrix.
-    internal static readonly LibGte.SVECTOR SVECTOR_1f800104 = new();
-
-    // GHIDRA: DAT_1f800110 @ 0x1F800110
-    internal static int DAT_1f800110;
-
-    // GHIDRA: DAT_1f800114 @ 0x1F800114
-    internal static int DAT_1f800114;
-
-    // GHIDRA: DAT_1f800118 @ 0x1F800118
-    internal static int DAT_1f800118;
-
-    // GHIDRA: DAT_1f80011c @ 0x1F80011C
-    internal static int DAT_1f80011c;
-
     // GHIDRA: DAT_1f800120 @ 0x1F800120
     internal static int DAT_1f800120;
-
-    // GHIDRA: DAT_1f800124 @ 0x1F800124
-    internal static int DAT_1f800124;
 
     // GHIDRA: DAT_1f800128 @ 0x1F800128
     internal static int DAT_1f800128;
