@@ -1,11 +1,11 @@
-# Retrait des attentes `CdSearchFile` — lot 1
+# Retrait des attentes disque — lots 1 a 3
 
 Les sept boucles `do { p = CdSearchFile(...); } while (p == NULL)` du port sont
 retirees. Chaque site fait desormais un appel unique et nomme le fichier absent.
 
-Ce lot ne couvre **que** la famille `CdSearchFile`. Les autres attentes disque
-(`CdSync`, `CdRead`, `CdReadSync`, `CdControlB`, `CdRead2`, `StGetNext`) sont
-inventoriees plus bas et laissees en place pour un lot separe.
+Le lot 1 ne couvrait que la famille `CdSearchFile`. Le lot 3, plus bas, a ferme
+tout le reste: plus aucune construction `while`/`do` du runtime translittere ne
+teste la valeur de retour d'une primitive CD.
 
 ## Le motif
 
@@ -100,39 +100,77 @@ de l'utilisateur — le port ne simule pas de temps de chargement — et corrige
 sa place le defaut qu'il masquait, cote entree, par un verrou de manette dans
 `PadInputBackend`. Voir `DISC_LOAD_LATENCY.md`.
 
-## Inventaire du lot 2
+## Lot 3 — le reste des attentes disque
 
-Contrats desktop mesures, tous deterministes: `CdSync` rend la constante `2`
-(`CdlComplete`), `CdReadSync` la constante `0`, `CdRead` et `CdRead2` rendent `0`
-ou `1` selon l'etat disque seul, `CdControl`/`CdControlB` rendent `1` des le
-premier essai pour toutes les commandes vivantes. Aucune de ces attentes ne peut
-donc aider non plus; chacune est vacante ou bloquante.
+Les sites ne meritaient pas tous le meme traitement, et c'est le tri qui a fait
+le travail. Trois politiques, choisies par ce qu'un echec **signifie**.
 
-Les lignes ci-dessous designent l'**appel** lui-meme, pas l'ouverture de la
-boucle, et sont relevees sur l'arbre livre par ce lot.
+### Silencieux — la primitive n'a aucune valeur d'echec
 
-- vacantes: `CdSync` (`FileIo.cs:453`, `TITLE_EXE_exe.cs:572`,
-  `LoadingScreen.cs:115`, `SelectScreen.cs:328`), `CdReadSync` (`FileIo.cs:469`
-  et `:473`, `TITLE_EXE_exe.cs:588` et `:592`, `LoadingScreen.cs:124`,
-  `SelectScreen.cs:335`), `CdControlB(0x0e)` (`SelectScreen.cs:320`),
-  `CdControl(0x15)` (`MOVIE_EXE_exe.cs:356`, `SLPS_003_55_exe.cs:429`);
-- bloquantes en cas d'echec de lecture, sans `VSync`: `do { CdRead } while (i != 1)`
-  (`FileIo.cs:459`, `TITLE_EXE_exe.cs:578`) et `while (CdRead2(0x1c0) == 0) { }`
-  (`MOVIE_EXE_exe.cs:360`, `SLPS_003_55_exe.cs:433`) — pour `CdRead2` un second
-  appel apres succes est meme destructeur, il rouvre et rembobine le flux;
-- bornees mais gigantesques: les deux sondages `StGetNext` imbriques des lecteurs
-  de STR, `0x800000` x `0x800000` appels au pire. Les compteurs sont a
-  `MOVIE_EXE_exe.cs:256` (`DecodeNextMovieFrameVlc @ 0x80020F98`) et `:277`
-  (`GetNextMovieFrame @ 0x80021020`), `SLPS_003_55_exe.cs:329`
-  (`DecodeNextMovieFrameVlc @ 0x800212E4`) et `:350`
-  (`GetNextMovieFrame @ 0x8002136C`). Sur console c'est l'IRQ du lecteur qui
-  remplit l'anneau pendant que la boucle tourne; ce cote-la n'est pas porte.
+`CdSync` est `return CdlComplete;`, une constante 2 (`LibCd.cs:146`).
+`CdReadSync` est une constante 0. Leurs boucles etaient tranchees avant de
+tourner. `CdControlB(0x0E)` de `LoadUSAGI_B` et `CdControl(3)` du chemin audio
+CD sont acceptes au premier essai, et la note `DEVIATION:` de chacun le prouve
+par le nombre de parametres de la commande, pas par analogie.
 
-Le troisieme compteur `0x800000` de chaque lecteur (`MOVIE_EXE_exe.cs:328`,
-`SLPS_003_55_exe.cs:401`) est **hors sujet**: c'est `WaitForMovieFrameUpload`,
-une attente de fin d'upload MDEC dont le corps ne contient aucun appel CD.
+Sites: `FileIo.cs`, `TITLE_EXE_exe.cs`, `LoadingScreen.cs`, `SelectScreen.cs`,
+`CdAudio.cs`.
 
-Ces sites remodelent quatre fonctions plus profondement que le lot 1, d'ou la
-separation: `ReadCDData @ 0x80057E40` (TITLE) et son jumeau
-`FUN_80061d98 @ 0x80061D98` (VS), `SeekAndStartMovieStream @ 0x80021228` (MOVIE)
-et son jumeau `@ 0x80021574` (SLPS).
+### Levee d'exception — l'echec est reel et le silence corromprait
+
+Le reessai `CdRead` des deux jumeaux `ReadCDData` ne contenait pas de `VSync`:
+une lecture ratee figeait la fenetre. Il nomme desormais le nombre de secteurs
+et la position. Idem `CdRead2` dans les deux `SeekAndStartMovieStream`, ou
+reessayer apres un succes est **destructeur** — un second appel rouvre le flux
+et le rembobine.
+
+`CdControl(0x15)` est passe du silencieux au garde pendant la relecture, et
+c'est la correction importante du lot: un seek jamais emis laisse
+`s_lastSeekTarget` sur la position **precedente**, et le `CdRead2` juste en
+dessous arme alors le flux au mauvais endroit et joue les mauvais octets sans
+la moindre erreur. C'est le seul echec du lot qui corromprait au lieu d'arreter.
+
+### Contrat preserve, aucune exception — les quatre sondages `StGetNext`
+
+Ici « pas pret » est routinier: **c'est ainsi qu'un film se termine.** Appliquer
+le reflexe du lot 1 aurait fait planter une lecture normale. Les sondages
+s'effondrent en un appel unique et rendent toujours `0` et `-1` comme
+l'original.
+
+`StGetNext` ingere ses secteurs **synchroniquement dans l'appel** — aucune IRQ
+du lecteur n'est portee, `StCdInterrupt` est un stub vide — donc un seul appel
+fait deja ce que la boucle de `0x800000` attendait. Et un appel refuse a deja
+consomme puis jete un vrai secteur video: tourner mangerait le film au lieu de
+l'attendre.
+
+### Pieges rencontres
+
+- Deux affectations vivantes dans des corps de boucle: `DAT_80055ae0 = 3`
+  (`CdAudio`), sortie du corps ou elle etait; et le `iVar2 = 0` de
+  `SelectScreen`, qui **suivait** sa boucle au lieu d'y etre.
+- Le `VSync(0)` supprime avec le drain `CdReadSync` des deux `ReadCDData` n'avait
+  jamais tourne: `CdReadSync` etant une constante 0, `0 < r` etait faux des la
+  premiere evaluation. Aucun rendu de frame n'est perdu.
+
+### Laisses en place, deliberement
+
+Le `CdReadSync` en `if`/`else` de `BattleScene` est une machine a etats pilotee
+par la frame, pas une attente; son bras `-1` n'est mort que parce que le stub
+est constant, et le supprimer corrigerait l'original (regle 12). Les deux
+compteurs `WaitForMovieFrameUpload` sont des attentes d'upload MDEC sans appel
+CD. Le drain de `BandaiStrValidation` est un consommateur de test.
+
+### Acceptation
+
+Build propre, aucun avertissement nouveau (208 avant, 208 apres, aucun venant
+des sept fichiers). Quinze invocations de bancs vertes.
+
+Et la mesure qui compte pour les FMV: le **journal de decodage complet** d'un
+demarrage scripte, capture avec et sans le changement sur la meme machine —
+**identique octet pour octet, 862 lignes, meme MD5**. Pas une frame ne bouge.
+
+Le journal, pas l'horodatage. Une premiere tentative comparait l'ecart
+`MOVIE.EXE -> TITLE.EXE` en millisecondes et a fait conclure a tort a une
+regression de +29 %: la mesure avait ete prise juste apres la reecriture de
+157 Mo de donnees, cache disque froid. Les horodatages de ce banc dependent de
+la machine; le journal de decodage, non.
