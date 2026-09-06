@@ -76,3 +76,12 @@ for i, call in enumerate(calls):
 print("desaccords : %d sur %d" % (bad, len(calls)))
 if bad == 0 and len(calls) == 51:
     print("TABLE CONFORME : les 51 emplacements appellent le gestionnaire que le binaire designe.")
+
+# Un verificateur qui ne peut pas echouer ne verifie rien. Ce script sortait 0 quel que soit le
+# nombre de desaccords, donc une regression de la table de distribution passait un `&&` sans
+# bruit -- il fallait lire sa sortie pour la voir. Les deux autres checkers de couture sortent
+# deja 1 sur violation; celui-ci s'aligne. Le compte d'entrees est verifie aussi: une table
+# tronquee a moins de 51 emplacements est une regression meme si les entrees restantes concordent.
+if len(calls) != 51:
+    print("COMPTE INATTENDU : %d entrees C# au lieu de 51" % len(calls))
+sys.exit(1 if (bad or len(calls) != 51) else 0)
