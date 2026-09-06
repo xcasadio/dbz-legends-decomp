@@ -90,7 +90,8 @@ internal static class LoadingScreen
         if (CdSearchFile(CStack_38, "\\CHR_DATA\\LOAD.B;1".ToCharArray()) == null)
         {
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve \\CHR_DATA\\LOAD.B;1 under the deployed data tree",
+                "CdSearchFile could not resolve \\CHR_DATA\\LOAD.B;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\CHR_DATA\\LOAD.B;1"),
                 "\\CHR_DATA\\LOAD.B;1");
         }
 

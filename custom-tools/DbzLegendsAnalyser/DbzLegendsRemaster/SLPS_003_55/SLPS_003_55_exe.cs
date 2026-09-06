@@ -107,7 +107,8 @@ internal sealed class SLPS_003_55_exe
         if (movieFile == null)
         {
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve \\MOVIE\\BANDAI.STR;1 under the deployed data tree",
+                "CdSearchFile could not resolve \\MOVIE\\BANDAI.STR;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\MOVIE\\BANDAI.STR;1"),
                 "\\MOVIE\\BANDAI.STR;1");
         }
 

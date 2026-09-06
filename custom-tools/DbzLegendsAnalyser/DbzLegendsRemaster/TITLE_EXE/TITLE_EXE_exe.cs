@@ -108,7 +108,8 @@ internal sealed class TITLE_EXE_exe
         if (CdSearchFile(CdlFILE_800a8860, "\\SELECT.EXE;1".ToCharArray()) == null)
         {
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve \\SELECT.EXE;1 under the deployed data tree",
+                "CdSearchFile could not resolve \\SELECT.EXE;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\SELECT.EXE;1"),
                 "\\SELECT.EXE;1");
         }
 
@@ -547,7 +548,8 @@ internal sealed class TITLE_EXE_exe
         {
             string isoPath = new string(fileName).TrimEnd('\0');
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve " + isoPath + " under the deployed data tree",
+                "CdSearchFile could not resolve " + isoPath + " -- no file at " +
+                LibDs.DescribeDiscPath(isoPath),
                 isoPath);
         }
     }

@@ -94,7 +94,8 @@ internal sealed class MOVIE_EXE_exe
         if (movieFile == null)
         {
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve \\MOVIE\\DBZ_OP.STR;1 under the deployed data tree",
+                "CdSearchFile could not resolve \\MOVIE\\DBZ_OP.STR;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\MOVIE\\DBZ_OP.STR;1"),
                 "\\MOVIE\\DBZ_OP.STR;1");
         }
 

@@ -22,6 +22,11 @@ internal static class PsxSdkBridges
 
         string discRoot = Path.Combine(AppContext.BaseDirectory, "data");
         s_discRoot = discRoot;
+        // The translation lives in ONE place and is shared by the two hooks below. The resolver
+        // answers "is it there?"; the describer answers "where would it have been?". Keeping them
+        // as one function is the point — a diagnostic that computed the path a second way could
+        // disagree with the lookup it is trying to explain.
+        LibDs.DiscPathDescriber = isoPath => Path.Combine(discRoot, IsoPathToRelative(isoPath));
         LibDs.DiscFileResolver = isoPath =>
         {
             if (string.IsNullOrEmpty(isoPath))
@@ -29,24 +34,37 @@ internal static class PsxSdkBridges
                 return null;
             }
 
-            // LoadExec spells its argument "cdrom:\NAME.EXE;1"; every other call site omits the
-            // device prefix. Both resolve to the same file.
-            if (isoPath.StartsWith("cdrom:", StringComparison.OrdinalIgnoreCase))
-            {
-                isoPath = isoPath.Substring("cdrom:".Length);
-            }
-
-            int versionSeparator = isoPath.IndexOf(';');
-            string relative = versionSeparator >= 0 ? isoPath[..versionSeparator] : isoPath;
-            relative = relative.Replace('\\', Path.DirectorySeparatorChar)
-                               .TrimStart(Path.DirectorySeparatorChar);
-            string candidate = Path.Combine(discRoot, relative);
+            string candidate = Path.Combine(discRoot, IsoPathToRelative(isoPath));
             return File.Exists(candidate) ? candidate : null;
         };
 
         // The resident executable's own image. The BIOS loaded SLPS_003.55 the same way LoadExec
         // loads every overlay after it, so its .data is modelled the same way.
         ArmImage("SLPS_003.55");
+    }
+
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: the one ISO-path-to-relative-host-path translation, shared by the resolver and the
+    // describer installed above.
+    //
+    // Three transformations, and the third is not cosmetic. LoadExec spells its argument
+    // "cdrom:\NAME.EXE;1" while every other call site omits the device prefix; ";1" is the
+    // ISO 9660 version suffix, meaningful on the disc and meaningless here; and the leading
+    // separator MUST be trimmed, because Path.Combine discards its first argument when the second
+    // is rooted — without the trim, "\CHR_DATA\LOAD.B" would resolve against the drive root
+    // instead of the disc root. A relative spelling and an absolute one converge on the same
+    // probe, deliberately.
+    private static string IsoPathToRelative(string isoPath)
+    {
+        if (isoPath.StartsWith("cdrom:", StringComparison.OrdinalIgnoreCase))
+        {
+            isoPath = isoPath.Substring("cdrom:".Length);
+        }
+
+        int versionSeparator = isoPath.IndexOf(';');
+        string relative = versionSeparator >= 0 ? isoPath[..versionSeparator] : isoPath;
+        return relative.Replace('\\', Path.DirectorySeparatorChar)
+                       .TrimStart(Path.DirectorySeparatorChar);
     }
 
     private static string s_discRoot = string.Empty;

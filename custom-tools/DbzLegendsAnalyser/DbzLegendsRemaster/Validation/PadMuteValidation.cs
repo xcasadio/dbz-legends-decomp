@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.Validation;
@@ -57,6 +57,15 @@ internal static class PadMuteValidation
 
             Check(PadInputBackend.MuteActive,
                 "le verrou reste arme tant que le bouton est maintenu");
+
+            // LE POINT DE CE BANC, cote asymetrie: le verrou est PAR PORT. Start est force sur le
+            // port 1 seulement, et rien n'est tenu sur le port 2, donc apres un Poll le port 1 doit
+            // rester muet et le port 2 doit s'etre libere. Un verrou global les laisserait tous les
+            // deux armes, et MuteActive seul ne saurait pas les distinguer.
+            Check(PadInputBackend.MutePort1Active,
+                "port 1 muet: c'est lui qui tient Start");
+            Check(!PadInputBackend.MutePort2Active,
+                "port 2 libere: il ne tient rien, il ne doit pas subir le port 1");
             Check(PadInputBackend.PublishedActiveLow == AllReleased,
                 "rien n'est publie tant que le verrou est arme");
             Check((~PadInputBackend.PublishedActiveLow & Start) == 0,
@@ -73,6 +82,8 @@ internal static class PadMuteValidation
 
             Check(!PadInputBackend.MuteActive,
                 "le verrou s'ouvre au premier Poll qui lit un etat relache");
+            Check(!PadInputBackend.MutePort1Active && !PadInputBackend.MutePort2Active,
+                "les deux ports se sont liberes");
             Check(PadInputBackend.PublishedActiveLow == AllReleased,
                 "la publication a repris (rien n'est enfonce, donc etat relache)");
 

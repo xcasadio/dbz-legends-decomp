@@ -173,7 +173,8 @@ internal static class SelectScreen
         if (CdSearchFile(CdlFILE_80059744, "\\SUB\\USAGI.B;1".ToCharArray()) == null)
         {
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve \\SUB\\USAGI.B;1 under the deployed data tree",
+                "CdSearchFile could not resolve \\SUB\\USAGI.B;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\SUB\\USAGI.B;1"),
                 "\\SUB\\USAGI.B;1");
         }
 

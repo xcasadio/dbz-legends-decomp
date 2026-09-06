@@ -416,7 +416,8 @@ internal static class FileIo
         {
             string isoPath = new string(fileName).TrimEnd('\0');
             throw new FileNotFoundException(
-                "CdSearchFile could not resolve " + isoPath + " under the deployed data tree",
+                "CdSearchFile could not resolve " + isoPath + " -- no file at " +
+                LibDs.DescribeDiscPath(isoPath),
                 isoPath);
         }
     }
