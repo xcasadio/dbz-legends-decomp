@@ -64,47 +64,86 @@ retombe donc sur la specification materielle au lieu d'etre ajuste a vue.
 Un delai fixe aurait ete faux: `TITLE.EXE` est sept fois plus gros que
 `MOVIE.EXE`.
 
-## Implementation
 
-`LibCd.WaitDiscLoad(isoPath)` lit la taille reelle du fichier par
-`LibDs.DiscFileSize`, applique le modele et consomme le temps en `VSync`, afin
-que l'hote continue de presenter des images pendant le chargement.
+## Le modele est retire
 
-Les deux adaptations `LoadExec` l'appellent avant de passer la main a l'overlay
-suivant.
+Tout ce qui precede reste vrai de la console et de la mesure. Ce qui suit a
+change: `LibCd.WaitDiscLoad` n'existe plus.
 
-Changements de support:
+La decision est celle de l'utilisateur, et elle est de principe: le port ne
+simule pas le lecteur CD. Un temps de chargement modelise est une simulation de
+materiel, et la regle 14 du mandat la refuse des lors qu'un contrat observable
+equivalent suffit cote desktop. Bruler des frames pour reproduire une attente
+qui n'a aucune cause ici — le fichier est simplement lu — tombe exactement
+sous cette regle. Retire: la fonction, sa signature, ses deux constantes et ses
+cinq sites d'appel `LoadExec`, dont les commentaires affirmaient que la latence
+etait ce qui empechait le double saut. `LibDs.DiscFileSize` reste en place mais
+n'a plus d'appelant.
 
-- le resolveur ISO accepte le prefixe `cdrom:` que `LoadExec` emploie, les
-  autres sites d'appel ne le mettant pas;
-- `MOVIE.EXE` et `TITLE.EXE` sont copies dans la sortie de build, leur taille
-  reelle etant la donnee d'entree du modele;
-- le chronometre de diagnostic est ancre au demarrage. Il etait
-  `beforefieldinit`, donc ne demarrait qu'a son premier usage et affichait
-  toujours `t=0` pour la premiere trace.
+## Ce qui le remplace
+
+Le defaut n'etait pas que le chargement soit rapide; il etait qu'un appui
+unique soit consomme par deux overlays. C'est un probleme d'entree, corrige
+cote entree: `PadInputBackend.MuteUntilRelease()` fait publier a la manette
+« aucun bouton enfonce » jusqu'a ce que l'echantillon physique repasse a zero.
+Les quatre `PsxSdkBridges.Activate*`, que tout `LoadExec` traverse, l'arment
+apres le basculement — donc l'appui qui a **cause** la transition n'est pas
+avale, seul son report sur l'overlay suivant l'est.
+
+Trois points ont failli etre manques et meritent d'etre ecrits:
+
+- **La detection de front n'aurait pas suffi.** `TITLE.EXE` et `VS.EXE` en font
+  deja (`ProcessPadInput @ 0x800578A8`, `FUN_80061800 @ 0x80061800`), et elle
+  est mise en defaut precisement ici: leur etat precedent vaut 0 a la premiere
+  frame d'un overlay neuf, donc un bouton encore tenu produit un front montant
+  fantome. Le verrou ferme les tests de niveau et ce front d'un seul geste.
+- **`Poll()` et le fil runtime tournent en concurrence.** Le baton de frame ne
+  serialise que la fenetre de `Draw` — `ReleaseGame()` est la derniere chose que
+  fait `Game1.Draw`, et `Poll()` est dans `Game1.Update`. Sans section critique
+  partagee, un `Poll` ayant deja echantillonne un mot maintenu pouvait le
+  publier apres le retour de `MuteUntilRelease`, soit exactement la frame que le
+  verrou existe pour retenir.
+- **Un banc qui n'observe que le mot publie ne prouve rien.** Sans touche
+  enfoncee, le mot publie vaut `0xFFFFFFFF` que le verrou soit arme ou non. D'ou
+  l'accesseur `PadInputBackend.MuteActive` et le banc `--validate-pad-mute`, qui
+  assertent la **transition**. Controle negatif execute: neutraliser la ligne
+  `s_muteUntilRelease = false;` de `Poll` fait echouer la branche a vide en
+  `2 echec(s)`, code de retour 1. Le banc mord.
 
 ## Validation
 
-```
-[overlay] t=1165ms LoadExec -> MOVIE.EXE
-[overlay] t=4865ms LoadExec -> TITLE.EXE
-```
+Meme commande avant et apres, `DBZ_OVERLAY_DIAG=1 DBZ_PAD_FORCE=0x0800`, Start
+tenu pour la vie du processus:
 
-L'ecart de 3700 ms vaut les 3636 ms de `TITLE.EXE` plus les 64 ms de
-`DBZ_OP.STR`, conformement aux mesures console.
+| | `MOVIE.EXE` | `TITLE.EXE` | ecart |
+|---|---:|---:|---:|
+| verrou absent | 153 ms | 219 ms | **66 ms** |
+| verrou en place | 136 ms | 76 678 ms | **76,5 s** |
 
-La fenetre entre la fin de `BANDAI.STR` et le premier test du pad de
-`DBZ_OP.STR` passe de 66 ms a environ 1085 ms.
+Les 66 ms sont exactement le chiffre releve en tete de ce document. Apres, la
+seconde video se joue en entier. `t(MOVIE.EXE)` reste petit dans les deux cas:
+la premiere video est bien sautee, l'appui qui a cause la transition n'est pas
+mange.
 
-Start maintenu saute toujours les deux films, comme sur console: la correction
-retablit un temps, elle ne modifie pas le controle de flux translitere.
+**Ce n'est pas un seuil de non-regression.** Seul l'ordre de grandeur porte:
+des dizaines de secondes contre des dizaines de millisecondes. La valeur exacte
+depend de la vitesse de decodage MDEC de la machine — une seconde execution du
+meme binaire a donne 64 069 ms, soit environ 14,8 images/s pour les 945 images
+que compte `--validate-dbz-op`. Attendre 60 a 80 s, pas 76 678 ms.
 
-Bancs `--validate-heap`, `--validate-tasks` et `--validate-title-init`: tous au
-vert apres la modification.
+Bancs: les quatorze existants au vert, plus `--validate-pad-mute` dans ses deux
+branches.
 
-## Limite
+## L'ecart assume
 
-Les 598 ms qui suivent le chargement, soit la recherche du `.STR`, le seek et
-la mise en tampon, ne sont pas modelises: seul le chargement de l'overlay
-l'est. Cela suffit au comportement observable vise. Modeliser la latence disque
-generale toucherait le chemin FMV deja valide et demanderait de le revalider.
+Sur console, Start **maintenu** de bout en bout saute les deux films; c'est
+mesure et c'est ecrit plus haut. Avec ce correctif il n'en saute plus qu'un.
+
+Aucune correction cote entree ne peut faire autrement — `justPressed` aurait
+exactement la meme consequence — parce que ce comportement repose entierement
+sur le temps qui passe entre les deux overlays. Seul un modele de latence le
+rendait, et c'est ce modele qui est refuse.
+
+L'utilisateur a tranche en connaissance de cause: **un appui ne doit sauter
+qu'une video a la fois.** C'est la regle du port, et elle prime ici sur la
+reproduction du cas « bouton tenu » de la console.

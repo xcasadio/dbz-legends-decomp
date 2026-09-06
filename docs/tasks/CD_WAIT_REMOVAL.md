@@ -81,10 +81,14 @@ recherche, ou le corps le mettait.
 
 ## Ce que le lot ne touche pas
 
-`LibCd.WaitDiscLoad` n'est pas une attente de lecteur: c'est un **modele de
-latence mesure** (587,8 ms de cout fixe, 309 036 o/s, soit le 2x reel du lecteur)
-ajoute deliberement parce que sans lui un appui sur Start sautait les deux FMV
-d'intro. Voir `DISC_LOAD_LATENCY.md`. Il reste.
+`LibCd.WaitDiscLoad` n'est pas une attente de lecteur mais un **modele de
+latence mesure** (587,8 ms de cout fixe, 309 036 o/s, soit le 2x reel du
+lecteur). Ce lot-ci ne le touche pas.
+
+Il ne survit pas pour autant: le lot suivant le retire entierement, sur decision
+de l'utilisateur — le port ne simule pas de temps de chargement — et corrige a
+sa place le defaut qu'il masquait, cote entree, par un verrou de manette dans
+`PadInputBackend`. Voir `DISC_LOAD_LATENCY.md`.
 
 `data/CHR_DATA/` contient six fichiers, aucun deploye: `CH_EF_P0.B`, `CRDD.B`,
 `EFF_AUTO.B`, `FACE.B`, `LOAD.B`, `OV_CHR_A.B`.

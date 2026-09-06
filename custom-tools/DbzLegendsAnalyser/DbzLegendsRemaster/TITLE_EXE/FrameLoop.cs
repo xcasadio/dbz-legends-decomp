@@ -191,8 +191,6 @@ internal static class FrameLoop
     // which is transliterated.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
-        WaitDiscLoad(exeFileName);
-
         if (string.Equals(exeFileName, "cdrom:\\SELECT.EXE;1", StringComparison.Ordinal))
         {
             PsxSdkBridges.ActivateSelectExe();

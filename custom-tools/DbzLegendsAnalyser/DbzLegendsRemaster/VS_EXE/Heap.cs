@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
 using static PsxSdkMonogame.LibEtc;
@@ -223,12 +223,6 @@ internal static class Heap
     {
         _ = param_2;
         _ = param_3;
-
-        // JUSTIFICATION: PSX hardware adaptation only
-        // RELATION: see LibCd.WaitDiscLoad — the drive spends real time fetching the overlay, and
-        // without it a held button carries straight into the next screen. It returns immediately
-        // when the file is absent, which is the case for four of the five targets today.
-        WaitDiscLoad(exeFileName);
 
         throw new LoadExecTransferException();
     }

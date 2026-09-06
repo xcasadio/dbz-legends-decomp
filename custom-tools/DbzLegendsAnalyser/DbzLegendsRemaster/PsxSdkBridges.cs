@@ -78,6 +78,11 @@ internal static class PsxSdkBridges
     // RELATION: LoadExec replaces the resident executable and its overlapping RAM ranges.
     internal static void ActivateMovieExe()
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: one physical press must not be consumed by two overlays. See
+        // PadInputBackend.MuteUntilRelease for why this stands where the disc's own seek time used
+        // to. Armed AFTER the switch, so the press that CAUSED it is not swallowed.
+        PadInputBackend.MuteUntilRelease();
         PsxRam.AddressResolver = MOVIE_EXE_exe.ResolveAddress;
         ArmImage("MOVIE.EXE");
         TraceOverlay("MOVIE.EXE");
@@ -87,6 +92,11 @@ internal static class PsxSdkBridges
     // RELATION: LoadExec replaces the resident executable and its overlapping RAM ranges.
     internal static void ActivateTitleExe()
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: one physical press must not be consumed by two overlays. See
+        // PadInputBackend.MuteUntilRelease for why this stands where the disc's own seek time used
+        // to. Armed AFTER the switch, so the press that CAUSED it is not swallowed.
+        PadInputBackend.MuteUntilRelease();
         PsxRam.AddressResolver = TITLE_EXE_exe.ResolveAddress;
         ArmImage("TITLE.EXE");
         TraceOverlay("TITLE.EXE");
@@ -119,6 +129,11 @@ internal static class PsxSdkBridges
     // PsxHeap.Resolve is chained LAST in SELECT_EXE_exe.ResolveAddress.
     internal static void ActivateSelectExe()
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: one physical press must not be consumed by two overlays. See
+        // PadInputBackend.MuteUntilRelease for why this stands where the disc's own seek time used
+        // to. Armed AFTER the switch, so the press that CAUSED it is not swallowed.
+        PadInputBackend.MuteUntilRelease();
         PsxRam.AddressResolver = SELECT_EXE_exe.ResolveAddress;
         ArmImage("SELECT.EXE");
         TraceOverlay("SELECT.EXE");
@@ -140,6 +155,11 @@ internal static class PsxSdkBridges
     // holding the seam. That is the main session's job.
     internal static void ActivateVsExe()
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: one physical press must not be consumed by two overlays. See
+        // PadInputBackend.MuteUntilRelease for why this stands where the disc's own seek time used
+        // to. Armed AFTER the switch, so the press that CAUSED it is not swallowed.
+        PadInputBackend.MuteUntilRelease();
         PsxRam.AddressResolver = VS_EXE.VS_EXE_exe.ResolveAddress;
         ArmImage("VS.EXE");
         TraceOverlay("VS.EXE");

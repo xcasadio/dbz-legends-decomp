@@ -192,17 +192,11 @@ internal static class OverlayExit
     // SELECT.EXE: installer le resolveur de la cible, puis entrer dans son start().
     //
     // PARTIAL: DEMO.EXE et SP.EXE ne sont pas transliterees. Elles sont presentes sous data/
-    // (159744 et 942080 octets) et WaitDiscLoad reproduit le temps de lecture que chacune
-    // prendrait, mais il n'y a toujours rien a qui passer la main pour elles.
+    // (159744 et 942080 octets), mais il n'y a toujours rien a qui passer la main pour elles.
     private static void LoadExec(string exeFileName, int param_2, int param_3)
     {
         _ = param_2;
         _ = param_3;
-
-        // JUSTIFICATION: PSX hardware adaptation only
-        // RELATION: see LibCd.WaitDiscLoad — the drive spends real time fetching the overlay, and
-        // without it a held button carries straight into the next screen.
-        WaitDiscLoad(exeFileName);
 
         // JUSTIFICATION: PSX hardware adaptation only
         // RELATION: A0(0x51) remplace l'executable resident et transfere le controle. Sur console
