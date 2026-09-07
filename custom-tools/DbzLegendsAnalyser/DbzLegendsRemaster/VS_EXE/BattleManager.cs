@@ -285,7 +285,7 @@ internal static class BattleManager
 
         iVar15 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
 
-        // 0x80055FBC — the animation VM's suspend gate, the same `if ((DAT_800b305a & 1) == 0)`
+            // 0x80055FBC — the animation VM's suspend gate, the same `if ((DAT_800b305a & 1) == 0)`
         // every one of the fifty-one opcode handlers opens with. When it is up the manager still
         // runs its last two callees and returns: the frame is frozen, but whatever those two do is
         // not. The symbol is AnimVm's; it is read here, not redeclared.
@@ -4437,13 +4437,450 @@ internal static class BattleManager
         LibGpu.AddPrim(PsxRam.ReadI32(Dat8008d420Address) - (PsxRam.ReadI32(ctx + 0x3030) * 4 + -0x206c), ctx + 0x2ffc);
     }
 
+    // GHIDRA: the character-file name table @ 0x8008330E (VS.EXE)
+    // Not owned by any file yet. Eighteen (0x12) bytes per entry, a NUL-terminated CD path with
+    // trailing zero padding, indexed from 1 — read-memory shows entry 1 at 0x80083320 as
+    // "\AT1\GKN.B;1" and entry 2 at 0x80083332 as "\AT2\GKS.B;1", exactly base + n*0x12 for n=1,2.
+    // Index 0 is never used by either caller below (Roster.cs's own ids run 1..38): it would land
+    // on the eight halfwords immediately before the table, which are something else entirely.
+    private const int CharacterFileNameTableAddress = unchecked((int)0x8008330E);
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: identical in shape and purpose to VS_EXE/BattleScene.cs's own private
+    // `PsxStringAt` — FUN_80061d4c (FileIo.ReadFile) is transliterated to take the `char[]` its
+    // own callee WaitSearchFile needs, so every caller that hands it a raw PSX string address, as
+    // FUN_80026d08 below does, needs this conversion. Not reused from BattleScene.cs: that copy is
+    // private to its own file, and the two ownerships stay separate rather than one file reaching
+    // into another's private helper. No behaviour is added beyond the pointer-to-array conversion
+    // C# forces, and it reads through PsxRam like every other memory access in this file.
+    //
+    // PARTIAL, for the same reason BattleScene.cs's copy is: the program image's .rodata is not
+    // modelled by this port, so every byte reads back zero and the array comes out empty today.
+    // The address arithmetic is the original's and becomes correct the moment the image is
+    // modelled. Capped at the table's own 0x12-byte stride rather than BattleScene.cs's generic
+    // 0x1b, since every entry here is known to sit on that stride.
+    private static char[] PsxStringAt(int address)
+    {
+        int length = 0;
+        while (length < 0x12 && PsxRam.ReadU8(address + length) != 0)
+        {
+            length = length + 1;
+        }
+
+        char[] chars = new char[length];
+        for (int i = 0; i < length; i++)
+        {
+            chars[i] = (char)PsxRam.ReadU8(address + i);
+        }
+
+        return chars;
+    }
+
+    // GHIDRA: FUN_80026d08 @ 0x80026D08 (VS.EXE)
+    // 144 bytes, leaf. Its only callee is FUN_80061d4c, already ported as FileIo.ReadFile.
+    // param_1 is ctx, param_2 the destination buffer address in the CD staging region FUN_80026ac0
+    // below walks, param_3 the slot index (only its low halfword is read, matching the `& 0xffff`
+    // the decompiler prints at every use).
+    //
+    // The record it reads from is ctx + slot * CtxSlotRecordStride + 0x15BC — unnamed in
+    // BattleState.cs, four bytes past CtxGaugeContribution and four before CtxTargetIndex — which
+    // FUN_800594b4's own first loop below is what seeds with the roster character id. On success
+    // this stores the buffer address at ctx + slot*4 + 0x16A0 (a second array BattleState.cs does
+    // not name either; FUN_80026ac0 below is its only other reader/writer in this slice) and the
+    // returned value at record+0x12 (0x15C2, ctx + slot*0x14 + 0x15C2); on failure it returns -1
+    // and touches neither. Per FileIo.ReadFile's own note, ReadCDData returns an unsigned sector
+    // count or 0, so the `< 0` test can never fire on the console. Reproduced, not corrected.
+    private static int FUN_80026d08(int param_1, int param_2, uint param_3)
+    {
+        int iVar2 = param_1 + (int)(param_3 & 0xffff) * BattleState.CtxSlotRecordStride;
+        int iVar1 = (int)FileIo.ReadFile(
+            PsxStringAt(CharacterFileNameTableAddress + (short)PsxRam.ReadU16(iVar2 + 0x15bc) * 0x12),
+            param_2, 0);
+
+        if (iVar1 < 0)
+        {
+            iVar1 = -1;
+        }
+        else
+        {
+            PsxRam.WriteI32((int)(param_3 & 0xffff) * 4 + param_1 + 0x16a0, param_2);
+            PsxRam.WriteU16(iVar2 + 0x15c2, (ushort)iVar1);
+        }
+
+        return iVar1;
+    }
+
+    // GHIDRA: FUN_80026ac0 @ 0x80026AC0 (VS.EXE)
+    // 584 bytes. THE TARGET-REASSIGNMENT SCAN. One caller, FUN_800594b4 below, which always passes
+    // param_3 == 0 and param_2 == Roster.PTR_DAT_800844b8 + 0x112 — the ordinal array Roster.cs's
+    // own OWNERSHIP CAVEAT already earmarks for this function by name. Only the param_3 == 0 arm is
+    // ever exercised on the console; the else arm is transliterated anyway, faithfully, since
+    // Ghidra decompiles it as live code and the mandate is a full port, not a reachability prune.
+    //
+    // param_4 IS THE FOURTH GHIDRA PARAMETER, but the call site passes only three arguments — the
+    // fourth register carries over whatever FUN_800594b4's own prior work left in it. That dead
+    // value is safe to discard: inside the param_3 == 0 arm, `bVar1` resets false at the top of
+    // every outer uVar6 iteration, and the only read of param_4 (the `if (bVar1)` branch) can only
+    // be reached after FUN_80026d08 has already reassigned it earlier in that same iteration. The
+    // incoming value is never read. It is passed as 0 below.
+    //
+    // `puVar7 = &DAT_80110000` is VS_EXE_exe.cs's own CD staging region at 0x80110000 — that file's
+    // own comment on its DAT_80110000 declaration already names FUN_80026ac0 as one of its unported
+    // readers. Reached here by the raw address rather than a second declaration: PsxRam resolves
+    // through the one installed resolver regardless of which file spells the literal, so this is
+    // the same backing bytes, not a second store.
+    private static void FUN_80026ac0(int param_1, int param_2, short param_3, int param_4)
+    {
+        if (param_3 == 0)
+        {
+            int puVar7 = unchecked((int)0x80110000);
+            ushort uVar6 = 1;
+            do
+            {
+                bool bVar1 = false;
+                ushort uVar4 = 0;
+                int puVar5 = param_2;
+                do
+                {
+                    ushort slotVal = PsxRam.ReadU16(puVar5);
+                    if (slotVal != 0 && slotVal == uVar6)
+                    {
+                        if (bVar1)
+                        {
+                            PsxRam.WriteI32((int)((uint)uVar4 * 4) + param_1 + 0x16a0, puVar7 + param_4 * -0x800);
+                            PsxRam.WriteU16(
+                                param_1 + (int)((uint)uVar4 * BattleState.CtxSlotRecordStride) + 0x15c2, (ushort)param_4);
+                        }
+                        else
+                        {
+                            do
+                            {
+                                param_4 = FUN_80026d08(param_1, puVar7, uVar4);
+                            } while (param_4 == 0);
+
+                            puVar7 = puVar7 + param_4 * 0x800;
+                            bVar1 = true;
+                        }
+                    }
+
+                    uVar4 = (ushort)(uVar4 + 1);
+                    puVar5 = puVar5 + 2;
+                } while (uVar4 < 0xc);
+
+                uVar6 = (ushort)(uVar6 + 1);
+            } while (uVar6 < 0xd);
+        }
+        else
+        {
+            ushort uVar6 = 0xb;
+            ushort uVar4 = 0;
+            int puVar5 = param_2;
+            do
+            {
+                ushort uVar2 = PsxRam.ReadU16(puVar5);
+                puVar5 = puVar5 + 2;
+                if ((uVar2 & 0x8000) != 0)
+                {
+                    uVar2 = (ushort)(uVar2 & 0x7fff);
+                    if (uVar2 < uVar6)
+                    {
+                        uVar6 = uVar2;
+                    }
+                }
+
+                uVar4 = (ushort)(uVar4 + 1);
+            } while (uVar4 < 0xc);
+
+            uVar4 = 0;
+            puVar5 = param_2;
+            do
+            {
+                ushort uVar2 = PsxRam.ReadU16(puVar5);
+                puVar5 = puVar5 + 2;
+                if (uVar6 == uVar2)
+                {
+                    break;
+                }
+
+                uVar4 = (ushort)(uVar4 + 1);
+            } while (uVar4 < 0xc);
+
+            int iVar8 = PsxRam.ReadI32((int)((uint)uVar4 * 4) + param_1 + 0x16a0);
+            uVar4 = 0;
+            do
+            {
+                ushort uVar2 = 0;
+                puVar5 = param_2;
+                do
+                {
+                    ushort raw = PsxRam.ReadU16(puVar5);
+                    uint uVar3 = (uint)(raw & 0x7fff);
+                    if ((raw & 0x8000) != 0)
+                    {
+                        if (uVar3 == uVar6)
+                        {
+                            do
+                            {
+                                param_4 = FUN_80026d08(param_1, iVar8, uVar2);
+                            } while (param_4 == 0);
+
+                            iVar8 = iVar8 + param_4 * 0x800;
+                            uVar6 = (ushort)(uVar6 + 1);
+                        }
+                        else if (uVar3 == (uint)(uVar6 - 1))
+                        {
+                            PsxRam.WriteI32((int)((uint)uVar2 * 4) + param_1 + 0x16a0, iVar8 + param_4 * -0x800);
+                            PsxRam.WriteU16(
+                                param_1 + (int)((uint)uVar2 * BattleState.CtxSlotRecordStride) + 0x15c2, (ushort)param_4);
+                        }
+                    }
+
+                    uVar2 = (ushort)(uVar2 + 1);
+                    puVar5 = puVar5 + 2;
+                } while (uVar2 < 0xc);
+
+                uVar4 = (ushort)(uVar4 + 1);
+            } while (uVar4 < 0xc);
+        }
+    }
+
     // GHIDRA: FUN_800594b4 @ 0x800594B4 (VS.EXE)
-    // BLOCKED: 2528 bytes. First of the three sub-initialisers state 0 runs, and it reads
-    // DAT_8008d320 three times — which is why that global is written BEFORE these calls and not
-    // after.
+    // 2528 bytes. First of the three sub-initialisers state 0 runs, and it reads DAT_8008d320
+    // three times — which is why that global is written BEFORE these calls and not after.
+    //
+    // PARTIAL. Four callees: three are real SDK (SetPolyFT4/SetSemiTrans/SetShadeTex, all called
+    // only inside the blocked tail below) and the fourth, FUN_80026ac0 above, is now ported. Every
+    // STATE write this function makes onto the battle context is closed and transliterated below:
+    // the roster's character ids seeded into each slot record (feeding FUN_80026d08's filename
+    // lookup), the two acting-slot cursors and the +0x18 index, the flag-run copy from Roster's
+    // own record into both per-slot tables, the FUN_80026ac0 call itself, and the two default
+    // target-index sweeps that follow it.
+    //
+    // BLOCKED, and it is everything after: from 0x80059640 (inside the flag-run loop) through
+    // 0x80059e8c, the original builds roughly thirty POLY_FT4 quads — a per-slot HUD pair anchored
+    // on Roster's own DAT_80084184/DAT_80084186 portrait-coordinate columns plus two small local
+    // tables (DAT_80083e30, DAT_80083e40 — two (short,short) pairs, each read twice, both reads
+    // inside this function and nowhere else in the overlay) and a numeric-tally element anchored on
+    // DAT_80084220 and a byte table the decompiler renders as the string literal
+    // "s_H_HPH_HpHpH0XPH_X_80084221". Ghidra fails to recognise most of these stores as POLY_FT4
+    // fields at all — they decompile as a `char *`/`undefined2 *` walk with wraparound negative
+    // offsets (`pcVar19[-0xffffffff0000005f]`), unlike the clean `p->field` shape
+    // InitCentralGaugeBar's own PART ONE gets for the same primitive type. Hand-mapping roughly 250
+    // lines of that arithmetic without a working disassembly cross-check is exactly the situation
+    // FUN_8005a104's own inner block above already declined for a smaller, cleaner case; this one is
+    // both larger and messier, so it is left unperformed the same way, with the loop shell that
+    // carries the two closed writes kept so the boundary is visible. The trailing
+    // `*(undefined2 *)(param_1 + 0x2dc4) = 1` (CtxTallyValue = 1) is included in the block rather
+    // than ported on its own: it is the "these primitives are ready" flag for geometry this function
+    // never builds, and setting it without the geometry risks a worse outcome than leaving it at 0.
     private static void FUN_800594b4(int param_1)
     {
-        _ = param_1;
+        int puVar6 = Roster.PTR_DAT_800844b8;
+
+        // 0x800594D4 — seed every slot record's own +0xC (0x15BC, unnamed) with the roster
+        // character id, and the matching sub-record's own +0xC (unnamed; SubRecordOrdinal is
+        // +0x14, this is not that field) with a difficulty-scaled variant of the same id.
+        {
+            int psVar24 = puVar6 + 0x52;
+            short sVar20 = (short)(SharedHighRam.DAT_801ff01c * 0x25);
+            int local_38 = param_1 + BattleState.CtxSlotSubRecords;
+
+            for (int uVar13 = 0; uVar13 < 0xc; uVar13++)
+            {
+                short id = (short)PsxRam.ReadU16(psVar24);
+                PsxRam.WriteU16(param_1 + uVar13 * BattleState.CtxSlotRecordStride + 0x15bc, (ushort)id);
+                psVar24 += 2;
+                PsxRam.WriteU16(local_38 + 0xc, (ushort)(sVar20 - 1 + id));
+                local_38 += BattleState.CtxSlotSubRecordStride;
+            }
+        }
+
+        // 0x80059568 — THE ACTING-SLOT CURSORS. First slot of each team whose record+0xA flag run
+        // carries bit 3, defaulting to the team's own first slot when none does.
+        {
+            ushort teamACursor = 0;
+            do
+            {
+                if ((PsxRam.ReadU16(puVar6 + teamACursor * 2 + 10) & 8) != 0)
+                {
+                    break;
+                }
+
+                teamACursor++;
+            } while (teamACursor < 6);
+
+            if (teamACursor == 6)
+            {
+                teamACursor = 0;
+            }
+
+            PsxRam.WriteU16(param_1 + BattleState.CtxActingSlotTeamA, teamACursor);
+            // +0x18, unnamed: this file's own header calls it "a slot index compared against
+            // +0x2DC2 and against the +0x1520 walk index" — here it is stamped with the same value
+            // as the team-A cursor, at arming time only.
+            PsxRam.WriteU16(param_1 + 0x18, teamACursor);
+
+            ushort teamBCursor = 6;
+            do
+            {
+                if ((PsxRam.ReadU16(puVar6 + teamBCursor * 2 + 10) & 8) != 0)
+                {
+                    break;
+                }
+
+                teamBCursor++;
+            } while (teamBCursor < 0xc);
+
+            if (teamBCursor == 0xc)
+            {
+                teamBCursor = 6;
+            }
+
+            PsxRam.WriteU16(param_1 + BattleState.CtxActingSlotTeamB, teamBCursor);
+        }
+
+        // 0x8005961C — copy Roster's own flag-triplet run (record+0x82, twelve rows of three
+        // halfwords) into each slot record's own +2 / CtxKiGauge(+4) / +6, AND into three fixed
+        // ctx halfwords (+0x22, +0x24, +0x26 — unnamed, adjacent to the +0x20 sub-record base)
+        // that are overwritten every turn of the loop, so only the LAST slot's triplet survives
+        // there. Reproduced exactly as printed, not corrected.
+        {
+            PsxRam.WriteU16(param_1 + 0x1c, 0); // unnamed, next to +0x18/+0x1A in the head
+            int puVar25 = puVar6 + 0x82;
+
+            for (uint uVar13 = 0; uVar13 < 0xc; uVar13++)
+            {
+                ushort v0 = PsxRam.ReadU16(puVar25);
+                PsxRam.WriteU16(param_1 + 0x22, v0);
+                int iVar11 = param_1 + (int)uVar13 * BattleState.CtxSlotRecordStride;
+                PsxRam.WriteU16(iVar11 + 0x15b2, v0); // CtxSlotRecords + 2, unnamed
+
+                ushort v1 = PsxRam.ReadU16(puVar25 + 2);
+                PsxRam.WriteU16(param_1 + 0x24, v1);
+                PsxRam.WriteU16(iVar11 + BattleState.CtxKiGauge, v1);
+
+                ushort v2 = PsxRam.ReadU16(puVar25 + 4);
+                PsxRam.WriteU16(param_1 + 0x26, v2);
+                PsxRam.WriteU16(iVar11 + 0x15b6, v2); // CtxSlotRecords + 6, unnamed
+
+                puVar25 += 6;
+            }
+
+            // 0x80059688..0x800596CC — A SECOND TWELVE-SLOT LOOP, and a first version of this port
+            // dropped it entirely while its own header claimed every state write was closed. The
+            // instructions leave no doubt:
+            //     000210C0  sll  v0,v0,3          ; stride 8, NOT the 0x14 of CtxSlotRecords
+            //     00E21021  addu v0,a3,v0
+            //     A4431550  sh   v1,0x1550(v0)
+            //     A4431552  sh   v1,0x1552(v0)
+            //     A4431554  sh   v1,0x1554(v0)
+            //     2C42000C  sltiu v0,v0,0xC       ; twelve iterations
+            // It continues the SAME puVar25 cursor the flag-triplet loop above left behind, which is
+            // why it has to sit exactly here and not anywhere else.
+        //
+            // The region it fills, 0x1550..0x15AF, is the 0x60-byte gap between CtxFighterSlots
+            // (0x1520, twelve pointers ending at 0x1550) and CtxSlotRecords (0x15B0). It is a real
+            // twelve-entry array of stride 8, not padding -- but only three of its eight bytes per
+            // entry are written here, so it is left as raw offsets rather than named in BattleState.cs
+            // on the strength of one writer.
+            for (uint uVar13 = 0; uVar13 < 0xc; uVar13++)
+            {
+                int iVar11 = param_1 + (int)uVar13 * 8;
+                PsxRam.WriteU16(iVar11 + 0x1550, PsxRam.ReadU16(puVar25));
+                PsxRam.WriteU16(iVar11 + 0x1552, PsxRam.ReadU16(puVar25 + 2));
+                PsxRam.WriteU16(iVar11 + 0x1554, PsxRam.ReadU16(puVar25 + 4));
+                puVar25 += 6;
+            }
+        }
+
+        // 0x800596D4 — THE CALL THIS SLICE EXISTS TO UNBLOCK. param_2 is Roster's own ordinal
+        // array (+0x112); param_3 = 0 selects the arm that scans it. param_4's incoming value is
+        // dead (see the comment above FUN_80026ac0) and is passed as 0.
+        FUN_80026ac0(param_1, puVar6 + 0x112, 0, 0);
+
+        // 0x800596E4 — TEAM A'S DEFAULT TARGET. For slots 0..2, default CtxTargetIndex to 6 when
+        // team B's matching id slot (record+0x5E) is empty, else to a running 6, 7, 8...
+        {
+            int teamBIds = puVar6 + 0x5e;
+            short seq = 6;
+            for (ushort uVar22 = 0; uVar22 < 3; uVar22++)
+            {
+                if (PsxRam.ReadU16(teamBIds) == 0)
+                {
+                    PsxRam.WriteU16(
+                        param_1 + uVar22 * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex, 6);
+                    teamBIds = puVar6 + 0x60;
+                    seq = 7;
+                }
+                else
+                {
+                    PsxRam.WriteU16(
+                        param_1 + uVar22 * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex,
+                        (ushort)seq);
+                    teamBIds += 2;
+                    seq++;
+                }
+            }
+        }
+
+        // 0x80059758 — TEAM B'S DEFAULT TARGET, mirroring the block above off team A's ids
+        // (record+0x52). CLOSED but UNEXPLAINED: the bound is 0xF against a cursor that starts at
+        // 6, nine iterations (slots 6..14), not the three (6..8) the team-A block above uses for
+        // its own three real slots — verified against both the decompiled C and the disassembly's
+        // own `sltiu v0,v0,0xf` at 0x800597bc, not assumed. Slots 9..11 match this file's own
+        // established Rule 12 (records kept for fighters that do not exist); slots 12..14 write
+        // three CtxTargetIndex-shaped halfwords past the twelve-slot record array entirely, into
+        // memory this port does not otherwise name. Reproduced as printed, not corrected.
+        {
+            int teamAIds = puVar6 + 0x52;
+            short seq = 0;
+            for (ushort uVar22 = 6; uVar22 < 0xf; uVar22++)
+            {
+                if (PsxRam.ReadU16(teamAIds) == 0)
+                {
+                    PsxRam.WriteU16(
+                        param_1 + uVar22 * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex, 0);
+                    teamAIds = puVar6 + 0x54;
+                    seq = 1;
+                }
+                else
+                {
+                    PsxRam.WriteU16(
+                        param_1 + uVar22 * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex,
+                        (ushort)seq);
+                    teamAIds += 2;
+                    seq++;
+                }
+            }
+        }
+
+        // 0x80059758..0x80059CE8 — the loop shell is kept because two of its writes are closed
+        // (Roster's own flags run, copied into both per-slot tables' own +0x00); everything else
+        // this loop's body builds is the blocked POLY_FT4 pair the comment above the function
+        // describes, and is not performed.
+        {
+            int puVar25 = puVar6 + 0xa;
+            int local_38 = param_1 + BattleState.CtxSlotSubRecords;
+
+            for (uint uVar22 = 0; uVar22 < 0xc; uVar22++)
+            {
+                ushort flagRun = PsxRam.ReadU16(puVar25);
+                puVar25 += 2;
+                PsxRam.WriteU16(
+                    param_1 + (int)uVar22 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords, flagRun);
+                PsxRam.WriteU16(local_38 + BattleState.SubRecordFlags, flagRun);
+
+                // BLOCKED — see the comment above the function: the per-slot POLY_FT4 pair this
+                // iteration also builds (0x80059640..0x80059ce8 in the image) is not performed.
+
+                local_38 += BattleState.CtxSlotSubRecordStride;
+            }
+        }
+
+        // BLOCKED — 0x80059CF4..0x80059E8C: two further POLY_FT4 loops (nine iterations off
+        // DAT_80084220 / the "H HPH..." byte table, then two more off pPVar17[1].y2) building the
+        // numeric-tally HUD element, and the CtxTallyValue = 1 store that would announce it ready.
+        // See the comment above the function for why none of it is performed.
     }
 
     // GHIDRA: InitCentralGaugeBar @ 0x80059E94 (VS.EXE)

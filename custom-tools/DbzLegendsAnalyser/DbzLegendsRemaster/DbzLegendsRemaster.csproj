@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows7.0</TargetFramework>
@@ -93,6 +93,19 @@
       <Link>data\STG\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- AT1 / AT2, 2.5 MB together, added when FUN_80026d08 was ported: it opens
+         \AT1\GKN.B;1 and its siblings through FileIo.ReadFile, and without them the boot threw
+         FileNotFoundException at frame 1, which is the DESIGNED behaviour (this port does not
+         simulate a CD drive; a missing file fails by name) and is exactly how the gap was found. -->
+    <Content Include="..\..\..\data\AT1\*.B">
+      <Link>data\AT1\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\data\AT2\*.B">
+      <Link>data\AT2\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
     <Content Include="..\..\..\data\CH_BIN1\*.BIN">
       <Link>data\CH_BIN1\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

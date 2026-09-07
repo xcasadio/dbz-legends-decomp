@@ -379,46 +379,247 @@ internal static class FighterTask
     // =====================================================================================
 
     // GHIDRA: FUN_80050658 @ 0x80050658 (VS.EXE)
-    // BLOCKED: 180 bytes. Phase 3's arm — the whole body a fighter runs while the animation VM's
-    // suspend bit is up, i.e. the frozen-frame path.
+    // CERTAIN, full decompilation, 180 bytes. Phase 3's arm — the whole body a fighter runs while
+    // the animation VM's suspend bit is up, i.e. the frozen-frame path. All five callees are the
+    // same +0x138-bit-27-gated quintet phase 9.7/9.8 already runs in the main body above, called
+    // here on the SAME two arguments (fighter, fighter's own +0x114 position triple) — reached
+    // through this file's own declarations of them, one of which (FUN_8004fd24) is still its own
+    // BLOCKED stub below.
     private static void FUN_80050658(int param_1)
     {
-        _ = param_1;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        {
+            FUN_80047740(param_1);
+            FUN_800477ec(param_1, param_1 + 0x114);
+            FUN_80047a24(param_1, param_1 + 0x114);
+            FUN_80047b10(param_1);
+            FUN_8004fd24(param_1, param_1 + 0x114);
+        }
     }
 
     // GHIDRA: FUN_8005070c @ 0x8005070C (VS.EXE)
-    // BLOCKED: 196 bytes. Phase 4's arm, on +0x138 bit 31.
+    // CERTAIN, full decompilation, 196 bytes. Phase 4's arm, on +0x138 bit 31. Opens with an
+    // unconditional call to FighterCombat.FUN_80055dc0 @ 0x80055DC0 — Ghidra's own call site here
+    // passes a second literal argument (0) that FUN_80055dc0's own body never reads, matching the
+    // one-parameter signature FighterCombat.cs already exposes for it. The rest is the same
+    // +0x138-bit-27-gated quintet FUN_80050658 above runs.
     private static void FUN_8005070c(int param_1)
     {
-        _ = param_1;
+        FighterCombat.FUN_80055dc0(param_1);
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        {
+            FUN_80047740(param_1);
+            FUN_800477ec(param_1, param_1 + 0x114);
+            FUN_80047a24(param_1, param_1 + 0x114);
+            FUN_80047b10(param_1);
+            FUN_8004fd24(param_1, param_1 + 0x114);
+        }
     }
 
     // GHIDRA: FUN_800507d0 @ 0x800507D0 (VS.EXE)
-    // BLOCKED: 84 bytes. Phase 5's conditional half, skipped when the state byte +0x16A is 0x22.
+    // CERTAIN, full decompilation, 84 bytes. Phase 5's conditional half, skipped when the state
+    // byte +0x16A is 0x22 (see the guard at the call site above). Both callees are now ported:
+    // FighterSetState @ 0x80047C64 and FighterCombat.FUN_80026a28 @ 0x80026A28. The final store is
+    // a plain overwrite of +0x138, not an OR — the original clobbers whatever the caller's own
+    // targeting-flags step (phase 8) had just written there.
     private static void FUN_800507d0(int param_1)
     {
-        _ = param_1;
+        FighterCombat.FighterSetState(param_1, 0x22);
+        FighterCombat.FUN_80026a28(param_1);
+        PsxRam.WriteI32(param_1 + 0x138, 0x4000000);
     }
 
     // GHIDRA: FUN_80050824 @ 0x80050824 (VS.EXE)
-    // BLOCKED: 496 bytes. Phase 5's unconditional half.
+    // CERTAIN, full decompilation, 496 bytes. Phase 5's unconditional half — runs on every frame
+    // phase 5 is reached, regardless of the state-byte-0x22 guard that gates FUN_800507d0 above.
+    //
+    // Bit 25 of +0x134 (0x2000000) opens a block that clears/sets a run of +0x134/+0x138 bits,
+    // stamps the same three +0x150/+0x151/+0x152 bytes FUN_800507d0 and FighterCombat's own
+    // FUN_80047740 already touch, and calls FighterCombat.FUN_80026a28. Then, unconditionally,
+    // FUN_80047688 runs, followed by a +0x134-bit-31 arm — on bit 29 clear, calls
+    // FighterCombat.FUN_8004e758(fighter, 0) exactly as step 9.6 of the main body does; on bit 29
+    // set, that call is skipped but +0xec and +0xdc are still both zeroed (step 9.6 in the main
+    // body only ever zeroes +0xdc, never +0xec — this is a distinct write, not a repeat). The tail
+    // is the same +0x138-bit-27-gated quintet the other phase arms already run.
     private static void FUN_80050824(int param_1)
     {
-        _ = param_1;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x2000000) != 0)
+        {
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0xfdffffff));
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) | 0x4000000));
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x5fffffff));
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            PsxRam.WriteU8(param_1 + 0x152, 0x80);
+            PsxRam.WriteU8(param_1 + 0x151, 0x80);
+            PsxRam.WriteU8(param_1 + 0x150, 0x80);
+            FighterCombat.FUN_80026a28(param_1);
+        }
+
+        FUN_80047688(param_1);
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x80000000) != 0)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x20000000) == 0)
+            {
+                FighterCombat.FUN_8004e758(param_1, 0);
+                
+                // AND AGAIN WITH 1. Two calls, not one, and the second was dropped by a first
+                // version of this port. The bytes at 0x80050940 are unambiguous:
+                //     8FC40018  lw a0,0x18(s8)
+                //     00002821  addu a1,zero,zero      ; param_2 = 0
+                //     0C0139D6  jal 0x8004E758
+                //     8FC40018  lw a0,0x18(s8)
+                //     34050001  ori a1,zero,1          ; param_2 = 1
+                //     0C0139D6  jal 0x8004E758
+                // The two are NOT redundant: FUN_8004e758 indexes its attack record at
+                // param_1 + param_2 * 0x10 + 0xDC, so 0 and 1 resolve the fighter's two SEPARATE
+                // record slots at +0xDC and +0xEC. That is also why this function zeroes BOTH of
+                // them afterwards while its sibling FUN_800501b8 -- which genuinely makes one call
+                // -- zeroes only +0xDC. The asymmetry between the two was the tell.
+                FighterCombat.FUN_8004e758(param_1, 1);
+            }
+
+            PsxRam.WriteI32(param_1 + 0xec, 0);
+            PsxRam.WriteI32(param_1 + 0xdc, 0);
+        }
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        {
+            FUN_80047740(param_1);
+            FUN_800477ec(param_1, param_1 + 0x114);
+            FUN_80047a24(param_1, param_1 + 0x114);
+            FUN_80047b10(param_1);
+            FUN_8004fd24(param_1, param_1 + 0x114);
+        }
     }
 
     // GHIDRA: FUN_80050514 @ 0x80050514 (VS.EXE)
-    // BLOCKED: 324 bytes. Phase 6's arm, on +0x134 bit 26.
+    // CERTAIN, full decompilation, 324 bytes. Phase 6's arm, on +0x134 bit 26. Re-derives the
+    // same +0x18/+0x60 re-point step 9.1 above performs — through FighterTaskNode (+0xAC) rather
+    // than FUN_8004fa8c's own resolution — then, only when the frame counter at +4 is zero,
+    // re-stamps the CURRENT state via FighterSetState (the same "re-stamp with current state"
+    // pattern FighterCombat's own FighterSetState header note documents for state 2/10). The tail
+    // is FUN_80047688 followed by the same +0x138-bit-27-gated quintet, and a reset of the +0x22A
+    // frame counter FUN_8004fa8c (step 9.1) itself owns and decrements.
     private static void FUN_80050514(int param_1)
     {
-        _ = param_1;
+        int iVar1 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8);
+        PsxRam.WriteI32(param_1 + 0x18, iVar1 + 0x114);
+        PsxRam.WriteI32(param_1 + 0x60, iVar1 + 0xf8);
+
+        if ((short)PsxRam.ReadU16(param_1 + 4) == 0)
+        {
+            FighterCombat.FighterSetState(param_1, (ushort)PsxRam.ReadU8(param_1 + 0x16a));
+        }
+
+        FUN_80047688(param_1);
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        {
+            FUN_80047740(param_1);
+            FUN_800477ec(param_1, param_1 + 0x114);
+            FUN_80047a24(param_1, param_1 + 0x114);
+            FUN_80047b10(param_1);
+            FUN_8004fd24(param_1, param_1 + 0x114);
+        }
+
+        PsxRam.WriteU16(param_1 + 0x22a, 0);
     }
 
     // GHIDRA: FUN_800501b8 @ 0x800501B8 (VS.EXE)
-    // BLOCKED: 860 bytes. Phase 7's arm, on +0x134 bit 25 — the largest of the five early outs.
+    // CERTAIN, full decompilation, 860 bytes. Phase 7's arm, on +0x134 bit 25 — the largest of the
+    // five early outs.
+    //
+    // The entry block runs when the state byte +0x16A is 0, OR when the frame counter at +4 is 0
+    // AND the flag at +6 is non-zero — Ghidra's own printed condition, kept exactly rather than
+    // simplified. Inside it, +0x134 has bit 25 cleared, bit 26 set, then is ANDed with 0x07F8FFFF
+    // — which clears bits 31/30/29/28 along with bit 25, among others; NOTE THIS FOR THE GATE
+    // FINDING: this path CLEARS +0x134 bit 31, it does not set it. The same three +0x150..+0x152
+    // bytes are stamped 0x80, then FighterCombat.FUN_8004a638(fighter, 0) and
+    // FighterCombat.FUN_80026a28(fighter) run.
+    //
+    // FighterCombat.FUN_8004ffec then runs unconditionally (its own uint result is discarded here,
+    // exactly as the original computes but never consumes it). Four more single-state arms follow,
+    // each testing the SAME state byte +0x16A against one fixed value and, on a match, clearing a
+    // small per-state flag field, masking +0x138 down to 0x0E000000, and calling
+    // FighterCombat.FUN_8004a638(fighter, 0) again — these are independent ifs, not an if/else
+    // chain, matching Ghidra's own four separate branches. The tail is the same +0x134-bit-31 arm
+    // and +0x138-bit-27-gated quintet the other phase arms already run, except this one zeroes only
+    // +0xdc (not +0xec, unlike FUN_80050824 above) — that asymmetry is the original's.
+    //
+    // The four state values are left as raw hex with the char Ghidra prints them as, per this
+    // file's own precedent at FUN_800507d0's 0x22 guard: 0x21 '!', 0x20 ' ', 0x1c, 0x2a '*' — state
+    // numbers, not characters.
     private static void FUN_800501b8(int param_1)
     {
-        _ = param_1;
+        if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0
+            || ((short)PsxRam.ReadU16(param_1 + 4) == 0 && (short)PsxRam.ReadU16(param_1 + 6) != 0))
+        {
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0xfdffffff));
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) | 0x4000000));
+            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x7f8ffff));
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            PsxRam.WriteU8(param_1 + 0x152, 0x80);
+            PsxRam.WriteU8(param_1 + 0x151, 0x80);
+            PsxRam.WriteU8(param_1 + 0x150, 0x80);
+            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.FUN_80026a28(param_1);
+        }
+
+        FighterCombat.FUN_8004ffec(param_1);
+
+        // 0x21 '!'
+        if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x21)
+        {
+            PsxRam.WriteU8(param_1 + 0x224, 0);
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            FighterCombat.FUN_8004a638(param_1, 0);
+        }
+
+        // 0x20 ' '
+        if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x20)
+        {
+            PsxRam.WriteU16(param_1 + 0x15e, 0);
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            FighterCombat.FUN_8004a638(param_1, 0);
+        }
+
+        // 0x1c
+        if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x1c)
+        {
+            PsxRam.WriteU8(param_1 + 0x228, 0);
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            FighterCombat.FUN_8004a638(param_1, 0);
+        }
+
+        // 0x2a '*'
+        if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x2a)
+        {
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
+            FighterCombat.FUN_8004a638(param_1, 0);
+        }
+
+        FUN_80047688(param_1);
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x80000000) != 0)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x20000000) == 0)
+            {
+                FighterCombat.FUN_8004e758(param_1, 0);
+            }
+
+            PsxRam.WriteI32(param_1 + 0xdc, 0);
+        }
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        {
+            FUN_80047740(param_1);
+            FUN_800477ec(param_1, param_1 + 0x114);
+            FUN_80047a24(param_1, param_1 + 0x114);
+            FUN_80047b10(param_1);
+            FUN_8004fd24(param_1, param_1 + 0x114);
+        }
     }
 
     // GHIDRA: FUN_8004fa8c @ 0x8004FA8C (VS.EXE)
@@ -600,11 +801,30 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_80047688 @ 0x80047688 (VS.EXE)
-    // BLOCKED: 184 bytes. Step 9.5, unconditional, immediately after whichever of the trio ran.
-    // First of the five functions this body reaches in the 0x80047xxx block.
+    // CERTAIN, full decompilation, 184 bytes. Step 9.5, unconditional, immediately after whichever
+    // of the trio ran. First of the five functions this body reaches in the 0x80047xxx block, and
+    // also called by the four early-out arms above (FUN_80050514/824/501b8) and by FUN_8005070c —
+    // it clears +0x134 bit 31 and then pushes/pops the fighter's own +0xf8 sub-record on the
+    // DAT_80083cb4 chain FighterCombat's own FUN_80045998/FUN_80045a38 already document, and runs
+    // the keyframe-stream scanner FighterCombat.FUN_800539d0.
+    //
+    // &DAT_80083cb4 and &DAT_80101ba4 are ADDRESSES the callees use as opaque keys, not values —
+    // VS_EXE/AnimCmdEffects.cs already names the first privately as `DAT_80083cb4Address` for an
+    // unrelated caller of the same chain, but that constant is private to that file and this
+    // project's duplicate-symbol rule forbids redeclaring the same Ghidra address under a second
+    // name, so both addresses are used here as raw literals with this comment rather than through
+    // a shared constant.
     private static void FUN_80047688(int param_1)
     {
-        _ = param_1;
+        PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x7fffffff));
+
+        // &DAT_80083cb4 -- the list-head record FighterCombat.FUN_80045998/FUN_80045a38 use.
+        FighterCombat.FUN_80045a38(unchecked((int)0x80083cb4), param_1 + 0xf8);
+        FighterCombat.FUN_800539d0(param_1);
+
+        // &DAT_80083cb4 (list head) and &DAT_80101ba4 (opaque payload address).
+        FighterCombat.FUN_80045998(unchecked((int)0x80083cb4), param_1 + 0xf8, unchecked((int)0x80101ba4));
+        FighterCombat.FUN_80045814(param_1 + 0xf8);
     }
 
     // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
@@ -708,6 +928,15 @@ internal static class FighterTask
     // GHIDRA: FUN_8004fd24 @ 0x8004FD24 (VS.EXE)
     // BLOCKED: 712 bytes. Step 9.8, last of the five, and the third to be handed iVar3 + 0x114. It
     // closes the compilation unit that FUN_8004fa8c and FUN_8004fbfc open, ending at 0x8004FFEB.
+    //
+    // Checked this wave: its two callees are FUN_8004a108 (now ported, FighterCombat.FUN_8004a108)
+    // and FUN_800340a8 @ 0x800340A8 — STILL BLOCKED, 1764 bytes, 11 callees of its own (rand,
+    // SquareRoot0, ratan2, and eight more FUN_8003xxxx functions, none in this port), in a
+    // different address range from anything this file or FighterCombat.cs owns. FUN_800340A8 is
+    // the exact function that would unblock this stub. This function is called from every one of
+    // this wave's now-ported quintet call sites (FUN_80050658/8005070c/80050514/80050824/800501b8
+    // and the main body's own step 9.8) — all of them call this same still-empty stub, matching the
+    // precedent already set before this wave.
     private static void FUN_8004fd24(int param_1, int param_2)
     {
         _ = param_1;

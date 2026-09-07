@@ -50,6 +50,31 @@ namespace DbzLegendsRemaster.VS_EXE;
 // FUN_8004dfc4's three callees (FUN_8004d32c, FUN_8004d9f4, FUN_8004d694 — 584/1180/864 bytes)
 // are out of this slice and stay BLOCKED stubs, this file's own copies, called exactly where the
 // original calls them.
+//
+// WAVE 2 — eight standalone leaves FighterTask.cs's own remaining stubs wait on, added below the
+// tier-1/tier-2 family above. Every one of the eight is reached from FUN_80047688 (FighterTask.cs's
+// own BLOCKED stub, step 9.5) except FUN_8004ffec, reached from FUN_800501b8 (step 7's arm); none
+// is otherwise called from anywhere already in this port. Two of the eight (FUN_80045998,
+// FUN_80045a38) are the push/unlink halves of one intrusive doubly-linked list anchored at
+// DAT_80083cb4 — the SAME global AnimCmdEffects.cs already declares (as a private
+// DAT_80083cb4Address constant) for an unrelated opcode's own use of the SAME chain, cross-
+// referenced here rather than redeclared, per this project's duplicate-symbol rule: compare
+// addresses, not names.
+//
+// TWO OF THE EIGHT ARE NOT ACTUALLY LEAVES, once decompiled — the workflow that named them as such
+// could not see this without decompiling them, which this port now has:
+//   FUN_800539d0 dispatches, through a 16-entry function-pointer table at 0x80083C10 (no Ghidra
+//   symbol resolves any of the sixteen targets to more than an UndefinedFunction preview — Ghidra
+//   has not analyzed any of them), to one of sixteen substantial, wholly unanalyzed handler
+//   functions. That dispatch is BLOCKED below (DispatchHitStreamRecord); the list-walk driving it
+//   is not, and is ported in full.
+//   FUN_80049e30 dispatches to four callees (FUN_80047cf8, FUN_800496a8, FUN_80049a24,
+//   FUN_80049534 — 288/892/996/372 bytes) that Ghidra HAS fully analyzed but that are far outside
+//   this slice. Same treatment as FUN_8004dfc4's own three callees above: the dispatcher is ported
+//   in full, each callee stays a BLOCKED private stub carrying its real size.
+// Two more (FUN_80045af0, FUN_80055c6c) are not among the eight named addresses at all — they are
+// FUN_80055dc0's own two callees, both genuine leaves (Ghidra shows zero callees for either), added
+// here so FUN_80055dc0 itself is not left calling into nothing.
 internal static class FighterCombat
 {
     // JUSTIFICATION: backend MonoGame only
@@ -1332,5 +1357,559 @@ internal static class FighterCombat
         }
 
         return local_10;
+    }
+
+    // =====================================================================================
+    // WAVE 2 — eight standalone leaves, plus two of FUN_80055dc0's own callees. See this file's
+    // header note above ("WAVE 2") for how each was reached and what, if anything, is BLOCKED.
+    // =====================================================================================
+
+    // GHIDRA: FUN_80045814 @ 0x80045814 (VS.EXE)
+    // 388 bytes, zero callees. One caller, FUN_80047688 (FighterTask.cs's own BLOCKED stub, step
+    // 9.5): `FUN_80045998(&DAT_80083cb4,param_1+0xf8,&DAT_80101ba4); FUN_80045814(param_1+0xf8);`
+    // — so this runs against the SAME +0xf8 sub-record FUN_80045998/FUN_80045a38 below manage.
+    //
+    // TWO INDEPENDENT, IDENTICALLY-SHAPED CONVERSIONS: +0x1C -> +0x14, and +0x20 -> +0x16. Each
+    // takes a signed 16-bit fixed-point value (9-bit fraction, i.e. /512) and stores its rounded
+    // integer part, but the two directions round differently:
+    //   NEGATIVE input: value >> 9 (arithmetic shift, i.e. floor-toward-negative-infinity) — the
+    //     original computes `value - 0x1FF` first and only falls back to plain `value` when that
+    //     is still negative, which — given the input is already negative here — it always is
+    //     (value < 0 implies value-0x1FF <= -0x200 < 0), so the `-0x1FF` arm can never survive to
+    //     the shift. Kept literal rather than simplified away, per rule 12/7, the same way this
+    //     file already keeps FUN_8004a108's and FUN_8004a638's own unreachable rounding arms.
+    //     Only the +0x14/+0x16 result from THIS branch is then floor-clamped: values below -0x40
+    //     get +0x80 added.
+    //   NON-NEGATIVE input: value >> 9 directly (the original's own `if (iVar2 < 0) iVar2 += 0x1FF`
+    //     guard here can never fire either, since iVar2 IS the non-negative input at that point —
+    //     same dead-arm shape, same reason it stays literal). No +0x40/+0x80 clamp on this side.
+    // Neither +0x1C/+0x20 (the fixed-point inputs) nor +0x14/+0x16 (the rounded outputs) has a
+    // BattleState name; raw literals throughout.
+    internal static void FUN_80045814(int param_1)
+    {
+        short in1c = (short)PsxRam.ReadU16(param_1 + 0x1c);
+        if (in1c < 0)
+        {
+            int iVar2 = in1c - 0x1ff;
+            if (iVar2 < 0) // always true here (in1c < 0 implies in1c-0x1ff < 0) -- see header note
+            {
+                iVar2 = in1c;
+            }
+
+            short result = (short)(iVar2 >> 9);
+            PsxRam.WriteU16(param_1 + 0x14, unchecked((ushort)result));
+
+            if (result < -0x40)
+            {
+                PsxRam.WriteU16(param_1 + 0x14,
+                    unchecked((ushort)((short)PsxRam.ReadU16(param_1 + 0x14) + 0x80)));
+            }
+        }
+        else
+        {
+            int iVar2 = in1c;
+            if (iVar2 < 0) // real branch (bltz); unreachable -- in1c >= 0 on this side, see header note
+            {
+                iVar2 += 0x1ff;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x14, unchecked((ushort)(iVar2 >> 9)));
+        }
+
+        short in20 = (short)PsxRam.ReadU16(param_1 + 0x20);
+        if (in20 < 0)
+        {
+            int iVar2 = in20 - 0x1ff;
+            if (iVar2 < 0) // always true here (in20 < 0 implies in20-0x1ff < 0) -- see header note
+            {
+                iVar2 = in20;
+            }
+
+            short result = (short)(iVar2 >> 9);
+            PsxRam.WriteU16(param_1 + 0x16, unchecked((ushort)result));
+
+            if (result < -0x40)
+            {
+                PsxRam.WriteU16(param_1 + 0x16,
+                    unchecked((ushort)((short)PsxRam.ReadU16(param_1 + 0x16) + 0x80)));
+            }
+        }
+        else
+        {
+            int iVar2 = in20;
+            if (iVar2 < 0) // real branch (bltz); unreachable -- in20 >= 0 on this side, see header note
+            {
+                iVar2 += 0x1ff;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x16, unchecked((ushort)(iVar2 >> 9)));
+        }
+    }
+
+    // GHIDRA: FUN_80045998 @ 0x80045998 (VS.EXE)
+    // 160 bytes, zero callees. Three callers: FUN_80047688 (FighterTask.cs's own BLOCKED stub,
+    // step 9.5) — `FUN_80045998(&DAT_80083cb4, param_1+0xf8, &DAT_80101ba4)`; FUN_80027340 and
+    // FUN_800438c0 (neither in this slice).
+    //
+    // INTRUSIVE DOUBLY-LINKED LIST PUSH-FRONT — the insertion half of the pair FUN_80045a38 below
+    // unlinks. param_1 is the LIST-HEAD RECORD, not a node: its own +4 is the head-pointer slot.
+    // The one ported call site passes &DAT_80083cb4 as param_1 -- the SAME global
+    // VS_EXE/AnimCmdEffects.cs already declares privately as `DAT_80083cb4Address` for an unrelated
+    // opcode's own reader of this same chain (that file's own comment: "the head of the second
+    // record's chain. AnimCmd_HitzSet walks it through each node's word 0"). Cross-referenced here,
+    // not redeclared, per this project's duplicate-symbol rule.
+    //
+    // param_2 is the NODE being pushed -- the ported call site's own param_2 is the caller's own
+    // +0xf8 sub-record (node+0x00 = next, node+0x04 = prev, node+0x10 = a payload word this
+    // function stamps in from param_3). param_3 is opaque here; the one ported caller passes
+    // &DAT_80101ba4 -- an ADDRESS, not a value, the same "address matters, contents do not"
+    // convention AnimCmdEffects.cs's own PTR_DAT_800217f0 already uses.
+    //
+    //   newNode->next(+0)  = head;
+    //   if (head != 0) head->prev(+4) = newNode;
+    //   head                = newNode;
+    //   newNode->payload(+0x10) = param_3;
+    //   newNode->prev(+4)  = 0;
+    internal static void FUN_80045998(int param_1, int param_2, int param_3)
+    {
+        int head = PsxRam.ReadI32(param_1 + 4);
+        PsxRam.WriteI32(param_2, head);
+
+        if (head != 0)
+        {
+            PsxRam.WriteI32(head + 4, param_2);
+        }
+
+        PsxRam.WriteI32(param_1 + 4, param_2);
+        PsxRam.WriteI32(param_2 + 0x10, param_3);
+        PsxRam.WriteI32(param_2 + 4, 0);
+    }
+
+    // GHIDRA: FUN_80045a38 @ 0x80045A38 (VS.EXE)
+    // 184 bytes, zero callees. Three callers: FUN_80047688 (FighterTask.cs's own BLOCKED stub,
+    // step 9.5, immediately before its own FUN_800539d0 call below) —
+    // `FUN_80045a38(&DAT_80083cb4, param_1+0xf8)`; FUN_80026d98 and FUN_800438c0 (neither in this
+    // slice).
+    //
+    // THE UNLINK HALF of FUN_80045998's push-front above, against the SAME node layout (+0x00
+    // next, +0x04 prev) and the SAME DAT_80083cb4 list head (its own +4 the head-pointer slot):
+    //
+    //   if (node->next(+0) != 0) node->next->prev(+4) = node->prev(+4);
+    //   if (node->prev(+4) == 0) head = node->next(+0);
+    //   else                     node->prev->next(+0) = node->next(+0);
+    internal static void FUN_80045a38(int param_1, int param_2)
+    {
+        int next = PsxRam.ReadI32(param_2);
+        int prev = PsxRam.ReadI32(param_2 + 4);
+
+        if (next != 0)
+        {
+            PsxRam.WriteI32(next + 4, prev);
+        }
+
+        if (prev == 0)
+        {
+            PsxRam.WriteI32(param_1 + 4, next);
+        }
+        else
+        {
+            PsxRam.WriteI32(prev, next);
+        }
+    }
+
+    // GHIDRA: FUN_800539d0 @ 0x800539D0 (VS.EXE)
+    // 272 bytes, zero callees OF ITS OWN CODE -- but one INDIRECT call through a 16-entry
+    // function-pointer table at 0x80083C10 (`PTR_LAB_80083c10`), decoded off the raw bytes: 0x80054E24,
+    // 0x80054C10, 0x800554E8, 0x8005574C, 0x80054990, 0x8005515C, 0x80055098, 0x80054AEC,
+    // 0x8005404C, 0x80055104, 0x800558F8, 0x80053AE8, 0x80053B1C, 0x80053F04, 0x800553E8,
+    // 0x80054DA4. Ghidra has not analyzed ANY of the sixteen -- each resolves only to an
+    // "UndefinedFunction" preview, not a real Function -- so none can be ported this wave; see
+    // DispatchHitStreamRecord below. Two callers this port sees: FUN_80047688 (FighterTask.cs's
+    // own BLOCKED stub, step 9.5) — `FUN_800539d0(param_1)`, the fighter workspace itself, NOT the
+    // +0xf8 sub-record FUN_80045998/FUN_80045a38 above use — and FUN_80027340 (not in this slice).
+    //
+    // A KEYFRAME-STREAM SCANNER against a record array whose cursor lives at fighter+8, walked one
+    // 6-byte record at a time: record+0/+1 = start-frame (0xFFFF terminates the stream), +2/+3 =
+    // end-frame, +4 = byte step to the record AFTER this one's 6-byte header, +5 = a handler index
+    // 0..15 into the table above. Fighter+4 is the frame counter this function itself increments
+    // every call -- the SAME raw offset FUN_8004a638's own header note above already names ("the
+    // halfword at +4... no BattleState name covers offset 4"), now with a second, consistent use.
+    // Fighter+6 is a one-shot "started" flag this function sets once and never clears.
+    //
+    // For each record whose [start,end] window contains the (freshly incremented) frame counter,
+    // this stashes the cursor just past the record's 6-byte header, calls the indexed handler
+    // (record data, fighter, &local scratch pair) through the table, then RE-READS both the cursor
+    // and the frame counter from the fighter afterward -- the handler may advance either. Whether
+    // matched or not, the next record is reached by stepping the (possibly handler-updated) cursor
+    // forward by the CURRENT record's own byte-4 step. At stream end (start-frame 0xFFFF), the
+    // cursor is restored to where it stood before the FIRST record this call examined, and the
+    // frame counter is reset to 0 if the terminator's own end-frame (word 1 of the sentinel record)
+    // is not still ahead of it.
+    internal static void FUN_800539d0(int param_1)
+    {
+        int puVar6 = PsxRam.ReadI32(param_1 + 8);
+        ushort uVar4 = unchecked((ushort)((short)PsxRam.ReadU16(param_1 + 4) + 1));
+        PsxRam.WriteU16(param_1 + 4, uVar4);
+
+        ushort uVar2 = PsxRam.ReadU16(puVar6);
+
+        // local_18[0] in the original -- the cursor snapshot restored at the end. Passed by
+        // reference to the (BLOCKED) handler below exactly as the original passes &local_18.
+        int[] local_18 = new int[2];
+        local_18[0] = puVar6;
+
+        while (uVar2 != 0xffff)
+        {
+            int puVar5 = puVar6 + 6;                    // puVar6 + 3 ushorts
+            ushort uVar3 = PsxRam.ReadU16(puVar6 + 4);   // puVar6[2], used as a byte step below
+            byte bVar1 = PsxRam.ReadU8(puVar6 + 5);
+
+            if (uVar2 <= uVar4 && uVar4 <= PsxRam.ReadU16(puVar6 + 2)) // puVar6[1]
+            {
+                PsxRam.WriteI32(param_1 + 8, puVar5);
+                DispatchHitStreamRecord(bVar1, puVar5, param_1, local_18);
+                puVar5 = PsxRam.ReadI32(param_1 + 8);
+                uVar4 = PsxRam.ReadU16(param_1 + 4);
+            }
+
+            puVar6 = puVar5 + (byte)uVar3;
+            uVar2 = PsxRam.ReadU16(puVar6);
+        }
+
+        uVar2 = PsxRam.ReadU16(puVar6 + 2); // puVar6[1], the terminator record's own end-frame
+        PsxRam.WriteI32(param_1 + 8, local_18[0]);
+
+        if (uVar2 <= uVar4)
+        {
+            PsxRam.WriteU16(param_1 + 4, 0);
+        }
+
+        if ((short)PsxRam.ReadU16(param_1 + 6) == 0)
+        {
+            PsxRam.WriteU16(param_1 + 6, 1);
+        }
+    }
+
+    // GHIDRA: none -- this is FUN_800539d0's own indirect call through PTR_LAB_80083c10, given a
+    // name because the original call site has none (an indirect call has no symbol to inherit).
+    // BLOCKED: all sixteen real targets (listed on FUN_800539d0's own header note above) are
+    // wholly unanalyzed by Ghidra -- not even decompiled once, let alone in this slice. `local_18`
+    // is passed by reference exactly as the original passes &local_18, so a future port of any of
+    // the sixteen handlers can read or write local_18[1] (local_18[0] is FUN_800539d0's own cursor
+    // snapshot, already meaningful before this call and read again after it) without this
+    // signature changing.
+    private static void DispatchHitStreamRecord(byte handlerIndex, int recordPtr, int param_1, int[] local_18)
+    {
+        _ = handlerIndex;
+        _ = recordPtr;
+        _ = param_1;
+        _ = local_18;
+    }
+
+    // GHIDRA: FUN_80049e30 @ 0x80049E30 (VS.EXE)
+    // 276 bytes. Three callers, all FUN_80049f54 (FighterTask.cs's own BLOCKED stub, step 9.3 --
+    // the frame's command word): `FUN_80049e30(param_1,0)` (twice, gated on +0x138 bits
+    // 0x10000000/0x20000000) and `FUN_80049e30(param_1,0)` again in that function's own default
+    // arm. None of the three passes 1 in the decompilation this port can see, though Ghidra's own
+    // signature takes a general int.
+    //
+    // FOUR CALLEES, NONE IN THIS SLICE: FUN_80047cf8 (288 bytes, called unconditionally first) and
+    // then exactly one of FUN_80049a24 (996 bytes), FUN_800496a8 (892 bytes) or FUN_80049534 (372
+    // bytes), chosen by the SAME +0x138 bit groups (0x7F00, then 0x200FF) FighterTask.cs's own
+    // UpdateFighter step 9.4 already tests. Same treatment as FUN_8004dfc4's own three callees
+    // above: this dispatcher is ported in full, each callee stays a BLOCKED private stub below,
+    // carrying its real size.
+    //
+    // param_2 selects a PORT (0 or 1) into two pad-state pairs: `(&DAT_8008d3b8)[param_2]` and
+    // `(&DAT_8008d3ac)[param_2]`. VS_EXE/PadInput.cs already declares all four of DAT_8008d3b8
+    // (port 1)/DAT_8008d3bc (port 1 + 4 = port 2) and DAT_8008d3ac (port 1)/DAT_8008d3b0 (port 2)
+    // as individual scalar fields rather than arrays -- its own header note explains why some
+    // adjacent pairs there are `uint[2]` and others are not -- so the array index here is expressed
+    // as a port selector against those existing internal fields instead of a second array
+    // declaration over the same addresses.
+    internal static int FUN_80049e30(int param_1, int param_2)
+    {
+        uint padState = param_2 == 0 ? PadInput.DAT_8008d3b8 : PadInput.DAT_8008d3bc;
+        uint padEdge = param_2 == 0 ? PadInput.DAT_8008d3ac : PadInput.DAT_8008d3b0;
+        FUN_80047cf8(param_1, (int)padState, (int)padEdge);
+
+        int result;
+        if ((PsxRam.ReadI32(param_1 + 0x138) & 0x7f00) == 0)
+        {
+            if ((PsxRam.ReadI32(param_1 + 0x138) & 0x200ff) == 0)
+            {
+                result = FUN_80049a24(param_1);
+            }
+            else
+            {
+                result = FUN_800496a8(param_1);
+            }
+        }
+        else
+        {
+            result = FUN_80049534(param_1);
+        }
+
+        return result;
+    }
+
+    // GHIDRA: FUN_80047cf8 @ 0x80047CF8 (VS.EXE)
+    // BLOCKED: 288 bytes, out of this slice. Called from FUN_80049e30 above, unconditionally,
+    // first: FUN_80047cf8(fighter, portPadState, portPadEdge).
+    private static void FUN_80047cf8(int param_1, int param_2, int param_3)
+    {
+        _ = param_1;
+        _ = param_2;
+        _ = param_3;
+    }
+
+    // GHIDRA: FUN_80049a24 @ 0x80049A24 (VS.EXE)
+    // BLOCKED: 996 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bits
+    // 0x7F00 and 0x200FF are both clear.
+    //
+    // The stub returns 0, not the original's value -- FUN_80049e30's own caller (FighterTask.cs's
+    // own FUN_80049f54, out of this slice) is not ported either, so nothing here yet depends on
+    // the real result.
+    private static int FUN_80049a24(int param_1)
+    {
+        _ = param_1;
+        return 0;
+    }
+
+    // GHIDRA: FUN_800496a8 @ 0x800496A8 (VS.EXE)
+    // BLOCKED: 892 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bits
+    // 0x7F00 is clear and 0x200FF is set. The stub returns 0; see FUN_80049a24's own note above.
+    private static int FUN_800496a8(int param_1)
+    {
+        _ = param_1;
+        return 0;
+    }
+
+    // GHIDRA: FUN_80049534 @ 0x80049534 (VS.EXE)
+    // BLOCKED: 372 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bit
+    // 0x7F00 is set. The stub returns 0; see FUN_80049a24's own note above.
+    private static int FUN_80049534(int param_1)
+    {
+        _ = param_1;
+        return 0;
+    }
+
+    // GHIDRA: FUN_80026a28 @ 0x80026A28 (VS.EXE)
+    // 64 bytes, zero callees. Three callers: FUN_800501b8, FUN_800507d0, FUN_80050824 --
+    // FighterTask.cs's own BLOCKED stubs for phases 7, 5(conditional half) and 5(unconditional
+    // half) respectively.
+    //
+    // CLEARS EVERY TABLE ENTRY OWNED BY THIS FIGHTER in the thirty-record, 0x24-byte-stride table
+    // at DAT_8008d610 -- VS_EXE_exe.cs's own array, declared there (`private static readonly
+    // byte[] DAT_8008d610 = RamRegion(Dat8008d610Address, 0x438)`) and registered with PsxRam's
+    // address resolver through LibGpu.RamRegion, so this function reaches the SAME backing storage
+    // through PsxRam.Read/WriteI32 at the raw address rather than needing access to that private
+    // field. VS_EXE_exe.cs's own OWNERSHIP CAVEAT on that array asks any later slice that touches
+    // it to reuse it rather than redeclare -- this does, via the resolver, without redeclaring
+    // anything. That file's own note already flags the array as PARTIAL ("what the thirty 0x24-byte
+    // records... hold is not established by this function, which only clears them") -- this
+    // function is the SAME kind of partial: entry+0x20 is a fighter-pointer field this function
+    // compares against param_1, and clears entry+0/entry+4 on a match, but what the OTHER 0x20
+    // bytes of each record hold is not established here either.
+    //
+    // Finally clears one byte at param_1+0x227, unconditionally -- no BattleState name covers it.
+    internal static void FUN_80026a28(int param_1)
+    {
+        for (int i = 0; i < 0x1e; i++)
+        {
+            int entryBase = unchecked((int)0x8008d610) + i * 0x24;
+
+            if (PsxRam.ReadI32(entryBase + 0x20) == param_1)
+            {
+                PsxRam.WriteI32(entryBase + 4, 0);
+                PsxRam.WriteI32(entryBase, 0);
+            }
+        }
+
+        PsxRam.WriteU8(param_1 + 0x227, 0);
+    }
+
+    // GHIDRA: FUN_80045af0 @ 0x80045AF0 (VS.EXE)
+    // 128 bytes, zero callees. Two callers this port sees: FUN_80055dc0 below and FUN_80042f74
+    // (not in this slice). Not one of the eight named leaves -- FUN_80055dc0's own callee, added
+    // here per this file's header note above ("WAVE 2").
+    //
+    // TABLE LOOKUP KEYED ON A SCRATCHPAD PHASE COUNTER. Ghidra prints the scratchpad read as
+    // `DAT_1f80007e` -- VS_EXE/AnimCmdControl.cs already closes this exact address as the vy field
+    // of Scratchpad.SVECTOR_1f80007c (0x1F80007C + 2 = 0x1F80007E: "the second halfword of the
+    // scratchpad SVECTOR at 0x1F80007C, which FileIo already declares and RotMatrix already
+    // consumes as an SVECTOR"), cross-referenced here rather than re-declared.
+    //
+    //   row = (Scratchpad.SVECTOR_1f80007c.vy + param_1) & 0xFFF;   -- always 0..0xFFF
+    //   -- Ghidra folds the negative-adjustment arm below to `if (false)`: an AND-0xFFF result can
+    //      never be negative, so the `row += 0xFF` correction is dead code, kept per rule 12/7
+    //      rather than erased (same posture as FUN_80045814's own dead rounding arms above).
+    //   return *(ushort*)(0x80082E24 + (row >> 8) * 2);   -- 16 ushort-entry table, no Ghidra symbol.
+    internal static ushort FUN_80045af0(short param_1)
+    {
+        int row = (Scratchpad.SVECTOR_1f80007c.vy + param_1) & 0xfff;
+
+        if (row < 0) // real branch (bgez); unreachable -- row is always 0..0xFFF, see header note
+        {
+            row += 0xff;
+        }
+
+        return PsxRam.ReadU16(unchecked((int)0x80082e24) + (row >> 8) * 2);
+    }
+
+    // GHIDRA: FUN_80055c6c @ 0x80055C6C (VS.EXE)
+    // 340 bytes, zero callees. One caller, FUN_80055dc0 below: `FUN_80055c6c(param_1, uVar1)`,
+    // where uVar1 is FUN_80045af0's table-lookup result above. Not one of the eight named leaves --
+    // FUN_80055dc0's own second callee, added here per this file's header note ("WAVE 2").
+    //
+    // STAMPS THE LOW BYTE OF +0x134 FROM param_2, THEN CHASES FOUR TABLE INDIRECTIONS off a base
+    // pointer read from +0x148. Each of the four shares one shape: read a raw value, store it
+    // as-is, and if its sign bit is CLEAR (i.e. it reads like a small positive offset rather than
+    // an absolute KSEG0 pointer or a negative sentinel already resolved), ALSO add the object's own
+    // base pointer (+0x00) and overwrite the field with that sum instead. None of the four fields
+    // (+0x84, +0x8C, +0xA4, +0x98/+0x94), the two byte selectors (+0xA8, +0xAA) or the base table
+    // pointer (+0x148) has a name anywhere else in this port; +0x80 is read here but never written,
+    // presumably seeded by a caller outside this slice.
+    //
+    //   +0x134 low byte       = param_2 & 0xFF (upper 24 bits of +0x134 preserved)
+    //   idx                   = (param_2 & 0x3F) * 4
+    //   +0x84  (raw/resolved) = *(int*)(+0x148 + idx)
+    //   +0x8C  (raw/resolved) = *(int*)(+0x148 + idx + 0x1C)
+    //   +0xA4  (raw/resolved) = *(int*)( *(byte*)(+0xA8) * 4 + [+0x8C, post-resolve] )
+    //   +0x98  (raw/resolved) = *(int*)( *(byte*)( *(byte*)(+0xAA)*3 + [+0xA4,post-resolve] + 1) * 4
+    //                                    + +0x80 )
+    //   +0x94  (raw/resolved) = *(int*)( *(byte*)( *(byte*)(+0xAA)*3 + [+0xA4,post-resolve] + 2) * 4
+    //                                    + [+0x84, post-resolve] )
+    internal static void FUN_80055c6c(int param_1, uint param_2)
+    {
+        PsxRam.WriteI32(param_1 + 0x134,
+            unchecked((int)(((uint)PsxRam.ReadI32(param_1 + 0x134) & 0xffffff00u) | (param_2 & 0xff))));
+
+        int idx = (int)(param_2 & 0x3f) * 4;
+        int tableBase = PsxRam.ReadI32(param_1 + 0x148);
+
+        int iVar1 = PsxRam.ReadI32(tableBase + idx);
+        PsxRam.WriteI32(param_1 + 0x84, iVar1);
+        if (iVar1 >= 0)
+        {
+            PsxRam.WriteI32(param_1 + 0x84, iVar1 + PsxRam.ReadI32(param_1));
+        }
+
+        uint uVar2 = (uint)PsxRam.ReadI32(tableBase + idx + 0x1c);
+        PsxRam.WriteI32(param_1 + 0x8c, unchecked((int)uVar2));
+        if (uVar2 < 0x80000000)
+        {
+            PsxRam.WriteI32(param_1 + 0x8c, unchecked((int)(uVar2 + (uint)PsxRam.ReadI32(param_1))));
+        }
+
+        uVar2 = (uint)PsxRam.ReadI32(PsxRam.ReadU8(param_1 + 0xa8) * 4 + PsxRam.ReadI32(param_1 + 0x8c));
+        PsxRam.WriteI32(param_1 + 0xa4, unchecked((int)uVar2));
+        if (uVar2 < 0x80000000)
+        {
+            PsxRam.WriteI32(param_1 + 0xa4, unchecked((int)(uVar2 + (uint)PsxRam.ReadI32(param_1))));
+        }
+
+        uVar2 = (uint)PsxRam.ReadI32(
+            PsxRam.ReadU8(PsxRam.ReadU8(param_1 + 0xaa) * 3 + PsxRam.ReadI32(param_1 + 0xa4) + 1) * 4
+            + PsxRam.ReadI32(param_1 + 0x80));
+        PsxRam.WriteI32(param_1 + 0x98, unchecked((int)uVar2));
+        if (uVar2 < 0x80000000)
+        {
+            PsxRam.WriteI32(param_1 + 0x98, unchecked((int)(uVar2 + (uint)PsxRam.ReadI32(param_1))));
+        }
+
+        uVar2 = (uint)PsxRam.ReadI32(
+            PsxRam.ReadU8(PsxRam.ReadU8(param_1 + 0xaa) * 3 + PsxRam.ReadI32(param_1 + 0xa4) + 2) * 4
+            + PsxRam.ReadI32(param_1 + 0x84));
+        PsxRam.WriteI32(param_1 + 0x94, unchecked((int)uVar2));
+        if (uVar2 < 0x80000000)
+        {
+            PsxRam.WriteI32(param_1 + 0x94, unchecked((int)(uVar2 + (uint)PsxRam.ReadI32(param_1))));
+        }
+    }
+
+    // GHIDRA: FUN_80055dc0 @ 0x80055DC0 (VS.EXE)
+    // 60 bytes. One caller, FUN_8005070c (FighterTask.cs's own BLOCKED stub, phase 4's arm on
+    // +0x138 bit 31): `FUN_80055dc0(param_1, 0)` -- Ghidra's own signature here is ONE parameter
+    // (`void FUN_80055dc0(int param_1)`); the caller's second literal argument (0) is never read
+    // by this body, matching this port's existing convention of exposing the signature the body
+    // actually uses (see FUN_8004a108's own header note for the precedent).
+    //
+    // Chains this file's own FUN_80045af0 (the scratchpad-keyed table lookup) into FUN_80055c6c
+    // (the four-indirection resolver), both above: looks up a table row keyed on the fighter's own
+    // +0x11E halfword, then hands that row straight to FUN_80055c6c as its param_2.
+    internal static void FUN_80055dc0(int param_1)
+    {
+        ushort uVar1 = FUN_80045af0((short)PsxRam.ReadU16(param_1 + 0x11e));
+        FUN_80055c6c(param_1, uVar1);
+    }
+
+    // GHIDRA: FUN_8004ffec @ 0x8004FFEC (VS.EXE)
+    // 460 bytes -- the largest of the eight, taken last. One callee, FUN_8004a638, already ported
+    // above in this file (the state-transition/recovery-timer function). One caller, FUN_800501b8
+    // (FighterTask.cs's own BLOCKED stub, phase 7's arm on +0x134 bit 25): `FUN_8004ffec(param_1);`.
+    //
+    // SCANS ALL TWELVE BATTLE SLOTS (0..11) via BattleState.CtxFighterSlots, skipping the caller's
+    // own slot (FighterSlotIndex) and any empty slot. For each OTHER slot with a live fighter
+    // pointer AND bit 0x200 set in a per-slot ushort at ctx+slot*CtxSlotRecordStride+0x15B0 (no
+    // BattleState name; raw literal, four bytes before CtxKiGauge at the same stride), resolves
+    // that slot's fighter through its own task-node +8 hop (the same shape FUN_8004e758's own
+    // header note already documents) and, ONLY when THAT fighter's own +0x138 bit 26 is CLEAR,
+    // ANDs a running accumulator (seeded 0x4000000, i.e. bit 26 set) with that fighter's own +0x134
+    // word -- then, only when that SAME fighter's own +0x134 bit 26 is SET, calls
+    // FUN_8004a638(fighter, 0).
+    //
+    // THE RETURN VALUE is the final accumulator shifted right 26 bits (>> 0x1A): whatever bit 26
+    // was left holding across every matching fighter's own +0x134 word, ANDed together starting
+    // from 1 -- i.e. 1 only if EVERY matching fighter still had +0x134 bit 26 set, 0 the moment any
+    // one of them did not. The caller (FUN_800501b8, out of this slice) is not itself ported, so
+    // what it does with this 0/1 result is not established here.
+    internal static uint FUN_8004ffec(int param_1)
+    {
+        uint local_14 = 0x4000000;
+
+        for (int local_10 = 0; local_10 < 0xc; local_10++)
+        {
+            if (PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) == local_10)
+            {
+                continue;
+            }
+
+            if (PsxRam.ReadI32(local_10 * 4
+                    + PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    + BattleState.CtxFighterSlots) == 0)
+            {
+                continue;
+            }
+
+            // ctx+slot*CtxSlotRecordStride+0x15B0: a per-slot ushort with no BattleState name, four
+            // bytes before CtxKiGauge (+0x15B4) at the same stride.
+            if ((PsxRam.ReadU16(
+                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    + local_10 * BattleState.CtxSlotRecordStride + 0x15b0) & 0x200) == 0)
+            {
+                continue;
+            }
+
+            int iVar1 = PsxRam.ReadI32(
+                PsxRam.ReadI32(
+                    local_10 * 4
+                    + PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    + BattleState.CtxFighterSlots) + 8);
+
+            if ((PsxRam.ReadI32(iVar1 + 0x138) & 0x4000000) != 0)
+            {
+                continue;
+            }
+
+            local_14 &= (uint)PsxRam.ReadI32(iVar1 + 0x134);
+
+            if ((PsxRam.ReadI32(iVar1 + 0x134) & 0x4000000) != 0)
+            {
+                FUN_8004a638(iVar1, 0);
+            }
+        }
+
+        return local_14 >> 0x1a;
     }
 }
