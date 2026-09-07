@@ -134,6 +134,15 @@ internal static class BattleManager
 
     internal static readonly int[] DiagCtxStateVisits = new int[8];
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probes for the ONE chain that raises a fighter's +0x144 guard, which is
+    // what UpdateFighter's phase 1 tests and what the port measured never to be set. The only
+    // setter in the whole overlay is `sw s1,0x144(s4)` at 0x800273E4, inside FUN_80027340, whose
+    // only caller is FUN_80026d98, whose only call site is the CtxRoundRequest 0x180 gate below.
+    internal static int DiagRoundRequestEverSeen;
+
+    internal static int DiagFun80026d98Calls;
+
     internal static void UpdateBattleManager()
     {
         DiagManagerCalls++;
@@ -145,6 +154,7 @@ internal static class BattleManager
             DiagCtxFlagsEverSeen |= DiagLastCtxFlags;
             DiagLastGauge = PsxRam.ReadI32(diagCtx + BattleState.CtxCentralGauge);
             DiagLastD458 = DAT_8008d458;
+            DiagRoundRequestEverSeen |= PsxRam.ReadI32(diagCtx + BattleState.CtxRoundRequest);
             if (((uint)DiagLastCtxFlags & 0x18000008) == 0) { DiagCond1Pass++; }
             int diagAlive = 0;
             for (int ds = 0; ds < 12; ds++)
@@ -3108,6 +3118,7 @@ internal static class BattleManager
 
             if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0x180) != 0)
             {
+                DiagFun80026d98Calls++;
                 FUN_80026d98(param_1);
                 PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
                     (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffe7f));

@@ -534,7 +534,7 @@ internal static class AnimCmdEffects
                         return puVar5;
                     }
 
-                    FUN_80053970(
+                    FighterCombat.FUN_80053970(
                         PsxRam.ReadI32(AnimStreamBlockBase + (piVar10)), PTR_DAT_800217f0Address, uVar6);
                     PsxRam.WriteU16(
                         PsxRam.ReadI32(AnimStreamBlockBase + (piVar10)) + 0x50, (ushort)(uVar8 & 0x20));
@@ -1347,16 +1347,17 @@ internal static class AnimCmdEffects
     }
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
-    private static void FUN_80053970(int param_1, int param_2, int param_3)
-    {
-        // BLOCKED: 96 bytes. AnimCmd_EffSet's re-arm path calls it on an already-live effect
-        // object with the address of PTR_DAT_800217f0. It sits in the 0x80053xxx block beside the
-        // task scheduler VS_EXE/TaskSystem.cs already ports, so it belongs to that slice's
-        // neighbourhood rather than to this one.
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE, AND THAT IS A FIX, NOT A MOVE. This file used to carry an EMPTY
+    // private stub for this address while VS_EXE/FighterCombat.cs carried the real 96-byte body,
+    // and the note left on the stub argued the two were harmless because each was private to its
+    // own class. They were not: C# binds the unqualified call in AnimCmd_EffSet's re-arm path to
+    // THIS class first, so that call site did nothing at all while the same function worked
+    // correctly everywhere else. That is the exact defect class this repository has shipped four
+    // times, and custom-tools/scripts/check_function_addresses.py now fails the build's own
+    // acceptance loop on it.
+    //
+    // The single body lives in FighterCombat.FUN_80053970 and the one call site here reaches it by
+    // qualified name.
 
     // GHIDRA: FUN_800438c0 @ 0x800438C0 (VS.EXE)
     private static int FUN_800438c0(int param_1, int param_2, short[] param_3, short[] param_4,

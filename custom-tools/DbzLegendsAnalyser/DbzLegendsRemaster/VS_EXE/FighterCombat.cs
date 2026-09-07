@@ -39,7 +39,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // confirmed instruction-by-instruction, but what they represent is not. FUN_8004d0fc has one
 // spot (marked DEVIATION below) where the original itself reads an uninitialized local; that bug
 // is kept, not fixed, and only given a defined value because C# requires one. FUN_80047c64's two
-// callees (FUN_80053970, FUN_80026424) are out of this slice and stay BLOCKED stubs — one of them
+// callees (FUN_80053970, FUN_80026424) were out of this slice — FUN_80053970 is now closed here
 // already has an independent stub in AnimCmdEffects.cs with a different call shape; this file
 // owns its own copy rather than reaching into that file's private members.
 //
@@ -69,9 +69,11 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   functions. That dispatch is BLOCKED below (DispatchHitStreamRecord); the list-walk driving it
 //   is not, and is ported in full.
 //   FUN_80049e30 dispatches to four callees (FUN_80047cf8, FUN_800496a8, FUN_80049a24,
-//   FUN_80049534 — 288/892/996/372 bytes) that Ghidra HAS fully analyzed but that are far outside
-//   this slice. Same treatment as FUN_8004dfc4's own three callees above: the dispatcher is ported
-//   in full, each callee stays a BLOCKED private stub carrying its real size.
+//   FUN_80049534 — 288/892/996/372 bytes) that Ghidra HAS fully analyzed but that were far outside
+//   this slice. A LATER WAVE CLOSED THEM, and moved the dispatcher out with them: all five now
+//   live in FighterInput.cs, under the names ReadFighterPadCommand, PushFighterPadHistory,
+//   DecodeCommandFlags200FF, DecodeCommandFlagsClear and DecodeCommandFlags7F00. This file no
+//   longer declares any of the five, and nothing here calls them.
 // Two more (FUN_80045af0, FUN_80055c6c) are not among the eight named addresses at all — they are
 // FUN_80055dc0's own two callees, both genuine leaves (Ghidra shows zero callees for either), added
 // here so FUN_80055dc0 itself is not left calling into nothing.
@@ -932,12 +934,16 @@ internal static class FighterCombat
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
     // CLOSED (was BLOCKED) -- 96 bytes, 7 call sites total, two of them in THIS class
-    // (FighterSetState above, and CreateAttackEventTask below). AnimCmdEffects.cs carries an INDEPENDENT
-    // private stub for this SAME address, still a stub (called there from AnimCmd_EffSet's re-arm
-    // path); that stub is local to that file's own class and not reachable from here, so this
-    // remains FighterCombat's own copy of the body rather than a shared one -- see the sweep note
-    // on cross-file duplicates this project already tracks. Ghidra's own decompilation closes the
-    // body without ambiguity:
+    // (FighterSetState above, and CreateAttackEventTask below).
+    //
+    // THIS IS THE ONLY DECLARATION OF 0x80053970 IN THE PORT, and it took a fix to become so.
+    // AnimCmdEffects.cs used to carry an INDEPENDENT empty private stub for the same address, and
+    // the note here used to argue that was harmless because each copy was private to its own
+    // class. It was not harmless: AnimCmd_EffSet's re-arm path called ITS class's stub, so that one
+    // call site silently did nothing. The stub is gone and that call site now says
+    // FighterCombat.FUN_80053970, which is why this member is `internal`.
+    //
+    // Ghidra's own decompilation closes the body without ambiguity:
     //
     //   *(ushort*)(param_1+4) = 0;
     //   if (param_2 >= 0) param_2 = param_2 + *(int*)param_1;
@@ -953,7 +959,7 @@ internal static class FighterCombat
     // non-negative (as FighterSetState passes it: *(int*)(*(int*)(fighter+0x148)+0x38), a table
     // pointer, always non-negative, so the add always fires there). param_3 selects a 4-byte entry
     // in that table by its own low 16 bits. Neither table has a name in this port.
-    private static void FUN_80053970(int param_1, int param_2, uint param_3)
+    internal static void FUN_80053970(int param_1, int param_2, uint param_3)
     {
         PsxRam.WriteU16(param_1 + 4, 0);
 
@@ -1650,94 +1656,6 @@ internal static class FighterCombat
         _ = recordPtr;
         _ = param_1;
         _ = local_18;
-    }
-
-    // GHIDRA: FUN_80049e30 @ 0x80049E30 (VS.EXE)
-    // 276 bytes. Three callers, all FUN_80049f54 (FighterTask.cs's own BLOCKED stub, step 9.3 --
-    // the frame's command word): `FUN_80049e30(param_1,0)` (twice, gated on +0x138 bits
-    // 0x10000000/0x20000000) and `FUN_80049e30(param_1,0)` again in that function's own default
-    // arm. None of the three passes 1 in the decompilation this port can see, though Ghidra's own
-    // signature takes a general int.
-    //
-    // FOUR CALLEES, NONE IN THIS SLICE: FUN_80047cf8 (288 bytes, called unconditionally first) and
-    // then exactly one of FUN_80049a24 (996 bytes), FUN_800496a8 (892 bytes) or FUN_80049534 (372
-    // bytes), chosen by the SAME +0x138 bit groups (0x7F00, then 0x200FF) FighterTask.cs's own
-    // UpdateFighter step 9.4 already tests. Same treatment as FUN_8004dfc4's own three callees
-    // above: this dispatcher is ported in full, each callee stays a BLOCKED private stub below,
-    // carrying its real size.
-    //
-    // param_2 selects a PORT (0 or 1) into two pad-state pairs: `(&DAT_8008d3b8)[param_2]` and
-    // `(&DAT_8008d3ac)[param_2]`. VS_EXE/PadInput.cs already declares all four of DAT_8008d3b8
-    // (port 1)/DAT_8008d3bc (port 1 + 4 = port 2) and DAT_8008d3ac (port 1)/DAT_8008d3b0 (port 2)
-    // as individual scalar fields rather than arrays -- its own header note explains why some
-    // adjacent pairs there are `uint[2]` and others are not -- so the array index here is expressed
-    // as a port selector against those existing internal fields instead of a second array
-    // declaration over the same addresses.
-    internal static int FUN_80049e30(int param_1, int param_2)
-    {
-        uint padState = param_2 == 0 ? PadInput.DAT_8008d3b8 : PadInput.DAT_8008d3bc;
-        uint padEdge = param_2 == 0 ? PadInput.DAT_8008d3ac : PadInput.DAT_8008d3b0;
-        FUN_80047cf8(param_1, (int)padState, (int)padEdge);
-
-        int result;
-        if ((PsxRam.ReadI32(param_1 + 0x138) & 0x7f00) == 0)
-        {
-            if ((PsxRam.ReadI32(param_1 + 0x138) & 0x200ff) == 0)
-            {
-                result = FUN_80049a24(param_1);
-            }
-            else
-            {
-                result = FUN_800496a8(param_1);
-            }
-        }
-        else
-        {
-            result = FUN_80049534(param_1);
-        }
-
-        return result;
-    }
-
-    // GHIDRA: FUN_80047cf8 @ 0x80047CF8 (VS.EXE)
-    // BLOCKED: 288 bytes, out of this slice. Called from FUN_80049e30 above, unconditionally,
-    // first: FUN_80047cf8(fighter, portPadState, portPadEdge).
-    private static void FUN_80047cf8(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
-
-    // GHIDRA: FUN_80049a24 @ 0x80049A24 (VS.EXE)
-    // BLOCKED: 996 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bits
-    // 0x7F00 and 0x200FF are both clear.
-    //
-    // The stub returns 0, not the original's value -- FUN_80049e30's own caller (FighterTask.cs's
-    // own FUN_80049f54, out of this slice) is not ported either, so nothing here yet depends on
-    // the real result.
-    private static int FUN_80049a24(int param_1)
-    {
-        _ = param_1;
-        return 0;
-    }
-
-    // GHIDRA: FUN_800496a8 @ 0x800496A8 (VS.EXE)
-    // BLOCKED: 892 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bits
-    // 0x7F00 is clear and 0x200FF is set. The stub returns 0; see FUN_80049a24's own note above.
-    private static int FUN_800496a8(int param_1)
-    {
-        _ = param_1;
-        return 0;
-    }
-
-    // GHIDRA: FUN_80049534 @ 0x80049534 (VS.EXE)
-    // BLOCKED: 372 bytes, out of this slice. Called from FUN_80049e30 above when +0x138 bit
-    // 0x7F00 is set. The stub returns 0; see FUN_80049a24's own note above.
-    private static int FUN_80049534(int param_1)
-    {
-        _ = param_1;
-        return 0;
     }
 
     // GHIDRA: FUN_80026a28 @ 0x80026A28 (VS.EXE)

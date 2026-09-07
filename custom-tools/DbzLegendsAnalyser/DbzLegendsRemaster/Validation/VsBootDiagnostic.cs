@@ -134,6 +134,51 @@ internal static class VsBootDiagnostic
                 : "   <-- une variante de VariantBackgroundColorTable: FUN_800414ec a tourne"));
 
         Console.WriteLine();
+        Console.WriteLine(
+            $"  CtxRoundRequest cumule : 0x{BattleManager.DiagRoundRequestEverSeen:X8}"
+            + $"   porte 0x180 franchie (FUN_80026d98) : {BattleManager.DiagFun80026d98Calls}");
+
+        Console.WriteLine();
+        Console.Write("  LES PHASES DE UpdateFighter (entrees par phase) :");
+        for (int i = 1; i < FighterTask.DiagPhaseEntries.Length; i++)
+        {
+            Console.Write($" {i}:{FighterTask.DiagPhaseEntries[i]}");
+        }
+
+        Console.WriteLine();
+
+        Console.WriteLine();
+        Console.WriteLine("  ETAPE 9.3, LE MOT DE COMMANDE DE LA FRAME (SelectFighterCommand @ 0x80049F54):");
+        Console.WriteLine(
+            $"   pad port 1 : {FighterTask.DiagCommandSourceCalls[0]}"
+            + $"   pad port 2 : {FighterTask.DiagCommandSourceCalls[1]}"
+            + $"   IA : {FighterTask.DiagCommandSourceCalls[2]}"
+            + $"   sortie -1 : {FighterTask.DiagCommandSourceCalls[3]}");
+        Console.WriteLine(
+            $"   +0x138 cumules : 0x{FighterTask.DiagFighterFlagsEverSeen:X8}"
+            + "   bit 0x10000000 (pad 1) : "
+            + (((FighterTask.DiagFighterFlagsEverSeen & 0x10000000) != 0) ? "VU" : "JAMAIS VU")
+            + "   bit 0x20000000 (pad 2) : "
+            + (((FighterTask.DiagFighterFlagsEverSeen & 0x20000000) != 0) ? "VU" : "JAMAIS VU"));
+
+        bool anyCommand = false;
+        for (int i = 0; i < FighterTask.DiagCommandWords.Length; i++)
+        {
+            if (FighterTask.DiagCommandWords[i] != 0)
+            {
+                if (!anyCommand)
+                {
+                    Console.Write("   mots de commande vus :");
+                    anyCommand = true;
+                }
+
+                Console.Write($" 0x{i:X2}x{FighterTask.DiagCommandWords[i]}");
+            }
+        }
+
+        Console.WriteLine(anyCommand ? string.Empty : "   AUCUN mot de commande n'a ete produit.");
+
+        Console.WriteLine();
         Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");

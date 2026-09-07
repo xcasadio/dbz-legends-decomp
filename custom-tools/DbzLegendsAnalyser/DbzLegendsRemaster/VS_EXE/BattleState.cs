@@ -235,6 +235,49 @@ internal static class BattleState
     internal const int FighterZeroedFrom114 = 0x114;
 
     // =====================================================================================
+    // THE TWO PAD HISTORY RINGS, AND THE FACE-BUTTON SELECTOR BEHIND THEM
+    // =====================================================================================
+    // GHIDRA: fighter + 0x180 (VS.EXE)
+    // Twenty words. PushFighterPadHistory @ 0x80047CF8 shifts entries 0x13..1 up by one
+    // (`ring[i] = ring[i-1]` written by the original as `+0x180 + i*4 <- +0x17c + i*4`) and then
+    // stores this frame's REMAPPED pad state word at index 0. The value stored is
+    // `(&DAT_8008d3b8)[port]` -- PadInput.DAT_8008d3b8 / DAT_8008d3bc, the output of
+    // ProcessPadInput's fourteen-entry remap loop -- so these are the game's LOGICAL button bits,
+    // not raw hardware bits. They coincide only while the player has not reconfigured the pad,
+    // because SELECT.EXE seeds the remap tables at 0x801FF020 / 0x801FF03C with the identity.
+    //
+    // Index 0 is this frame, index 1 the frame before, and so on. Every input recogniser in
+    // FighterInput.cs reads the two rings by that convention and none of them looks past index 8.
+    internal const int FighterPadStateHistory = 0x180;
+
+    // GHIDRA: fighter + 0x1D0 (VS.EXE)
+    // Twenty words, the RISING EDGES of the same remapped word: `(&DAT_8008d3ac)[port]`, i.e.
+    // PadInput.DAT_8008d3ac / DAT_8008d3b0. Shifted by the same loop in the same function, same
+    // newest-at-index-0 convention.
+    //
+    // FighterAction.cs's own header note used to describe this address as "a fighter's own
+    // command/attack-slot buffer -- confirmed only by the arithmetic that locates it". That is
+    // now closed: PushFighterPadHistory is the only writer, and what it writes is the pad.
+    internal const int FighterPadEdgeHistory = 0x1D0;
+
+    // The length of both rings. 0x180 + 20*4 = 0x1D0 and 0x1D0 + 20*4 = 0x220, so the two rings
+    // are exactly adjacent and the second ends where FighterRepeatedFaceButton begins.
+    internal const int FighterPadHistoryLength = 20;
+
+    // GHIDRA: fighter + 0x220 (VS.EXE)
+    // One word, always 0 or exactly one of 0x1000 / 0x2000 / 0x4000 / 0x8000 -- a single
+    // face-button bit of the remapped word. Two writers, both in FighterInput.cs and both
+    // recognising the SAME face button pressed twice inside a short window of
+    // FighterPadEdgeHistory: MatchRepeatedFaceButton @ 0x80048C20 (whose result
+    // DecodeCommandFlagsClear stores here) and MatchStateGatedRepeatedFace @ 0x80049008 (which
+    // writes through the `param_1 + 0x220` pointer DecodeCommandFlags7F00 hands it).
+    //
+    // Read by FighterCombat.FUN_8004aa9c and FighterAction.FUN_8004ad80, which both switch on it
+    // to pick a knockback direction triple at +0xC8/+0xCA/+0xCC. Both of those already carried a
+    // "raw literal; no BattleState name covers +0x220" note; this constant is that name.
+    internal const int FighterRepeatedFaceButton = 0x220;
+
+    // =====================================================================================
     // THE PLACEMENT SET, AND THE CROSS-OVERLAY WORD THAT PICKS IT
     // =====================================================================================
     // FUN_800512CC branches on DAT_801FF100 and writes one of two triples into +0xB0..+0xBC:

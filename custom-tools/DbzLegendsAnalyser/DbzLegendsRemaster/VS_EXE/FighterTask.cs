@@ -54,6 +54,28 @@ internal static class FighterTask
     // RELATION: diagnostic probe for Validation/VsBootDiagnostic.cs; nothing in the runtime reads it.
     internal static int DiagUpdateFighterCalls;
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: step 9.3's own probes, read only by Validation/VsBootDiagnostic.cs. Which of
+    // SelectFighterCommand's four exits a frame takes is the difference between "the pad decoder
+    // is wired and idle" and "the pad decoder is never reached", and the two look identical from
+    // outside. [0] pad port 1, [1] pad port 2, [2] the AI, [3] the -1 exit.
+    internal static readonly int[] DiagCommandSourceCalls = new int[4];
+
+    // The OR of every +0x138 word SelectFighterCommand has seen, and the last one. Bits
+    // 0x10000000 / 0x20000000 are what mark a fighter pad-driven; if neither is ever set, no
+    // amount of pad decoding can reach a fighter.
+    internal static uint DiagFighterFlagsEverSeen;
+
+    // The distinct non-negative command words step 9.3 has produced, counted by opcode. Sized to
+    // cover every opcode this port has seen named (the largest is 0x2A).
+    internal static readonly int[] DiagCommandWords = new int[0x40];
+
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: one counter per phase of UpdateFighter's own ladder, incremented on ENTRY to that
+    // phase, so a run of counts that stops at phase N names the gate that closed. Read only by
+    // Validation/VsBootDiagnostic.cs.
+    internal static readonly int[] DiagPhaseEntries = new int[10];
+
     // JUSTIFICATION: C# language bridge only
     // RELATION: FUN_800512cc @ 0x800512CC hands &LAB_80050ae4 to CreateTask at 0x80051314, which
     // stores the raw pointer in the node at +0x04. The node built by this port still stores
@@ -92,6 +114,8 @@ internal static class FighterTask
         // The task workspace at node+0x08 IS the fighter, 0x240 bytes of it.
         int iVar3 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
 
+        DiagPhaseEntries[1]++;
+
         // PHASE 1 @ 0x80050B14 — the guard. FUN_800512cc leaves +0x144 zero, so a fighter that has
         // just been created falls straight out here every frame.
         if (PsxRam.ReadI32(iVar3 + 0x144) == 0)
@@ -108,6 +132,8 @@ internal static class FighterTask
             //     FUN_800512cc is never read by this function;
             //   * its lower clamp against +0xB2 only applies while the state byte +0x16A is zero.
             // X and Z get the plain max-then-min pair with no state condition.
+            DiagPhaseEntries[2]++;
+
             if (0 < (short)PsxRam.ReadU16(iVar3 + 0x116))
             {
                 PsxRam.WriteU16(iVar3 + 0x116, 0);
@@ -154,18 +180,28 @@ internal static class FighterTask
             // The symbol is AnimVm's; it is read here, not redeclared.
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
+                DiagPhaseEntries[3]++;
+
                 // PHASE 4 @ 0x80050CC4 — +0x138 bit 31.
                 if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x80000000) == 0)
                 {
+                    DiagPhaseEntries[4]++;
+
                     // PHASE 5 @ 0x80050CF8 — +0x138 bit 26.
                     if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x4000000) == 0)
                     {
+                        DiagPhaseEntries[5]++;
+
                         // PHASE 6 @ 0x80050D50 — +0x134 bit 26.
                         if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x4000000) == 0)
                         {
+                            DiagPhaseEntries[6]++;
+
                             // PHASE 7 @ 0x80050D8C — +0x134 bit 25.
                             if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x2000000) == 0)
                             {
+                                DiagPhaseEntries[7]++;
+
                                 // PHASE 8 @ 0x80050DC0..0x80050EBC — the targeting flags.
                                 //
                                 // The battle context at +0xF0 carries TWO halfwords, at ctx+0x14 and
@@ -217,7 +253,7 @@ internal static class FighterTask
                                 //                   task node; iVar2 is that node's workspace, and
                                 //                   +0x18 / +0x60 are re-pointed into it
                                 //   9.2 0x80050F4C  FUN_8004fbfc
-                                //   9.3 0x80050F5C  FUN_80049f54 -> uStack_10, or 0, or +0x16A
+                                //   9.3 0x80050F5C  SelectFighterCommand -> uStack_10, or 0, or +0x16A
                                 //   9.4 0x80050FB8  one of FUN_8004cea0 / FUN_8004c198 / FUN_8004b098
                                 //   9.5 0x80051038  FUN_80047688
                                 //   9.6 0x80051048  the +0x134 bit-31 arm
@@ -233,6 +269,8 @@ internal static class FighterTask
                                 // FUN_800512cc already wrote at creation (+0x18 -> own +0x114).
                                 // When it resolves to something else, this fighter's +0x18 points at
                                 // THAT workspace's +0x114 for the rest of the frame.
+                                DiagPhaseEntries[9]++;
+
                                 uVar1 = FUN_8004fa8c(iVar3);
                                 PsxRam.WriteI32(iVar3 + BattleState.FighterTaskNode, uVar1);
                                 if (PsxRam.ReadI32(iVar3 + BattleState.FighterTaskNode) == 0)
@@ -253,7 +291,7 @@ internal static class FighterTask
                                 // call outright; a returned -1 falls back to the state byte +0x16A.
                                 if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x2000000) == 0)
                                 {
-                                    uStack_10 = FUN_80049f54(iVar3);
+                                    uStack_10 = SelectFighterCommand(iVar3);
                                 }
                                 else
                                 {
@@ -263,6 +301,14 @@ internal static class FighterTask
                                 if (uStack_10 == 0xffffffff)
                                 {
                                     uStack_10 = PsxRam.ReadU8(iVar3 + 0x16a);
+                                }
+
+                                // JUSTIFICATION: backend MonoGame only
+                                // RELATION: diagnostic probe only; the tally is read by
+                                // Validation/VsBootDiagnostic.cs and by nothing in the runtime.
+                                if (uStack_10 < (uint)DiagCommandWords.Length)
+                                {
+                                    DiagCommandWords[uStack_10]++;
                                 }
 
                                 // 9.4 — three-way, on +0x138: bits 8..14 pick FUN_8004cea0; failing
@@ -759,17 +805,111 @@ internal static class FighterTask
         }
     }
 
-    // GHIDRA: FUN_80049f54 @ 0x80049F54 (VS.EXE)
-    // BLOCKED: 388 bytes. Step 9.3 — the frame's command word for this fighter, and the one callee
-    // whose RESULT the caller routes on. The caller treats 0xFFFFFFFF as "no command" and falls back
-    // to the state byte +0x16A, which is the only thing this slice can say about its range.
+    // GHIDRA: SelectFighterCommand @ 0x80049F54 (VS.EXE)
+    // 388 bytes. Step 9.3 — the frame's command word for this fighter, and the one callee whose
+    // RESULT the caller routes on. The caller treats 0xFFFFFFFF as "no command" and falls back to
+    // the state byte +0x16A.
     //
-    // The stub returns 0. That is not the original's value and it does not take the -1 fallback:
-    // until this is ported the trio at step 9.4 always sees command 0.
-    private static uint FUN_80049f54(int param_1)
+    // IT IS A TWO-WAY SWITCH: PAD OR AI. DAT_801FF100 is the handover word SELECT.EXE writes, held
+    // here as short index 0x80 of SharedHighRam.SHORT_ARRAY_801ff000 — the same spelling
+    // BattleManager.cs, FighterSetup.cs and SELECT_EXE/CharacterSelect.cs already use, so nothing
+    // new is declared for it. Its three in-values route as follows, and +0x138 bits 0x10000000 /
+    // 0x20000000 are what mark a fighter as driven by pad port 1 / port 2:
+    //
+    //   1  bit 0x10000000 set -> ReadFighterPadCommand(fighter, 0); otherwise the AI.
+    //   0  bit 0x10000000 set -> ReadFighterPadCommand(fighter, 0);
+    //      else bit 0x20000000 set -> ReadFighterPadCommand(fighter, 1);
+    //      else the AI.
+    //   2  the AI, unconditionally.
+    //   anything else -> -1, i.e. the caller's fall back to +0x16A.
+    //
+    // Note the shape of the original's `else` ladder, reproduced rather than flattened: the
+    // `DAT_801FF100 < 2` arm covers the value 0 and then FALLS THROUGH to `uVar1 = 0xffffffff` for
+    // any other value below 2, and the `== 2` arm returns before reaching it. Written the other way
+    // round, values below 2 that are not 0 would take the wrong exit.
+    internal static uint SelectFighterCommand(int param_1)
+    {
+        uint uVar1;
+
+        short handover = SharedHighRam.SHORT_ARRAY_801ff000[Dat801ff100ShortIndex];
+        DiagFighterFlagsEverSeen |= (uint)PsxRam.ReadI32(param_1 + 0x138);
+
+        if (handover == 1)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10000000) == 0)
+            {
+                DiagCommandSourceCalls[2]++;
+                uVar1 = (uint)FUN_80023890(param_1);
+            }
+            else
+            {
+                DiagCommandSourceCalls[0]++;
+                uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 0);
+            }
+        }
+        else
+        {
+            if (handover < 2)
+            {
+                if (handover == 0)
+                {
+                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10000000) != 0)
+                    {
+                        DiagCommandSourceCalls[0]++;
+                uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 0);
+                        return uVar1;
+                    }
+
+                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x20000000) != 0)
+                    {
+                        DiagCommandSourceCalls[1]++;
+                        uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 1);
+                        return uVar1;
+                    }
+
+                    DiagCommandSourceCalls[2]++;
+                uVar1 = (uint)FUN_80023890(param_1);
+                    return uVar1;
+                }
+            }
+            else if (handover == 2)
+            {
+                DiagCommandSourceCalls[2]++;
+                uVar1 = (uint)FUN_80023890(param_1);
+                return uVar1;
+            }
+
+            DiagCommandSourceCalls[3]++;
+            uVar1 = 0xffffffff;
+        }
+
+        return uVar1;
+    }
+
+    // GHIDRA: DAT_801ff100 @ 0x801FF100 (VS.EXE)
+    // Not a declaration — an INDEX, exactly as BattleManager.cs's own constant of the same name
+    // documents. 0x801FF100 - 0x801FF000 = 0x100 bytes = short index 0x80 of
+    // SharedHighRam.SHORT_ARRAY_801ff000. Held per file because the two constants are private to
+    // their own class; the STORAGE is single, in SharedHighRam, which is what the duplicate-symbol
+    // rule cares about.
+    private const int Dat801ff100ShortIndex = 0x80;
+
+    // GHIDRA: FUN_80023890 @ 0x80023890 (VS.EXE)
+    // BLOCKED: 5096 bytes, ten callees, and the whole of the CPU-side controller — the arm
+    // SelectFighterCommand takes for any fighter that is not marked pad-driven. Its own callees
+    // (FUN_80024C78, FUN_80025494, FUN_8002575C, FUN_80025A3C, FUN_80025B10, FUN_80025DC4,
+    // FUN_8002631C, FUN_800264D8, FUN_80045CF4, plus rand) are a family of comparable size, and it
+    // reads a three-level table of behaviour profiles rooted at PTR_DAT_800807A4.
+    //
+    // The stub returns -1, which the caller turns into the state-byte fallback at +0x16A. That is
+    // NOT the original's value: the original returns a command opcode. It is chosen over 0 because
+    // 0 is itself a live command in the decoder this wave ported (DecodeCommandFlagsClear's
+    // "nothing pressed" arm), so returning 0 would look like a real decision, while -1 is the one
+    // value step 9.3's own caller already documents as "no command".
+    private static int FUN_80023890(int param_1)
     {
         _ = param_1;
-        return 0;
+        return -1;
     }
 
     // GHIDRA: FUN_8004b098 @ 0x8004B098 (VS.EXE)
