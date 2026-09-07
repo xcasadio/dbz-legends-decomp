@@ -157,7 +157,18 @@ def main():
     # included. Ghidra's own symbol names confirm the split -- from that address on the
     # named functions are _card_*, Spu*, _spu_*, S_SVA_OBJ_*, libgpu, libgte, libetc.
     SDK_BASE = 0x800632C4
-    rows = [r for r in rows if int(r[0], 16) < SDK_BASE]
+
+    # AND A LOWER BOUND, WHICH IS NOT PEDANTRY. Ghidra's function manager for this
+    # program holds 1362 functions, but only 1209 of them are code: the other 153 are
+    # the GTE macro pseudo-functions in the separate 0x20000000 block, one byte each,
+    # which the SDK header defines as inline assembly and which no overlay ever calls
+    # as functions. 0x20000000 is NUMERICALLY BELOW 0x800632C4, so an upper bound
+    # alone would sort every one of them into ABSENT and report 153 phantom holes in
+    # a port that has none. The inventory shipped with this repository happens to
+    # contain only the 0x8xxxxxxx block, so the bug never fired -- it was waiting for
+    # the first person to re-dump the TSV from Ghidra.
+    LOAD_BASE = 0x80000000
+    rows = [r for r in rows if LOAD_BASE <= int(r[0], 16) < SDK_BASE]
 
     buckets = {"PORTED": [], "EMPTY": [], "STUB": [], "ABSENT": []}
     for row in rows:
