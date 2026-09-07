@@ -4069,7 +4069,7 @@ internal static class BattleManager
     // first digit of a pair reads glyph-row entries [sVar12 + 0..3] and the second reads
     // [4..7 - sVar12], so a non-zero sVar12 exchanges the two halves of the eight-short row. That
     // is the mirroring of the right-hand player's readout; kept as index arithmetic, not collapsed.
-    private static void BuildSlotDigitQuads(int param_1, short param_2)
+    internal static void BuildSlotDigitQuads(int param_1, short param_2)
     {
         int cVar1;
         int uVar2;

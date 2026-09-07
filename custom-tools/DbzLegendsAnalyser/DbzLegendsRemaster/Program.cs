@@ -1,4 +1,4 @@
-﻿if (args.Length == 2 && args[0] == "--validate-bandai")
+if (args.Length == 2 && args[0] == "--validate-bandai")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.BandaiStrValidation.Run(args[1]);
 }
@@ -74,6 +74,10 @@ else if (args.Length == 1 && args[0] == "--validate-tasks")
 else if (args.Length == 1 && args[0] == "--validate-exe-image")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.ExeImageValidation.Run();
+}
+else if (args.Length == 1 && args[0] == "--validate-digit-quads")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SlotDigitQuadsValidation.Run();
 }
 else if (args.Length == 1 && args[0] == "--validate-heap")
 {

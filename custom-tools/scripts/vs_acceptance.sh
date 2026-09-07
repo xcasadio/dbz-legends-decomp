@@ -12,7 +12,7 @@ BUILD_ERR=$(dotnet build "$SLN" -v q 2>&1 | grep -cE "error CS")
 echo "build errors: $BUILD_ERR"
 
 echo "=== benches ==="
-BENCHES="--validate-exe-image --validate-gte-rotavg --validate-heap --validate-pad-input --validate-pad-mute --validate-render --validate-sortsprite --validate-sound-loader --validate-tasks --validate-title-images --validate-title-init --validate-title-task --validate-vs-ram"
+BENCHES="--validate-digit-quads --validate-exe-image --validate-gte-rotavg --validate-heap --validate-pad-input --validate-pad-mute --validate-render --validate-sortsprite --validate-sound-loader --validate-tasks --validate-title-images --validate-title-init --validate-title-task --validate-vs-ram"
 PASS=0; TOTAL=0
 for b in $BENCHES; do
   TOTAL=$((TOTAL+1))
