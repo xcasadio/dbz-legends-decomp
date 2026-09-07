@@ -13,18 +13,18 @@ namespace DbzLegendsRemaster.VS_EXE;
 // file was renamed from MemoryCard.cs to MemoryCard.cs once that was established.
 //
 //   SELECT.EXE (already ported, SELECT_EXE/MemoryCard.cs)      VS.EXE (this file)     delta
-//     InitializeMemoryCard        @ 0x80021CE4                 FUN_80021d44           +0x60
-//     ShutdownMemoryCard          @ 0x80021D34                 FUN_80021d94           +0x60
-//     ProbeMemoryCard             @ 0x80021E34                 FUN_80021e94           +0x60
-//     RepollMemoryCard            @ 0x80021F0C                 FUN_80021f6c           +0x60
-//     QueryCardStatus             @ 0x80021FB4                 FUN_80022014           +0x60
-//     IsSaveFileMissing           @ 0x800220D4                 FUN_80022134           +0x60
+//     InitializeMemoryCard        @ 0x80021CE4                 InitializeMemoryCard           +0x60
+//     ShutdownMemoryCard          @ 0x80021D34                 ShutdownMemoryCard           +0x60
+//     ProbeMemoryCard             @ 0x80021E34                 ProbeMemoryCard           +0x60
+//     RepollMemoryCard            @ 0x80021F0C                 RepollMemoryCard           +0x60
+//     QueryCardStatus             @ 0x80021FB4                 QueryCardStatus           +0x60
+//     IsSaveFileMissing           @ 0x800220D4                 IsSaveFileMissing           +0x60
 //     FUN_800221d0 (0xF4.. poll)  @ 0x800221D0                 FUN_80022230           +0x60
 //     FUN_80022244 (0xF0.. poll)  @ 0x80022244                 FUN_800222a4           +0x60
 //     FUN_800222b8 (0xF4.. drain) @ 0x800222B8                 FUN_80022318           +0x60
 //     FUN_80022300 (0xF0.. drain) @ 0x80022300                 FUN_80022360           +0x60
-//     OpenMemoryCardEvents        @ 0x80022348                 FUN_800223a8           +0x60
-//     ReadSaveRecord              @ 0x80022810                 FUN_80022870           +0x60
+//     OpenMemoryCardEvents        @ 0x80022348                 OpenMemoryCardEvents           +0x60
+//     ReadSaveRecord              @ 0x80022810                 ReadSaveRecord           +0x60
 //
 // Twelve functions, one constant offset, bodies that match statement for statement. The two
 // overlays link the same object file at a slightly different address. So the SEMANTICS of this
@@ -109,7 +109,7 @@ internal static class MemoryCard
     // GHIDRA: DAT_8008d254 @ 0x8008D254 (VS.EXE)
     // gp+0x158, a SIGNED HALFWORD. Both drivers open with `sh v0,0x158(gp)` followed by
     // `sll v0,v0,0x10 / sra v0,v0,0x10` (read at 0x80022AD4-0x80022ADC), which is what settles the
-    // width and the sign: it holds FUN_80022014's card-status code and is then tested as
+    // width and the sign: it holds QueryCardStatus's card-status code and is then tested as
     // `== 2` and as the unsigned range `(uint)(x - 1) < 2`, i.e. 1 or 2.
     private static short DAT_8008d254;
 
@@ -154,7 +154,7 @@ internal static class MemoryCard
     private static int DAT_8008d414;
 
     // GHIDRA: DAT_8008d41c @ 0x8008D41C (VS.EXE)
-    // Set 1 by FUN_80021e94 when the probe took its _card_clear arm and 0 otherwise.
+    // Set 1 by ProbeMemoryCard when the probe took its _card_clear arm and 0 otherwise.
     // PARTIAL: WRITE-ONLY, exactly as SELECT.EXE's DAT_80055b68 is. Nothing in this cluster reads
     // it back; the stores are kept because the original makes them. CS0414 is suppressed for that
     // reason — there is no reader to port, so the warning is about the ORIGINAL, not about the port.
@@ -260,7 +260,7 @@ internal static class MemoryCard
 
     // JUSTIFICATION: PSX hardware adaptation only
     // RELATION: FUN_80022ab0's `local_a8 / local_a4 / local_a0 / local_9c` stack block, which
-    // FUN_80022870 fills with 64 bytes by POINTER. The original passes &local_a8; the port gives
+    // ReadSaveRecord fills with 64 bytes by POINTER. The original passes &local_a8; the port gives
     // that local a real PSX address in the real stack region (crt0 starts sp at 0x807FFFF8) and
     // backs it with a region, which is this port's established way of handing a C# local a PSX
     // address. The address is distinct from every other in-use scratch address
@@ -286,22 +286,22 @@ internal static class MemoryCard
     // BRING-UP AND TEARDOWN
     // =====================================================================================
 
-    // GHIDRA: FUN_80021d44 @ 0x80021D44 (VS.EXE)
+    // GHIDRA: InitializeMemoryCard @ 0x80021D44 (VS.EXE)
     // Eighty bytes, seven calls, no locals. THE BRING-UP, and the same seven calls in the same order
     // as SELECT.EXE's InitializeMemoryCard @ 0x80021CE4 and TITLE.EXE's @ 0x80022630.
     // One caller, LAB_80029484 @ 0x80029484, inside the undisassembled stretch.
-    internal static void FUN_80021d44()
+    internal static void InitializeMemoryCard()
     {
         InitCARD(1);
         StartCARD();
         _bu_init();
-        FUN_800223a8();
+        OpenMemoryCardEvents();
         _card_auto(0);
         ChangeClearPAD(0);
         FUN_800229a4();
     }
 
-    // GHIDRA: FUN_800223a8 @ 0x800223A8 (VS.EXE)
+    // GHIDRA: OpenMemoryCardEvents @ 0x800223A8 (VS.EXE)
     // Three hundred and sixty bytes. Eight OpenEvent calls inside a critical section, then eight
     // EnableEvent calls outside it. The split is load-bearing on the console — the table is built
     // with the ISR masked and only armed once a delivery may safely land — and LibApi's OpenEvent
@@ -309,7 +309,7 @@ internal static class MemoryCard
     // FUN_8007a940 and FUN_8007ac10 are EnterCriticalSection / ExitCriticalSection: three-instruction
     // `li a0,1 / syscall 0 / jr ra` bodies at those addresses, above 0x800632C4, so SDK per rule 13.
     // ALL EIGHT CALLBACKS ARE NULL, which is what makes these poll-only events.
-    internal static void FUN_800223a8()
+    internal static void OpenMemoryCardEvents()
     {
         EnterCriticalSection();
         DAT_8008d408 = (int)OpenEvent(0xf4000001, 4, 0x2000, null);
@@ -331,12 +331,12 @@ internal static class MemoryCard
         EnableEvent(DAT_8008d438);
     }
 
-    // GHIDRA: FUN_80021d94 @ 0x80021D94 (VS.EXE)
-    // Two hundred and fifty-six bytes — the mirror image of FUN_80021d44 + FUN_800223a8. Eight
+    // GHIDRA: ShutdownMemoryCard @ 0x80021D94 (VS.EXE)
+    // Two hundred and fifty-six bytes — the mirror image of InitializeMemoryCard + OpenMemoryCardEvents. Eight
     // DisableEvent OUTSIDE the critical section, eight CloseEvent inside it, then the card stopped
     // and the pad handed back to the BIOS driver. Three callers, at 0x80031BF0, 0x80031C18 and
     // 0x80031C94, all inside the undisassembled stretch.
-    internal static void FUN_80021d94()
+    internal static void ShutdownMemoryCard()
     {
         DisableEvent(DAT_8008d408);
         DisableEvent(DAT_8008d40c);
@@ -491,7 +491,7 @@ internal static class MemoryCard
     // THE CARD QUERIES
     // =====================================================================================
 
-    // GHIDRA: FUN_80021e94 @ 0x80021E94 (VS.EXE)
+    // GHIDRA: ProbeMemoryCard @ 0x80021E94 (VS.EXE)
     // Two hundred and sixteen bytes, five call sites (0x8002948C plus two in each driver).
     // THE PROBE. Two retry loops of at most five passes each with an optional _card_clear between:
     //   pass 1  drain, _card_info(chan), poll. Break as soon as the code is not 1 ("failed").
@@ -499,7 +499,7 @@ internal static class MemoryCard
     //   pass 2  drain, _card_load(chan), poll. Return the first code that is not 1.
     // Both loops return 1 only by exhausting five failing attempts.
     // Byte-identical in shape to SELECT.EXE's ProbeMemoryCard @ 0x80021E34.
-    internal static int FUN_80021e94(int param_1)
+    internal static int ProbeMemoryCard(int param_1)
     {
         int iVar1;
         int iVar2;
@@ -546,7 +546,7 @@ internal static class MemoryCard
         return 1;
     }
 
-    // GHIDRA: FUN_80021f6c @ 0x80021F6C (VS.EXE)
+    // GHIDRA: RepollMemoryCard @ 0x80021F6C (VS.EXE)
     // One hundred and sixty-eight bytes, EIGHT call sites — all of them (0x80029B04, 0x80029D00,
     // 0x8002B20C, 0x8002B384, 0x8002C574, 0x8002C978, 0x8002ED1C, 0x8002EEA0) inside the
     // undisassembled 0x80029000..0x80032000 stretch, so NOTHING IN THIS FILE CALLS IT. It is ported
@@ -555,7 +555,7 @@ internal static class MemoryCard
     // card picker is up so that inserting or removing a card is noticed.
     // param_1 is the PREVIOUS status. Its two arms: a code-4 answer is only cleared when the caller
     // was ALREADY at 4, and a code-2 answer is retried once; neither fires when param_1 is 2.
-    internal static int FUN_80021f6c(int param_1)
+    internal static int RepollMemoryCard(int param_1)
     {
         int iVar1;
 
@@ -579,7 +579,7 @@ internal static class MemoryCard
         return iVar1;
     }
 
-    // GHIDRA: FUN_80022014 @ 0x80022014 (VS.EXE)
+    // GHIDRA: QueryCardStatus @ 0x80022014 (VS.EXE)
     // One hundred and twelve bytes, two call sites — the head of each driver. A single _card_info,
     // retried exactly once when the code came back 2.
     // PARTIAL ON param_1. Both call sites leave a0 UNTOUCHED: FUN_80022ab0's prologue
@@ -589,7 +589,7 @@ internal static class MemoryCard
     // argument for exactly that reason. 0 is passed here because that is the only value this port
     // can name honestly; it is read ONLY inside `(iVar1 == 2) && (param_1 != 2)`, and code 2 means
     // spec 0x0100, which nothing in this port ever delivers, so no reachable behaviour depends on it.
-    internal static int FUN_80022014(int param_1)
+    internal static int QueryCardStatus(int param_1)
     {
         int iVar1;
 
@@ -633,13 +633,13 @@ internal static class MemoryCard
         return iVar1 == 0 ? 1 : 0;
     }
 
-    // GHIDRA: FUN_80022134 @ 0x80022134 (VS.EXE)
+    // GHIDRA: IsSaveFileMissing @ 0x80022134 (VS.EXE)
     // One hundred bytes. Builds "bu00:BISLPS-00355DRAGON" in a 32-byte stack buffer and asks the
     // BIOS card directory whether it is there. RETURNS 1 WHEN THE FILE IS ABSENT: the original is
     // `return iVar1 == 0;` over a firstfile that answers 0 when the directory has no match. Both
     // drivers' state 7 reads it as `if (iVar == 0)` = "the save exists".
     // The DIRENTRY it fills (`undefined1 auStack_30[40]`) is never looked at.
-    internal static int FUN_80022134(int param_1)
+    internal static int IsSaveFileMissing(int param_1)
     {
         int iVar1;
         string local_50;
@@ -708,7 +708,7 @@ internal static class MemoryCard
     // THE RECORD I/O
     // =====================================================================================
 
-    // GHIDRA: FUN_80022870 @ 0x80022870 (VS.EXE)
+    // GHIDRA: ReadSaveRecord @ 0x80022870 (VS.EXE)
     // Three hundred and eight bytes, two call sites (both in FUN_80022ab0's state 0xE). THE RECORD
     // READ. Opens "bu00:BISLPS-00355DRAGON", seeks to 0x200 + param_2 * 0x80, reads ONE 128-byte
     // record, validates it, and copies its 64-byte payload to param_3.
@@ -731,7 +731,7 @@ internal static class MemoryCard
     //
     // param_3 IS A PSX ADDRESS here, because its only caller passes the address of a stack local
     // and the copy is a byte loop through it.
-    internal static int FUN_80022870(int param_1, int param_2, int param_3)
+    internal static int ReadSaveRecord(int param_1, int param_2, int param_3)
     {
         byte bVar1;
         int iVar2;
@@ -799,7 +799,7 @@ internal static class MemoryCard
 
     // GHIDRA: FUN_80022758 @ 0x80022758 (VS.EXE)
     // Two hundred and eighty bytes, three call sites (two in FUN_80022ab0, one in FUN_80023314).
-    // THE RECORD WRITE — the exact inverse of FUN_80022870, and the function SELECT.EXE's slice
+    // THE RECORD WRITE — the exact inverse of ReadSaveRecord, and the function SELECT.EXE's slice
     // never had. Opens the same file for read/write, seeks to 0x200 + param_2 * 0x80, stamps the
     // magic '.', copies 64 bytes from param_3 while XOR-folding them into byte 127, and writes the
     // whole 128-byte record.
@@ -1101,7 +1101,7 @@ internal static class MemoryCard
         bVar4 = false;
         iVar10 = 0;
         sVar5 = 0;
-        DAT_8008d254 = (short)FUN_80022014(0);
+        DAT_8008d254 = (short)QueryCardStatus(0);
         if (DAT_8008d254 == 2)
         {
             DAT_8008d264 = 1;
@@ -1113,7 +1113,7 @@ internal static class MemoryCard
             if (DAT_8008d264 == 1)
             {
                 DAT_8008d264 = 0;
-                sVar5 = (short)FUN_80021e94(0);
+                sVar5 = (short)ProbeMemoryCard(0);
             }
 
             switch (DAT_8008d260)
@@ -1164,7 +1164,7 @@ internal static class MemoryCard
                 }
 
                 case 3:
-                    iVar9 = FUN_80021e94(0);
+                    iVar9 = ProbeMemoryCard(0);
                     if (iVar9 == 4)
                     {
                         unaff_s3 = CallFun80052db4(PsxRam.ReadI32(PtrDat8007ff1cAddress));
@@ -1228,7 +1228,7 @@ internal static class MemoryCard
                     break;
 
                 case 7:
-                    iVar9 = FUN_80022134(0);
+                    iVar9 = IsSaveFileMissing(0);
                     if (DAT_8008d25c == 0)
                     {
                         DAT_8008d260 = 8;
@@ -1445,7 +1445,7 @@ internal static class MemoryCard
                     bVar4 = true;
                     if (DAT_8008d268 >= 0 && DAT_8008d268 <= 2)
                     {
-                        iVar9 = FUN_80022870(0, DAT_8008d268 + 1, Local_a8Address);
+                        iVar9 = ReadSaveRecord(0, DAT_8008d268 + 1, Local_a8Address);
                         if (iVar9 == 0x80)
                         {
                             iVar9 = DAT_8008d268;
@@ -1470,7 +1470,7 @@ internal static class MemoryCard
                     }
                     else if (DAT_8008d268 >= 3 && DAT_8008d268 <= 5)
                     {
-                        iVar9 = FUN_80022870(0, DAT_8008d268 + 1, Local_a8Address);
+                        iVar9 = ReadSaveRecord(0, DAT_8008d268 + 1, Local_a8Address);
                         if (iVar9 != 0x80)
                         {
                             // LAB_80023264
@@ -1567,7 +1567,7 @@ internal static class MemoryCard
         bVar1 = false;
         uVar8 = 0;
         sVar2 = 0;
-        DAT_8008d254 = (short)FUN_80022014(0);
+        DAT_8008d254 = (short)QueryCardStatus(0);
         if (DAT_8008d254 == 2)
         {
             DAT_8008d264 = 1;
@@ -1579,7 +1579,7 @@ internal static class MemoryCard
             if (DAT_8008d264 == 1)
             {
                 DAT_8008d264 = 0;
-                sVar2 = (short)FUN_80021e94(0);
+                sVar2 = (short)ProbeMemoryCard(0);
             }
 
             switch (DAT_8008d260)
@@ -1619,7 +1619,7 @@ internal static class MemoryCard
                     break;
 
                 case 3:
-                    iVar4 = FUN_80021e94(0);
+                    iVar4 = ProbeMemoryCard(0);
                     if (iVar4 == 4)
                     {
                         unaff_s2 = CallFun80052db4(PsxRam.ReadI32(PtrDat8007ff1cAddress));
@@ -1675,7 +1675,7 @@ internal static class MemoryCard
                     goto LAB_800237ac;
 
                 case 7:
-                    iVar4 = FUN_80022134(0);
+                    iVar4 = IsSaveFileMissing(0);
                     DAT_8008d260 = 8;
                     if (iVar4 == 0)
                     {

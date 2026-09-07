@@ -5,7 +5,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 
 // THE CHARACTER PRIMITIVE BUILDER — what gives a fighter something to draw.
 //
-// FighterSubstitution.ActivateFighterInSlot calls FUN_80034818 as its second act, before it even
+// FighterSubstitution.ActivateFighterInSlot calls BuildCharacterPrimitives as its second act, before it even
 // publishes the fighter's own character-data pointer, and until this file landed that call went to
 // an empty stub: every fighter on the field had its state, its input and its position, and not one
 // primitive to submit.
@@ -14,7 +14,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // this file fills one of them. The layout it writes, read off the code rather than off a struct:
 //   +0x00  the new character id, +0x02 the slot -- the pair the search below matches on
 //   +0x05  a running primitive-record cursor, advanced by each of the three passes
-//   +0x0A / +0x09 / +0x0B  the three passes' own record counts, written by FUN_80032134
+//   +0x0A / +0x09 / +0x0B  the three passes' own record counts, written by ExpandPrimitiveTemplate
 //   +0x14..+0x6F  three 8-byte blocks and three 16-byte blocks of identity-shaped state
 //   +0x1E44  an eight-byte copy of the fighter's own +0x114 position triple
 //   from +0x14C4  the primitive records themselves, 0x34 bytes each
@@ -25,7 +25,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // original's own address arithmetic is kept: it starts a byte cursor at 6 * 0x1E58 and adds it to
 // 0x8008BBF0, which is DAT_8008DA48 minus one stride, so the first probe lands on slot 5.
 //
-// THREE PASSES, one per template, and the templates are DATA. FUN_80032134 is handed 1, then 0,
+// THREE PASSES, one per template, and the templates are DATA. ExpandPrimitiveTemplate is handed 1, then 0,
 // then 2, and each index picks a record out of the pointer triple at 0x800811B4. Each record is
 // {count, vertexTable, indexTable}: the index table holds five halfwords per primitive -- four
 // vertex indices and a flag -- and the vertex table three halfwords per vertex. The flag chooses
@@ -44,7 +44,7 @@ internal static class CharacterPrimitives
     // GHIDRA: DAT_80080adc @ 0x80080ADC (VS.EXE)
     // The three primitive templates and the pointer triple that selects them, 0x6E4 bytes read back
     // byte for byte from the image. See this file's header for how the extent is closed. Registered
-    // with PsxRam's resolver through LibGpu.RamRegion so FUN_80032134 can walk it with the
+    // with PsxRam's resolver through LibGpu.RamRegion so ExpandPrimitiveTemplate can walk it with the
     // original's own pointer arithmetic instead of a managed index.
     private const int Dat80080adcAddress = unchecked((int)0x80080ADC);
 
@@ -169,7 +169,7 @@ internal static class CharacterPrimitives
     private const int PtrDat800811b4Address = unchecked((int)0x800811B4);
 
     // GHIDRA: DAT_800817d8 @ 0x800817D8 (VS.EXE)
-    // Forty two-byte rows, indexed by the CHARACTER ID (the workspace's own +0x00). FUN_80034818
+    // Forty two-byte rows, indexed by the CHARACTER ID (the workspace's own +0x00). BuildCharacterPrimitives
     // reads both bytes of a row: the high one feeds a tpage word, the low one's top nibble a CLUT
     // index. Forty rows covers the roster's own 1..38 range with two spare, and the fortieth reads
     // 0x00 0x00, which is what the count is measured against rather than assumed from.
@@ -197,9 +197,9 @@ internal static class CharacterPrimitives
     // independently and only the index survives into the result.
     private const int WorkspaceCursorBase = unchecked((int)0x8008BBF0);
 
-    // GHIDRA: FUN_80034818 @ 0x80034818 (VS.EXE)
+    // GHIDRA: BuildCharacterPrimitives @ 0x80034818 (VS.EXE)
     // 1408 bytes, 267 decompiled lines. One caller: FighterSubstitution.ActivateFighterInSlot, as
-    // `FUN_80034818(*taskNode, fighter+0x173, characterId, slot, fighter+0x114)`. Its return value
+    // `BuildCharacterPrimitives(*taskNode, fighter+0x173, characterId, slot, fighter+0x114)`. Its return value
     // is DISCARDED by that caller, and it is -1 when the workspace search finds nothing.
     //
     // THE EIGHT-BYTE COPY at +0x1E44 is `lwl`/`lwr` on the source and `swl`/`swr` on the
@@ -211,7 +211,7 @@ internal static class CharacterPrimitives
     // PARTIAL: what the three 8-byte and three 16-byte blocks at +0x14..+0x6F hold is not closed
     // here. Their shape is suggestive -- three 0x1000 values with a zero beside each, and 0x1000 is
     // 1.0 in this game's 12-bit fixed point -- but no reader of them is in this slice.
-    internal static int FUN_80034818(uint param_1, uint param_2, ushort param_3, ushort param_4,
+    internal static int BuildCharacterPrimitives(uint param_1, uint param_2, ushort param_3, ushort param_4,
         int param_5)
     {
         int iVar8 = 6;
@@ -298,7 +298,7 @@ internal static class CharacterPrimitives
         PsxRam.WriteU16(puVar14 + 0x1e54, 0);
         PsxRam.WriteU16(puVar14 + 0x1e56, 0);
 
-        sbyte cVar4 = (sbyte)FUN_80032134(1, puVar14, (int)uVar12);
+        sbyte cVar4 = (sbyte)ExpandPrimitiveTemplate(1, puVar14, (int)uVar12);
         uint uVar10 = uVar12 + PsxRam.ReadU8(puVar14 + 0xa);
         PsxRam.WriteU8(puVar14 + 5, (byte)((sbyte)PsxRam.ReadU8(puVar14 + 5) + cVar4));
         byte bVar1 = PsxRam.ReadU8(Dat800817d8Address + 1 + PsxRam.ReadU16(puVar14) * 2);
@@ -315,7 +315,7 @@ internal static class CharacterPrimitives
         }
 
         uVar12 = PsxRam.ReadU8(puVar14 + 5);
-        cVar4 = (sbyte)FUN_80032134(0, puVar14, (int)uVar12);
+        cVar4 = (sbyte)ExpandPrimitiveTemplate(0, puVar14, (int)uVar12);
         uVar10 = uVar12 + PsxRam.ReadU8(puVar14 + 9);
         PsxRam.WriteU8(puVar14 + 5, (byte)((sbyte)PsxRam.ReadU8(puVar14 + 5) + cVar4));
         bVar1 = PsxRam.ReadU8(Dat800817d8Address + 1 + PsxRam.ReadU16(puVar14) * 2);
@@ -377,7 +377,7 @@ internal static class CharacterPrimitives
         }
 
         uVar12 = PsxRam.ReadU8(puVar14 + 5);
-        cVar4 = (sbyte)FUN_80032134(2, puVar14, (int)uVar12);
+        cVar4 = (sbyte)ExpandPrimitiveTemplate(2, puVar14, (int)uVar12);
         uVar10 = uVar12 + PsxRam.ReadU8(puVar14 + 0xb);
         PsxRam.WriteU8(puVar14 + 5, (byte)((sbyte)PsxRam.ReadU8(puVar14 + 5) + cVar4));
         bVar1 = PsxRam.ReadU8(Dat800817d8Address + 1 + PsxRam.ReadU16(puVar14) * 2);
@@ -445,8 +445,8 @@ internal static class CharacterPrimitives
         return GetGraphType() == 2 ? (ushort)0xae : (ushort)0x3e;
     }
 
-    // GHIDRA: FUN_80032134 @ 0x80032134 (VS.EXE)
-    // 328 bytes. Three callers, all FUN_80034818 above, with param_1 = 1, then 0, then 2.
+    // GHIDRA: ExpandPrimitiveTemplate @ 0x80032134 (VS.EXE)
+    // 328 bytes. Three callers, all BuildCharacterPrimitives above, with param_1 = 1, then 0, then 2.
     //
     // It expands ONE template into the workspace's primitive records. param_1 selects the template
     // through the pointer triple at 0x800811B4; param_3 is the record cursor the caller has reached.
@@ -459,7 +459,7 @@ internal static class CharacterPrimitives
     // indices are expanded into twelve halfwords at the record's own +0x14C4 offset.
     //
     // The return is the template's primitive COUNT, which the caller adds to its own cursor.
-    internal static int FUN_80032134(int param_1, int param_2, int param_3)
+    internal static int ExpandPrimitiveTemplate(int param_1, int param_2, int param_3)
     {
         int puVar11 = param_2 + param_3 * 0x18 + 0x14c4;
         int iVar10 = 0;
