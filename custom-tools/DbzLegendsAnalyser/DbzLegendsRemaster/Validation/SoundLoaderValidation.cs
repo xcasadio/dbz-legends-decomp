@@ -85,23 +85,40 @@ internal static class SoundLoaderValidation
         Check(PsxRam.ReadU16(WorkspaceAddress + SoundState.RetryCountdown) == 0x0A,
             "etat 1 arme le compte a rebours a 10");
 
-        // ---- state 2 holds, and the countdown is NOT touched. This assertion was wrong in the
-        // bench's first version, which expected a decrement: the disassembly only decrements when
-        // the poll returns 5 (0x8005F8B0/0x8005F8B8), and FUN_80073204 is a stub returning 0, which
-        // is "neither 2 nor 5" -- the path that returns the state unchanged and touches nothing.
-        // Corrected to what the code says rather than to what the bench assumed, and kept because
-        // it pins a real branch: a transcription that decremented unconditionally would fail here.
-        PsxRam.WriteU16(WorkspaceAddress + SoundState.RetryCountdown, 3);
-        Check(FUN(0, 2) == 2, "etat 2 se tient quand le sondage ne rend ni 2 ni 5");
-        Check(PsxRam.ReadU16(WorkspaceAddress + SoundState.RetryCountdown) == 3,
-            "et il ne touche pas au compte a rebours sur ce chemin");
+        // ---- THE WALK. This is the assertion that changed when Ghidra named the callees. The
+        // first version of this bench expected state 2 to HOLD, because the poll was bound to an
+        // unnamed FUN_ stub returning 0. Ghidra showed that poll is CdSync, which the SDK really
+        // implements and which returns CdlComplete (2) -- so state 2 takes the ready path and
+        // advances. The bench caught the change, which is what it is for.
+        //
+        // The libcd half is real, so the machine now walks for real: CdSync answers 2, CdReadSync
+        // answers 0, and each step issues a genuine CdlSetloc / CdRead.
+        Check(FUN(0, 2) == 3, "etat 2 -> 3: CdSync rend CdlComplete, la lecture est lancee");
+        Check(FUN(0, 3) == 4, "etat 3 -> 4: CdReadSync rend 0, la lecture est finie");
+        Check(FUN(0, 4) == 5, "etat 4 -> 5");
+        Check(FUN(0, 5) == 7,
+            "etat 5 -> 7: les deux appels VAB sont des stubs qui rendent 0, donc >= 0");
 
-        // ---- state 7 is where today's port stops, and that is asserted rather than hoped.
-        // SsVabTransCompleted is `return default` in LibSnd, so state 7's own "not yet" test is
-        // true for ever. If someone implements libsnd, THIS assertion is the one that should fail
-        // and be updated -- it is the marker of the remaining blocker, not a wish.
-        Check(FUN(0, 7) == 7,
-            "etat 7 se tient: SsVabTransCompleted est un stub qui rend 0");
+        // The workspace really was seeked into: CdIntToPos writes through the pointer, so +0xD8
+        // holds a position rather than the zeros it started at. This is what proves the CdlLOC
+        // bridge works -- the first version kept the position only in a C# object and a retry
+        // would have re-seeked to stale bytes.
+        bool seekWritten = false;
+        for (int i = 0; i < 4; i++)
+        {
+            if (PsxRam.ReadU8(WorkspaceAddress + SoundState.SeekPosition + i) != 0)
+            {
+                seekWritten = true;
+            }
+        }
+
+        Check(seekWritten, "la position de seek est ecrite DANS le workspace, pas seulement en C#");
+
+        // ---- state 7 is where the port stops, asserted rather than hoped. SsVabTransCompleted is
+        // `return default` in LibSnd, so state 7's "not yet" test is true for ever. When someone
+        // implements libsnd, THIS assertion is the one that fails, and that is the signal to update
+        // it -- it marks the remaining blocker rather than wishing it away.
+        Check(FUN(0, 7) == 7, "etat 7 se tient: SsVabTransCompleted est un stub qui rend 0");
 
         // ---- 8 is terminal and sticky: it fails the unsigned range test at the top.
         Check(FUN(0, 8) == 8, "etat 8 est terminal et se rend lui-meme");

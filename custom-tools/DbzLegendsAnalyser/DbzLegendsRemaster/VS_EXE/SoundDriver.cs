@@ -6,29 +6,50 @@ namespace DbzLegendsRemaster.VS_EXE;
 // that the battle scene depends on; the rest of the module is a slice of its own, as
 // AnimCmdSound.cs already records.
 //
-// EVIDENCE, and its limit. Ghidra was unreachable, so this was transliterated from the running
-// image through PCSX-Redux, gp = 0x8008D0FC. The channel was checked first: FUN_80061ed8 @
-// 0x80061ED8 disassembles to exactly the 68-byte CdSearchFile retry loop this port documents. The
-// emulator was halted on the exception vector with the workspace still zeroed, so this is STATIC
-// evidence -- the instructions -- and no live value was observed.
+// EVIDENCE, in the order it arrived. This was FIRST transliterated from the running image through
+// PCSX-Redux, gp = 0x8008D0FC, because Ghidra was unreachable at the time; that channel was checked
+// before being trusted (FUN_80061ed8 @ 0x80061ED8 disassembles to exactly the 68-byte CdSearchFile
+// retry loop this port documents) and the emulator was halted with the workspace zeroed, so it gave
+// STATIC evidence -- the instructions -- and no live value.
+//
+// Ghidra came back afterwards and the port was re-checked against it. That second pass is what the
+// class comment below records: the control flow held, the callee bindings did not. Both channels
+// are named here because the difference between them is the point -- raw disassembly proved the
+// SHAPE of this function, and only the symbol table could prove what it was TALKING TO.
 internal static class SoundDriver
 {
-    // THE THREE LIBSND NAMES BELOW ARE INFERENCE, NOT A SYMBOL READ, and that distinction is worth
-    // keeping visible. There is no symbol table for VS.EXE here; what closes them is the argument
-    // shape at the call sites matching the PSY-Q prototypes exactly, in a module that is manifestly
-    // the sound driver:
-    //   0x8006DEA8(0x801C4000, -1, 0x0005E000)  -> SsVabOpenHeadSticky(vh addr, vabid, spu addr)
-    //   0x8006EA04(0x801D2000, handle)          -> SsVabTransBody(vb addr, vabid)
-    //   0x80071860(0)                           -> SsVabTransCompleted(immediateFlag)
-    // The same three names appear in SELECT_EXE/SoundTestScreen.cs's own BLOCKED list, derived
-    // independently, which is corroboration rather than proof. If a symbol table ever lands and
-    // disagrees, this comment is what to check against.
+    // CORRECTED AGAINST GHIDRA. This function was first transliterated from raw disassembly with
+    // Ghidra unreachable, and ten of its callees were left as unnamed FUN_ addresses with guessed
+    // roles. Ghidra came back and named every one of them; the guesses were wrong in ways worth
+    // recording, because they show what raw disassembly cannot tell you:
     //
-    // A CONSEQUENCE WORTH STATING BEFORE ANYONE EXPECTS A PICTURE FROM THIS: all three are
-    // unimplemented stubs in PsxSdkMonogame.LibSnd, each `return default`, i.e. 0. Trace it through
-    // and this machine reaches state 7 and stays there -- SsVabTransCompleted returning 0 is
-    // exactly state 7's "not yet" condition, forever. So porting this function does NOT by itself
-    // make the battle scene draw. The remaining blocker is libsnd, not this state machine.
+    //   0x80073894 was "returns the base of a table"     -> CdPosToInt(CdlLOC *)
+    //   0x80073790 was "hands a table entry to the block"-> CdIntToPos(int, CdlLOC *)
+    //   0x8007328c was "issues the request", 2 arguments -> CdControl(com, param, result), THREE
+    //   0x80073204 was "polls; 2 ready, 5 retry"         -> CdSync -- 2 is CdlComplete, 5 CdlDiskError
+    //   0x800736f0 was "the other poll; 0 done, -1 retry"-> CdReadSync
+    //   0x80073710 was "reads the block"                 -> CdRead(sectors, buf, mode)
+    //   0x80072a64 was "releases a handle"               -> SsVabClose(short)
+    //
+    // The control flow survived that correction unchanged -- eight cases, the regressions, the
+    // shared countdown -- but the bindings did not, and one of them was a real defect: CdControl's
+    // result buffer had been dropped as "a stack local this port has nothing to put in". It is the
+    // eight-byte response block every other CdControl call site in this port already passes.
+    //
+    // The three libsnd names were guessed too, from argument shape, and those three turned out
+    // right: Ghidra confirms SsVabOpenHeadSticky(uchar*, short, ulong), SsVabTransBody(uchar*,
+    // short) and SsVabTransCompleted(short) at the addresses called here. Being right by luck is
+    // not the same as being right by evidence, which is why they were labelled as inference until
+    // this check.
+    //
+    // SO THIS IS A CD LOAD, not an opaque request machine: seek with CdlSetloc, wait on CdSync,
+    // CdRead into a buffer, wait on CdReadSync, twice over, then open the VAB head and transfer
+    // its body. It reads the CHSE bank's CdlFILE at workspace+0xF0 and indexes it by (id - 1) * 62.
+    //
+    // WHAT STILL DOES NOT DRAW. The libcd half is real in PsxSdkMonogame, so the machine now walks
+    // 0 -> 1 -> ... -> 7 for real. State 7 is where it stops: SsVabTransCompleted is a
+    // `return default` stub in LibSnd, and 0 is exactly state 7's "not yet". The remaining blocker
+    // is libsnd.
 
     // GHIDRA: FUN_8005f704 @ 0x8005F704 (VS.EXE)
     // CERTAIN as to control flow: the whole body was read instruction by instruction,
@@ -89,7 +110,7 @@ internal static class SoundDriver
                     int slot = i * SoundState.VoiceSlotStride;
                     if ((short)PsxRam.ReadU16(ws + SoundState.VoiceHandles + slot) >= 0)
                     {
-                        FUN_80072a64((short)PsxRam.ReadU16(ws + SoundState.VoiceHandles + slot));
+                        LibSnd.SsVabClose((short)PsxRam.ReadU16(ws + SoundState.VoiceHandles + slot));
                         PsxRam.WriteU16(ws + SoundState.VoiceHandles + slot, 0xFFFF);
                         PsxRam.WriteU16(
                             ws + SoundState.VoiceFlags + slot,
@@ -102,33 +123,33 @@ internal static class SoundDriver
                 s0 = 2;
                 if ((short)PsxRam.ReadU16(ws + SoundState.PendingVabHandle) >= 0)
                 {
-                    FUN_80072a64((short)PsxRam.ReadU16(ws + SoundState.PendingVabHandle));
+                    LibSnd.SsVabClose((short)PsxRam.ReadU16(ws + SoundState.PendingVabHandle));
                     PsxRam.WriteU16(ws + SoundState.PendingVabHandle, 0xFFFF);
                 }
 
                 // 0x8005F818..0x8005F868. The store of 2 into +0xDC is in the delay slot of the
                 // call, so it is NOT that call's result.
-                PsxRam.WriteI32(ws + SoundState.LoadRequestKind, 2);
-                ArmTableRead(ws, FUN_80073894(ws + SoundState.ChseBankSlot), s2);
+                PsxRam.WriteI32(ws + SoundState.SectorCount, 2);
+                SeekToEntry(ws, 0, s2);
                 s0 = ArmCountdownAndReturn(ws, s0);
                 break;
 
             // ---- state 2 @ 0x8005F870 -- poll, then read the block into 0x801C4000.
             case 2:
                 ws = SoundState.DAT_8008d284;
-                s0 = PollThenRead(ws, s0, unchecked((int)0x801C4000), 3);
+                s0 = SyncThenRead(ws, s0, unchecked((int)0x801C4000), 3);
                 break;
 
             // ---- state 3 @ 0x8005F8F4 -- second poll, arms the second table read (+2 header skip).
             case 3:
                 ws = SoundState.DAT_8008d284;
                 {
-                    int r = FUN_800736f0(1);
+                    int r = LibCd.CdReadSync(1, s_result);
                     if (r == 0)
                     {
                         s0 = 4;
-                        PsxRam.WriteI32(ws + SoundState.LoadRequestKind, 0x3C);
-                        ArmTableRead(ws, FUN_80073894(ws + SoundState.ChseBankSlot) + 2, s2);
+                        PsxRam.WriteI32(ws + SoundState.SectorCount, 0x3C);
+                        SeekToEntry(ws, 2, s2);
                         s0 = ArmCountdownAndReturn(ws, s0);
                     }
                     else if (r == -1)
@@ -143,14 +164,14 @@ internal static class SoundDriver
             // ---- state 4 @ 0x8005F9B0 -- structurally identical to state 2, other buffer.
             case 4:
                 ws = SoundState.DAT_8008d284;
-                s0 = PollThenRead(ws, s0, unchecked((int)0x801D2000), 5);
+                s0 = SyncThenRead(ws, s0, FileIo.g_cdFileBufferTableAddress, 5);
                 break;
 
             // ---- state 5 @ 0x8005FA34 -- open the VAB head, then transfer its body.
             case 5:
                 ws = SoundState.DAT_8008d284;
                 {
-                    int r = FUN_800736f0(1);
+                    int r = LibCd.CdReadSync(1, s_result);
                     if (r == 0)
                     {
                         short opened = LibSnd.SsVabOpenHeadSticky(
@@ -164,7 +185,7 @@ internal static class SoundDriver
                         }
                         else
                         {
-                            short body = LibSnd.SsVabTransBody(unchecked((int)0x801D2000), opened);
+                            short body = LibSnd.SsVabTransBody(FileIo.g_cdFileBufferTableAddress, opened);
                             s0 = 6;
 
                             // 0x8005FA9C: the countdown is re-armed in the delay slot, so it
@@ -190,7 +211,7 @@ internal static class SoundDriver
                 ws = SoundState.DAT_8008d284;
                 {
                     short body = LibSnd.SsVabTransBody(
-                        unchecked((int)0x801D2000),
+                        FileIo.g_cdFileBufferTableAddress,
                         (short)PsxRam.ReadU16(ws + SoundState.PendingVabHandle));
                     if (body >= 0)
                     {
@@ -221,10 +242,22 @@ internal static class SoundDriver
         return (ushort)(short)s0;
     }
 
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: the original's `u_char auStack_20[8]`, the eight-byte response block every
+    // CdControl / CdSync / CdReadSync in this function shares. It is a stack local on the console;
+    // here it is a field because C# cannot take the address of a local, and the calls only ever
+    // pass it through. Dropping it -- which the first version of this file did, calling CdControl
+    // with two arguments -- silently removed the buffer the drive writes its status into.
+    private static readonly byte[] s_result = new byte[8];
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: scratch for the position the workspace holds as bytes. One instance, reused, the
+    // way the original reuses one stack slot.
+    private static readonly LibCd.CdlLOC s_loc = new();
+
     // JUSTIFICATION: C# language bridge only
     // RELATION: the tail shared by states 1, 2, 3, 4 and 5 at 0x8005FB10 -- re-arm the countdown,
-    // then fall into the common exit. Extracted because five cases jump to the same two
-    // instructions; it aggregates nothing and changes no control flow.
+    // then fall into the common exit. Extracted because five cases jump to the same instruction.
     private static int ArmCountdownAndReturn(int ws, int state)
     {
         PsxRam.WriteU16(ws + SoundState.RetryCountdown, 0x0A);
@@ -232,41 +265,68 @@ internal static class SoundDriver
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: the table-read arming shared by states 1 and 3 (0x8005F82C..0x8005F868 and
-    // 0x8005F924..0x8005F964). The index arithmetic is the original's: (id - 1) * 62, built there
-    // as (v1 << 5) - v1 then doubled.
-    private static void ArmTableRead(int ws, int tableBase, int id)
+    // RELATION: the seek that states 1 and 3 share (0x8005F818..0x8005F868 and
+    // 0x8005F910..0x8005F964). Both read the CHSE bank's CdlFILE position, index it by
+    // (id - 1) * 62, convert back to a CdlLOC in the workspace and issue CdlSetloc. State 3 adds a
+    // two-sector header skip, which is the only difference and is the parameter.
+    private static void SeekToEntry(int ws, int headerSkip, int id)
     {
-        int entry = tableBase + (((short)id) - 1) * 62;
-        FUN_80073790(entry, ws + SoundState.LoadRequestScratch);
-        FUN_8007328c(2, ws + SoundState.LoadRequestScratch);
+        LoadLoc(ws + SoundState.ChseBankSlot, s_loc);
+        int lba = LibCd.CdPosToInt(s_loc);
+        LibCd.CdIntToPos(lba + headerSkip + (((short)id) - 1) * 0x3E, s_loc);
+
+        // The original's CdIntToPos writes THROUGH the pointer into the workspace, so the position
+        // it just computed is left at +0xD8 for the retry path to reissue. Mirrored here rather
+        // than kept only in the C# object, or a retry would seek to whatever was there before.
+        StoreLoc(ws + SoundState.SeekPosition, s_loc);
+        LibCd.CdControl(2, s_loc, s_result);
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: states 2 and 4 are byte-identical but for the destination address and the next
-    // state (0x8005F870 and 0x8005F9B0). One body, two call sites, no behaviour merged.
-    private static int PollThenRead(int ws, int state, int destination, int nextState)
+    // RELATION: the port models a CdlLOC as an object while the workspace holds it as four bytes of
+    // PSX memory, which is what the original passes by pointer. These two move it across.
+    private static void LoadLoc(int address, LibCd.CdlLOC loc)
     {
-        int r = FUN_80073204(1);
-        if (r == 2)
+        loc.minute = PsxRam.ReadU8(address);
+        loc.second = PsxRam.ReadU8(address + 1);
+        loc.sector = PsxRam.ReadU8(address + 2);
+        loc.track = PsxRam.ReadU8(address + 3);
+    }
+
+    private static void StoreLoc(int address, LibCd.CdlLOC loc)
+    {
+        PsxRam.WriteU8(address, loc.minute);
+        PsxRam.WriteU8(address + 1, loc.second);
+        PsxRam.WriteU8(address + 2, loc.sector);
+        PsxRam.WriteU8(address + 3, loc.track);
+    }
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: states 2 and 4 are identical but for the destination and the next state
+    // (0x8005F870 and 0x8005F9B0). CdSync's 2 is CdlComplete and its 5 is CdlDiskError; anything
+    // else means the seek is still running, and the state is returned untouched.
+    private static int SyncThenRead(int ws, int state, int destination, int nextState)
+    {
+        int status = LibCd.CdSync(1, s_result);
+        if (status == 2)
         {
-            FUN_80073710(PsxRam.ReadI32(ws + SoundState.LoadRequestKind), destination, 0x80);
+            LibCd.CdRead(PsxRam.ReadI32(ws + SoundState.SectorCount), destination, 0x80);
             return ArmCountdownAndReturn(ws, nextState);
         }
 
-        if (r != 5)
+        if (status != 5)
         {
             return state;
         }
 
-        // r == 5: count down, and on expiry re-issue without changing state.
         return CountdownOr(ws, state, state);
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: the decrement-and-maybe-reissue block states 2, 3, 4 and 5 share. On expiry it
-    // re-issues FUN_8007328c and re-arms the countdown; `onExpiry` is the state each case regresses
-    // to, which is its own state for 2 and 4, one back for 3 and 5.
+    // RELATION: the decrement-and-maybe-reseek block states 2, 3, 4 and 5 share. The original tests
+    // the value BEFORE the decrement against 1 (`if (sVar2 != 1)`), which is the same condition as
+    // testing the decremented value against 0. On expiry it re-issues CdlSetloc and re-arms.
+    // `onExpiry` is the state each case lands in: its own for 2 and 4, one back for 3 and 5.
     private static int CountdownOr(int ws, int state, int onExpiry)
     {
         ushort left = (ushort)(PsxRam.ReadU16(ws + SoundState.RetryCountdown) - 1);
@@ -276,13 +336,16 @@ internal static class SoundDriver
             return state;
         }
 
-        FUN_8007328c(2, ws + SoundState.LoadRequestScratch);
+        // The reissue reads the position back out of the workspace, exactly as the original does:
+        // `CdControl(2, (u_char *)(iVar5 + 0xd8), auStack_20)`.
+        LoadLoc(ws + SoundState.SeekPosition, s_loc);
+        LibCd.CdControl(2, s_loc, s_result);
         return ArmCountdownAndReturn(ws, onExpiry);
     }
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: the hard-reset countdown at 0x8005FB20..0x8005FB52, reached from state 6's failure
-    // and jumped into directly by state 5's. On expiry the machine goes back to state 0.
+    // RELATION: the hard-reset countdown at 0x8005FB28, reached from state 6's failed transfer and
+    // jumped into directly by state 5's failed open. On expiry the machine returns to state 0.
     private static int FailureCountdown(int ws, int state)
     {
         ushort left = (ushort)(PsxRam.ReadU16(ws + SoundState.RetryCountdown) - 1);
@@ -294,64 +357,5 @@ internal static class SoundDriver
 
         PsxRam.WriteU16(ws + SoundState.RetryCountdown, 0x0A);
         return 0;
-    }
-
-    // ==== Callees, all still outside this slice ================================================
-    // BLOCKED, every one of them. They live in the 0x8007xxxx band, which in VS.EXE is the PSX SDK
-    // region -- CdSearchFile is at 0x80075994 there, proven by WaitSearchFile's own `jal`. Naming
-    // them from their argument shapes alone would be a guess, so they keep their raw addresses.
-
-    // GHIDRA: FUN_80072a64 @ 0x80072A64 (VS.EXE)
-    // BLOCKED: takes a voice handle and releases it. Called seven times from state 1.
-    private static void FUN_80072a64(int param_1) => _ = param_1;
-
-    // GHIDRA: FUN_80073894 @ 0x80073894 (VS.EXE)
-    // BLOCKED: given a bank slot, returns the base of a table the (id - 1) * 62 index walks.
-    private static int FUN_80073894(int param_1)
-    {
-        _ = param_1;
-        return 0;
-    }
-
-    // GHIDRA: FUN_80073790 @ 0x80073790 (VS.EXE)
-    // BLOCKED: hands a table entry to the load request block.
-    private static void FUN_80073790(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_8007328c @ 0x8007328C (VS.EXE)
-    // BLOCKED: issues the request. The original takes a third argument, a stack local this port has
-    // nothing to put in; it is omitted rather than invented, and that is why this is BLOCKED.
-    private static void FUN_8007328c(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
-
-    // GHIDRA: FUN_80073204 @ 0x80073204 (VS.EXE)
-    // BLOCKED: polls the request. 2 means ready, 5 means retry, anything else means keep waiting.
-    private static int FUN_80073204(int param_1)
-    {
-        _ = param_1;
-        return 0;
-    }
-
-    // GHIDRA: FUN_800736f0 @ 0x800736F0 (VS.EXE)
-    // BLOCKED: the other poll. 0 means done, -1 means retry.
-    private static int FUN_800736f0(int param_1)
-    {
-        _ = param_1;
-        return 0;
-    }
-
-    // GHIDRA: FUN_80073710 @ 0x80073710 (VS.EXE)
-    // BLOCKED: reads the block to a destination address.
-    private static void FUN_80073710(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
     }
 }

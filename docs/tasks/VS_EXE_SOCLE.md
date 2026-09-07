@@ -13,7 +13,7 @@ reste valable.
 | Scratchpad GTE | dix-neuf mots partages dans `Scratchpad.cs` a la racine |
 | Doublons intra-VS | 0 stockage duplique, 0 type divergent (etait 12 et 2) |
 | `SoundState.cs` | le workspace son declare: taille 0x194 fermee deux fois, cinq bancs CD nommes par leurs litteraux |
-| `FUN_8005f704` | translittere depuis l'image, banc `--validate-sound-loader` avec temoin negatif |
+| `FUN_8005f704` | translittere depuis l'image, **puis corrige contre Ghidra revenu**; banc `--validate-sound-loader` avec temoin negatif |
 
 Acceptation a chaque etape: build propre, douze bancs verts, trois checkers de
 couture verts, `--diag-select 400` = **49396** pixels, inchange.
@@ -44,9 +44,10 @@ Le balayage compare desormais des **adresses** et les etiquette comme tels.
 
 ## La decouverte qui debloque la suite
 
-`VS_EXE_TRANCHE4.md` note Ghidra comme source de verite, et le serveur ReVa etait
-injoignable cette session. **PCSX-Redux, lui, repond, et sa RAM contient VS.EXE
-charge.** C'est une source de preuve equivalente et verifiable:
+`VS_EXE_TRANCHE4.md` note Ghidra comme source de verite, et le serveur ReVa a ete
+injoignable pendant la plus grande partie de cette session. **PCSX-Redux, lui,
+repond, et sa RAM contient VS.EXE charge.** C'est une source de preuve
+verifiable, et le reste de ce document montre jusqu'ou elle porte:
 
 ```
 mcp__pcsx-redux__pcsx_get_status      -> debugger: true, running: false (en pause, pas vide)
@@ -61,21 +62,58 @@ desassemble en exactement 68 octets avec son `beqz $v0` rebouclant sur
 **`gp = 0x8008D0FC`.** C'est la cle qui manquait: tout acces `0xNNN(gp)` se resout
 en symbole. `0x188(gp)` = `0x8008D284`, `0x244(gp)` = `0x8008D340`.
 
+## Les deux canaux de preuve, et ce que chacun a rate
+
+C'est le resultat le plus utile de la session, et il ne concerne pas une
+fonction en particulier. **ReVa est revenu**, et le portage de `FUN_8005f704` a
+ete rejoue contre lui. Le verdict est net et il se separe en deux:
+
+- **Le flot de controle a tenu.** Huit cas, les regressions, le compte a rebours
+  partage: rien n'a bouge. Le desassemblage brut lu instruction par instruction
+  prouve la **forme** d'une fonction, et il l'a prouvee juste.
+- **Les liaisons n'ont pas tenu.** Dix appelees etaient des `FUN_` anonymes avec
+  des roles devines. Ghidra les nomme toutes, et six sont des routines libcd
+  standard: `CdPosToInt`, `CdIntToPos`, `CdControl`, `CdSync`, `CdReadSync`,
+  `CdRead`. Ce n'est donc pas « une machine a requetes opaque » mais **un
+  chargement CD ordinaire**.
+
+Un de ces ecarts etait un vrai defaut, pas une question de nom: le troisieme
+argument de `CdControl`, le bloc de reponse de huit octets, avait ete supprime
+comme « un local de pile que ce portage n'a rien pour remplir ». C'est le meme
+bloc que tous les autres sites d'appel de ce portage passent deja.
+
+Et deux champs du workspace ont ete renommes par ricochet: `+0xD8` et `+0xDC`
+s'appelaient `LoadRequestScratch` et `LoadRequestKind`. Ce sont une `CdlLOC` et
+un nombre de secteurs. **La lecon a retenir pour les tranches suivantes**: le
+desassemblage seul donne les offsets et les largeurs justes, et des sens
+plausibles et faux.
+
+Enfin, trois noms devines se sont averes exacts — `SsVabOpenHeadSticky`,
+`SsVabTransBody`, `SsVabTransCompleted`, confirmes par la table des symboles.
+Avoir raison par chance n'est pas avoir raison par preuve; c'est pour cela
+qu'ils etaient etiquetes comme inference jusqu'a cette verification.
+
 ## Ce que le portage de `FUN_8005f704` a etabli
 
 Elle est faite, et elle **ne suffit pas a faire dessiner la scene**. Ce n'est pas
 une deception, c'est un resultat: le blocage est ailleurs, et on sait ou.
 
-Ses appelees VAB — `SsVabOpenHeadSticky`, `SsVabTransBody`, `SsVabTransCompleted`,
-nommees par la forme de leurs arguments et non par un symbole lu, ce que l'en-tete
-du fichier dit — sont des stubs `return default` dans `LibSnd`. En suivant le
-trace: la machine atteint l'etat 7 et y reste, parce que le test « pas encore »
-de l'etat 7 est exactement `SsVabTransCompleted` rendant 0.
+La moitie libcd est reelle dans `PsxSdkMonogame`, donc la machine marche
+vraiment jusqu'a l'etat 7. Ses appelees VAB, elles, sont des stubs
+`return default` dans `LibSnd`: la machine atteint l'etat 7 et y reste, parce que
+le test « pas encore » de l'etat 7 est exactement `SsVabTransCompleted` rendant 0.
 
 **Le blocage restant est libsnd, pas cette fonction.** Le banc
 `--validate-sound-loader` epingle ce blocage comme un fait d'aujourd'hui: quand
 quelqu'un implementera libsnd, c'est cette assertion-la qui echouera, et c'est le
 signal qu'il faudra la mettre a jour.
+
+Ce banc a d'ailleurs deja fait son travail une fois. Ecrit quand le sondage etait
+un stub rendant 0, il affirmait que l'etat 2 **se tenait**. Le vrai `CdSync` rend
+`CdlComplete`, l'etat 2 avance, et **le banc a echoue au moment ou la liaison a
+ete corrigee** — ce pour quoi il existe. Il affirme desormais la marche complete
+0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 7, plus le fait que la position de seek est ecrite
+*dans* le workspace et pas seulement dans un objet C#.
 
 Reste aussi le second verrou, independant: `FUN_8005a5b0` (`BattleManager.cs`,
 8500 octets), sans lequel aucun combattant ne bouge et la jauge ne monte jamais.

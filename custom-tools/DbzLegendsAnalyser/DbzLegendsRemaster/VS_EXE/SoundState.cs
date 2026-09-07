@@ -1,4 +1,4 @@
-namespace DbzLegendsRemaster.VS_EXE;
+﻿namespace DbzLegendsRemaster.VS_EXE;
 
 // VS.EXE's sound task: the globals its driver module shares, and the layout of the workspace they
 // all reach through. Nothing here is behaviour -- it is the one place the sound module's state is
@@ -6,15 +6,21 @@ namespace DbzLegendsRemaster.VS_EXE;
 // names for the same offsets. Tranche 4 calls this the foundation, and it exists because skipping
 // it once already produced twelve duplicated symbols and seven divergent types.
 //
-// EVIDENCE. Ghidra was unreachable, so every address and width below was read out of the running
-// image through PCSX-Redux's debugger, with gp = 0x8008D0FC resolving each `0xNNN(gp)` access. The
-// channel was checked before being trusted: FUN_80061ed8 @ 0x80061ED8 disassembles to exactly the
-// 68-byte CdSearchFile retry loop this port already documents.
+// EVIDENCE, and what each channel could and could not settle. Every address and width below was
+// read out of the running image through PCSX-Redux's debugger, with gp = 0x8008D0FC resolving each
+// `0xNNN(gp)` access, because Ghidra was unreachable when this file was written. The channel was
+// checked before being trusted: FUN_80061ed8 @ 0x80061ED8 disassembles to exactly the 68-byte
+// CdSearchFile retry loop this port already documents.
 //
 // ONE LIMIT, STATED PLAINLY: the emulator was halted on the exception vector (PC 0x80000080) with
-// the workspace still zeroed, so this is STATIC evidence -- what the code stores -- and not a
-// reading of live values. Field SIZES and WIDTHS come from the instructions, which is sound; field
-// MEANINGS come from how they are used, and the uncertain ones say so rather than guess.
+// the workspace still zeroed, so that was STATIC evidence -- what the code stores -- and not a
+// reading of live values. Field SIZES and WIDTHS come from the instructions, which is sound.
+//
+// Field MEANINGS did not survive intact. Ghidra came back, and typing this function's callees
+// renamed two fields outright: +0xD8 and +0xDC were "LoadRequestScratch" and "LoadRequestKind",
+// vague names taken from how they were passed around, and they are a CdlLOC and a sector count.
+// That is the shape of the error to expect from disassembly alone -- offsets and widths right,
+// meanings plausible and wrong -- and it is why the uncertain ones below still say so.
 internal static class SoundState
 {
     // GHIDRA: DAT_8008d284 @ 0x8008D284 (VS.EXE)
@@ -66,14 +72,19 @@ internal static class SoundState
     internal const int AtbBankSlot = 0x090;   // "\SOUND\ATB.B;1"  @ 0x8002094C
     internal const int AbtlBankSlot = 0x0C0;  // "\SOUND\ABTL.B;1" @ 0x8002092C
     internal const int ChseBankSlot = 0x0F0;  // "\SOUND\CHSE.B;1" @ 0x8002095C
+    // and it is a CdlFILE, not just a name slot: FUN_8005f704 hands its address straight to
+    // CdPosToInt, which reads the CdlLOC a CdlFILE begins with.
 
     // Only BGM and ABTL are streamed from CD by the init itself, into fixed RAM at
     // 0x801B6000/0x801B9000 and 0x801BE000/0x801D2000 (a VH+VB pair each). CR, ATB and CHSE are
     // registered and not read, which is consistent with loading them on demand later.
 
-    // ---- The CD-load step machine's own fields, all proven by FUN_8005f704's disassembly.
-    internal const int LoadRequestScratch = 0x0D8;  // handed to FUN_80073790 / FUN_8007328c
-    internal const int LoadRequestKind = 0x0DC;     // set to 2 in state 1, 0x3C in state 3
+    // ---- The CD-load step machine's own fields. Named from Ghidra's own typing of the callees,
+    // which corrected a first reading taken from raw disassembly alone: these two were called
+    // "LoadRequestScratch" and "LoadRequestKind" when the callees were unnamed FUN_ addresses.
+    // They are nothing so vague.
+    internal const int SeekPosition = 0x0D8;        // a CdlLOC: CdIntToPos writes it, CdControl(CdlSetloc) reads it
+    internal const int SectorCount = 0x0DC;         // CdRead's sector count: 2 in state 1, 0x3C in state 3
     internal const int BgmVabHandle = 0x10A;        // the BGM open's return
     internal const int TaskState = 0x10E;           // the dispatcher's own state: 0 init, 1 running, >=2 idle
     internal const int Gate12A = 0x12A;             // state 0 waits for this to read 0
