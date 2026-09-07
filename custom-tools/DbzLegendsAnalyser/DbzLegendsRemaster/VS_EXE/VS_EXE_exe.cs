@@ -317,6 +317,13 @@ internal sealed class VS_EXE_exe
         // The insert points are ELEMENTS of the three tables, not separate globals. The arithmetic
         // settles it and the four calls agree 4/4: 0x80083B3C + i*4 is list i's head, 0x80083B90 +
         // i*4 its tail. main inserts at the head for lists 0 and 0x13, at the tail for 9 and 0x14.
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: same shape and same reason as the two RegisterCallbacks below. CreateTask
+        // stores Lab8005d1fcAddress raw in the node at +0x04 and TaskSystem's per-list dispatch
+        // reaches only a body it has a registered delegate for. VS_EXE/SoundDriver.cs closed the
+        // body (96 bytes); without this line it would sit on list 0x14's schedule and never run,
+        // which is the same gap that hid the battle camera for three sessions.
+        TaskSystem.RegisterCallback(Lab8005d1fcAddress, SoundDriver.FUN_8005d1fc);
         TaskSystem.CreateTask(Lab8005d1fcAddress, 0x57, 0x14, 0x194, 0, TaskSystem.g_TaskListTail[20]);
 
         // JUSTIFICATION: C# language bridge only
@@ -463,7 +470,9 @@ internal sealed class VS_EXE_exe
     // membership and the context sizes are already right while the bodies are not.
 
     // GHIDRA: LAB_8005d1fc @ 0x8005D1FC (VS.EXE)
-    // BLOCKED: a task entry point Ghidra never promoted to a function. Task id 0x57, list 0x14,
+    // Task id 0x57, list 0x14. NO LONGER BLOCKED: the body is VS_EXE/SoundDriver.cs's own
+    // FUN_8005d1fc, registered with the scheduler at the CreateTask above. What follows is the
+    // note as it stood while the body was missing.
     // 0x194 bytes of workspace — the list main runs FIRST each frame, before ClearOTag.
     private const int Lab8005d1fcAddress = unchecked((int)0x8005D1FC);
 
