@@ -124,6 +124,13 @@ internal static class VsBootDiagnostic
         }
 
         Console.WriteLine();
+        Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
+        Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
+        Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");
+        Console.WriteLine($"   FUN_8004e758 (racine B) appelee : {FighterCombat.DiagE758Calls}");
+        Console.WriteLine($"   FUN_8004e108 (le semeur) appelee: {FighterCombat.DiagE108Calls}");
+
+        Console.WriteLine();
         Console.WriteLine($"appels au repartiteur de scene : {BattleScene.DiagDispatcherCalls}");
 
         if (BattleScene.DiagDispatcherCalls == 0)

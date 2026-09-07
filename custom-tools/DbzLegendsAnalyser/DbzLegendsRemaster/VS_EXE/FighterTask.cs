@@ -50,6 +50,10 @@ namespace DbzLegendsRemaster.VS_EXE;
 // from BattleState unchanged; the naming is reported upward rather than corrected here.
 internal static class FighterTask
 {
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probe for Validation/VsBootDiagnostic.cs; nothing in the runtime reads it.
+    internal static int DiagUpdateFighterCalls;
+
     // JUSTIFICATION: C# language bridge only
     // RELATION: FUN_800512cc @ 0x800512CC hands &LAB_80050ae4 to CreateTask at 0x80051314, which
     // stores the raw pointer in the node at +0x04. The node built by this port still stores
@@ -79,6 +83,8 @@ internal static class FighterTask
     // +0x144 guard is down, 0 on every other path.
     internal static int UpdateFighter()
     {
+        DiagUpdateFighterCalls++;
+
         int uVar1;
         int iVar2;
         uint uStack_10;
@@ -290,7 +296,7 @@ internal static class FighterTask
                                 {
                                     if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x20000000) == 0)
                                     {
-                                        FUN_8004e758(iVar3, 0);
+                                        FighterCombat.FUN_8004e758(iVar3, 0);
                                     }
 
                                     PsxRam.WriteI32(iVar3 + 0xdc, 0);
@@ -602,13 +608,13 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
-    // BLOCKED: 1776 bytes, the largest callee here. Step 9.6, reached only when +0x134 bit 31 is set
-    // and bit 29 is clear. The literal 0 is the original's second argument at that one call site.
-    private static void FUN_8004e758(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // MOVED, NOT DELETED. Its real 1776-byte body now lives in VS_EXE/FighterCombat.cs, with the
+    // rest of the combat-resolution family it belongs to. This file kept an EMPTY private stub for
+    // the same address, and because C# resolves an unqualified call to the enclosing class first,
+    // step 9.6's call below was binding to that no-op rather than to the real body -- one Ghidra
+    // address with two declarations, which this port treats as a defect, and the more dangerous
+    // kind: it compiles, it runs, and the work silently does not happen.
+    // The declaration is removed and the call site qualified. See FighterCombat.FUN_8004e758.
 
     // GHIDRA: FUN_80047740 @ 0x80047740 (VS.EXE)
     // CERTAIN, full decompilation, 172 bytes. Step 9.8, first of the five behind the +0x138

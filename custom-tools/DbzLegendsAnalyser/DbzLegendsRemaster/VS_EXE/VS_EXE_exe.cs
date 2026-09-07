@@ -938,11 +938,160 @@ internal sealed class VS_EXE_exe
         DrawSync(0);
     }
 
+    // GHIDRA: VariantFileNameTable @ 0x80082BA0 (VS.EXE)
+    // Eight fixed-stride (0x12 = 18-byte) records, each a null-padded CD file name. Bytes read
+    // verbatim from the image with read-memory: "\STG\STG1TX.B;1" through "\STG\STG8TX.B;1", each
+    // 15 characters plus three trailing 0x00 pad bytes. find-cross-references shows this address
+    // is constructed nowhere but FUN_800414ec (the lui/addiu/addu sequence at 0x80041568..0x8004157c
+    // building `&VariantFileNameTable + (param_1 & 0xffff) * 0x12`), and the very next byte after
+    // the eighth record (0x80082BA0 + 8*0x12 = 0x80082C30) is VariantBackgroundColorTable's first
+    // byte, confirming the entry count and stride independently of the caller's index range.
+    //
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: FileIo.ReadFile already takes its fileName as a C# char[] at every other call site
+    // in this file (see e.g. the EFF_AUTO.B;1 / CH_EF_P0.B;1 calls above), not a raw PSX pointer
+    // resolved through PsxRam -- so the table is modelled the same way, as literal strings turned
+    // into char[] at the call, rather than as a second byte-for-byte .bss array nothing else reads.
+    private static readonly string[] VariantFileNameTable =
+    {
+        "\\STG\\STG1TX.B;1",
+        "\\STG\\STG2TX.B;1",
+        "\\STG\\STG3TX.B;1",
+        "\\STG\\STG4TX.B;1",
+        "\\STG\\STG5TX.B;1",
+        "\\STG\\STG6TX.B;1",
+        "\\STG\\STG7TX.B;1",
+        "\\STG\\STG8TX.B;1",
+    };
+
+    // GHIDRA: VariantBackgroundColorTable @ 0x80082C30 (VS.EXE)
+    // Eight fixed-stride (0xc = 12-byte) records of three full 32-bit words apiece, read verbatim
+    // from the image with read-memory. Every word's upper three bytes are 0x00 in the image (each
+    // value fits a byte), but the original reads them as `*(uint *)`, not `*(byte *)` -- see
+    // FUN_800414ec's own `UINT_8008d394 = *(uint *)(&VariantBackgroundColorTable + iVar2)` and the
+    // two loads right after it -- so the full word is kept rather than narrowed. The three columns
+    // land in DAT_8008d394, DAT_8008d390, DAT_8008d38c in that order, which that trio's own header
+    // comment already identifies as "the background colour main copies into the DRAWENV every
+    // frame" (r0, g0, b0 respectively). find-cross-references shows FUN_800414ec is this table's
+    // only reader anywhere in the overlay.
+    private static readonly uint[] VariantBackgroundColorTable =
+    {
+        0xA0, 0xD0, 0xF8,
+        0x70, 0xC8, 0x80,
+        0x20, 0x28, 0x18,
+        0xC0, 0xC0, 0xF8,
+        0xA8, 0xD0, 0xF8,
+        0x98, 0xE0, 0xF0,
+        0xB0, 0xB8, 0xF8,
+        0xC0, 0xA0, 0xF0,
+    };
+
+    // GHIDRA: LAB_80041a1c @ 0x80041A1C (VS.EXE)
+    // BLOCKED: a task entry point Ghidra never promoted to a function -- id 0x100, list 1, 4 bytes
+    // of workspace, tail-inserted on list 1. Only referenced by FUN_800414ec's own CreateTask call
+    // (find-cross-references: one PARAM reference, from 0x800414fc). Same raw-address treatment as
+    // Lab80040f78Address and neighbours.
+    private const int Lab80041a1cAddress = unchecked((int)0x80041A1C);
+
+    // GHIDRA: LAB_80041704 @ 0x80041704 (VS.EXE)
+    // BLOCKED: a second task entry point Ghidra never promoted -- id 0x54, also list 1, no per-node
+    // workspace, also tail-inserted on list 1. Only referenced by FUN_800414ec's own CreateTask
+    // call (find-cross-references: one PARAM reference, from 0x80041540). Its return value (v0,
+    // non-zero on success) gates the rest of FUN_800414ec, exactly as Ghidra's decompilation shows.
+    private const int Lab80041704Address = unchecked((int)0x80041704);
+
+    // GHIDRA: DAT_800b7484 @ 0x800B7484 (VS.EXE)
+    // The base of the 23x23 grid of 0x48-byte packets FUN_80061204's own header comment already
+    // named (PrimitivePools.cs): "walking a 24x24 [sic, the loop bound 0x17 is 23 decimal] grid of
+    // packets in .bss from &DAT_800B7484 with a 0x48-byte stride, so the POLY_FT4 is embedded in a
+    // larger record there." Declared here as a raw address constant, not a backing byte[] -- every
+    // access below goes through PsxRam / the InitializePolyFt4 resolver, exactly as this file's own
+    // FUN_80061bd8 treats other .bss regions it does not own a C# array for.
+    private const int Dat800b7484Address = unchecked((int)0x800B7484);
+
     // GHIDRA: FUN_800414ec @ 0x800414EC (VS.EXE)
-    // BLOCKED: fed `rand() & 7` — one of eight variants chosen at boot. Which is not established.
+    // Fed `rand() & 7` by main -- one of eight stage variants, chosen once at boot. Registers two
+    // still-unpromoted list-1 tasks (LAB_80041a1c, LAB_80041704); only if the second CreateTask
+    // returns non-zero does it read the variant's background texture (VariantFileNameTable) into
+    // g_cdFileBufferTable, upload the table-driven records inside it through FUN_80061bd8, latch
+    // the variant's background colour triplet (VariantBackgroundColorTable) into DAT_8008d394 /
+    // DAT_8008d390 / DAT_8008d38c, register FUN_80040f30 as a list-0xd task with the same variant
+    // index, and finally stamp a 23x23 grid of POLY_FT4 packets at DAT_800b7484: InitializePolyFt4
+    // fills the fixed fields (tpage 0xb, clut 0x7880, u/v tile extent 0x1f) and this loop fills the
+    // four x/y vertex halfwords per cell afterward, exactly as InitializePolyFt4's own header notes
+    // ("The four x/y vertices are NOT written here; the caller fills them itself right after.").
+    //
+    // Every offset and register below was read off the disassembly (0x800415b0..0x800416dc), not
+    // off Ghidra's decompilation, which reuses the pseudo-C names iVar2/iVar3/sVar1 for two
+    // different live values apiece inside the loop and is not followed literally here. `iVar2` is
+    // the outer (row) counter and `iVar6` the inner (column) counter throughout, matching the
+    // decompiled InitializePolyFt4 call itself: `(iVar6 % 2) * 0x20` is param_5, `(iVar2 % 2) * 0x20`
+    // is param_6.
+    //
+    // CreateTask arguments confirmed against TaskSystem.CreateTask's own signature (callback, id,
+    // listIndex, contextSize, param_5, insertPoint); DAT_80083b94 is g_TaskListTail[1]
+    // (0x80083B90 + 1*4). FUN_80040f30's own definition takes a short parameter but Ghidra's
+    // decompilation of THIS call site drops the argument (`FUN_80040f30();`); tracing the a0
+    // register back from the jal at 0x80041608 shows it was never touched since `addu a0,s0,zero`
+    // at 0x800415a4, i.e. it still holds `param_1 & 0xffff` -- the same variant index used for both
+    // table lookups just above -- so that is what is passed here.
     private static void FUN_800414ec(uint param_1)
     {
-        _ = param_1;
+        TaskSystem.CreateTask(Lab80041a1cAddress, 0x100, 1, 4, 0, TaskSystem.g_TaskListTail[1]);
+        int iVar2 = TaskSystem.CreateTask(Lab80041704Address, 0x54, 1, 0, 0, TaskSystem.g_TaskListTail[1]);
+        if (iVar2 != 0)
+        {
+            int variantIndex = (int)(param_1 & 0xffff);
+
+            FileIo.ReadFile(VariantFileNameTable[variantIndex].ToCharArray(), FileIo.g_cdFileBufferTableAddress, 0);
+            FUN_80061bd8(FileIo.g_cdFileBufferTableAddress, FileIo.g_cdFileBufferTableAddress);
+
+            int colorBase = variantIndex * 3;
+            DAT_8008d394 = (int)VariantBackgroundColorTable[colorBase];
+            DAT_8008d390 = (int)VariantBackgroundColorTable[colorBase + 1];
+            DAT_8008d38c = (int)VariantBackgroundColorTable[colorBase + 2];
+
+            FUN_80040f30((short)variantIndex);
+
+            short sVar8 = 0x100;
+            int puVar7 = Dat800b7484Address;
+            iVar2 = 0;
+            do
+            {
+                int psVar5 = puVar7 + 0x3c;
+                byte rowPhase = (byte)((iVar2 % 2) * 0x20);
+                int iVar6 = 0;
+                do
+                {
+                    byte colPhase = (byte)((iVar6 % 2) * 0x20);
+                    PrimitivePools.InitializePolyFt4(puVar7, 1, 0xb, 0x7880, colPhase, rowPhase, 0x1f, 0x1f);
+
+                    short sVar1 = (short)(iVar6 << 8);
+                    iVar6 = iVar6 + 1;
+                    short sVar4 = (short)(iVar6 << 8);
+                    short sVar3 = (short)(iVar2 << 8);
+
+                    PsxRam.WriteU16(psVar5 - 4, unchecked((ushort)sVar1));
+                    PsxRam.WriteU16(psVar5 - 20, unchecked((ushort)sVar1));
+                    PsxRam.WriteU16(psVar5 + 6, 0);
+                    PsxRam.WriteU16(psVar5 - 2, 0);
+                    PsxRam.WriteU16(psVar5 - 10, 0);
+                    PsxRam.WriteU16(psVar5 - 18, 0);
+                    PsxRam.WriteU16(psVar5 + 4, unchecked((ushort)sVar4));
+                    PsxRam.WriteU16(psVar5 - 12, unchecked((ushort)sVar4));
+                    PsxRam.WriteU16(psVar5 - 8, unchecked((ushort)sVar3));
+                    PsxRam.WriteU16(psVar5 - 16, unchecked((ushort)sVar3));
+                    PsxRam.WriteU16(psVar5 + 8, unchecked((ushort)sVar8));
+                    PsxRam.WriteU16(psVar5, unchecked((ushort)sVar8));
+
+                    psVar5 = psVar5 + 0x48;
+                    puVar7 = puVar7 + 0x48;
+                } while (iVar6 < 0x17);
+
+                sVar8 = (short)(sVar8 + 0x100);
+                iVar2 = iVar2 + 1;
+            } while (iVar2 < 0x17);
+        }
     }
 
     // GHIDRA: DAT_8008d3d0 @ 0x8008D3D0 (VS.EXE)
@@ -966,10 +1115,9 @@ internal sealed class VS_EXE_exe
     // g_TaskListTail[0xd]: main's own comment on the task table arithmetic gives tail[i] =
     // 0x80083B90 + i*4, and 0x80083B90 + 0xd*4 = 0x80083BC4 exactly.
     //
-    // Its only caller is FUN_800414ec above, itself still a BLOCKED stub ("fed rand() & 7 -- one of
-    // eight variants chosen at boot, which is not established"), so this function is transliterated
-    // but not yet reachable -- the same state FUN_800411b4 was in before main's direct call and
-    // CreateTask registration existed.
+    // Its only caller is FUN_800414ec above, now transliterated: it passes the variant index
+    // (`param_1 & 0xffff`, the same value both table lookups there use) straight through, per the
+    // a0-register trace recorded on that call site.
     private static void FUN_80040f30(short param_1)
     {
         DAT_8008d3d0 = 0;
@@ -988,7 +1136,7 @@ internal sealed class VS_EXE_exe
     // shows (the reassignment to +7 words happens only inside the two matched branches); not
     // corrected, per rule 12.
     //
-    // Two callers: FUN_800414ec above (still BLOCKED) reaches it as
+    // Two callers: FUN_800414ec above (now transliterated) reaches it as
     // `FUN_80061bd8(&g_cdFileBufferTable,&g_cdFileBufferTable)` -- the same buffer as both the table
     // and the data region -- and one call from 0x80029700, outside this slice.
     //
