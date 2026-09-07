@@ -425,7 +425,7 @@ internal static class FighterSubstitution
 
         ushort uVar1 = PsxRam.ReadU16(ctx + iVar7 + 0x15bc);
         FUN_8005f5c4((short)uVar1, (short)PsxRam.ReadU16(puVar6 + BattleState.FighterIndex));
-        FUN_80034818(
+        CharacterPrimitives.FUN_80034818(
             PsxRam.ReadU16(param_1),
             PsxRam.ReadU8(puVar6 + BattleState.FighterSlotIndex),
             uVar1,
@@ -581,25 +581,9 @@ internal static class FighterSubstitution
     }
 
     // GHIDRA: FUN_80034818 @ 0x80034818 (VS.EXE)
-    // BLOCKED: 1408 bytes. ActivateFighterInSlot's second act, and the builder of the character's
-    // on-screen primitive buffers: it finds this character's own 0x1E58-byte slot in the six-slot
-    // array at DAT_8008DA48 (the array FighterSetup.cs's own PARTIAL note already flags), zeroes the
-    // header, then fills two runs of 0x1A-halfword primitive records with GPU command bytes,
-    // tpage/clut words and a screen-mode-dependent constant read back through GetGraphType. It has
-    // its own callee FUN_80032134 (328 bytes, three call sites here) and its own two-byte-per-
-    // character table at DAT_800817D8, neither of which is in this slice.
-    //
-    // Its return value is DISCARDED by the caller (`FUN_80034818(...)` with no assignment), and
-    // nothing it writes is read by the rest of ActivateFighterInSlot, so leaving it a stub does not
-    // change what +0x144 receives -- which is the point of this slice. What it does change is that
-    // the character has no primitives to draw.
-    private static int FUN_80034818(ushort param_1, byte param_2, ushort param_3, ushort param_4, int param_5)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-        _ = param_4;
-        _ = param_5;
-        return -1;
-    }
+    // NO LONGER DECLARED HERE. CLOSED, in VS_EXE/CharacterPrimitives.cs, together with its own
+    // callee FUN_80032134 and the three primitive templates they expand. ActivateFighterInSlot's
+    // call below is qualified; the note that used to sit here said leaving it a stub 'does not
+    // change what +0x144 receives -- what it does change is that the character has no primitives
+    // to draw', and that is now fixed.
 }
