@@ -96,6 +96,31 @@ internal static class VsBootDiagnostic
                 + (((BattleManager.DiagCtxFlagsEverSeen & 8) != 0) ? "VU" : "JAMAIS VU"));
             Console.WriteLine(
                 $"  tentatives de creation de la scene : {BattleManager.DiagSceneCreateAttempts}");
+            Console.WriteLine();
+            Console.WriteLine("  LES QUATRE CONDITIONS QUI LEVENT LE BIT 3 (FUN_80055f94 l.117-134):");
+            Console.WriteLine(
+                $"   1. (CtxFlags & 0x18000008) == 0        : "
+                + (BattleManager.DiagCond1Pass > 0 ? $"OUI ({BattleManager.DiagCond1Pass} frames)" : "NON"));
+            Console.WriteLine(
+                $"   2. CtxCentralGauge == +/-30000         : {BattleManager.DiagLastGauge}"
+                + (System.Math.Abs(BattleManager.DiagLastGauge) == 30000 ? "  OUI" : "  <-- NON"));
+            Console.WriteLine(
+                $"   3. DAT_8008d458 == 0                   : {BattleManager.DiagLastD458}"
+                + (BattleManager.DiagLastD458 == 0 ? "  OUI" : "  <-- NON"));
+            Console.WriteLine(
+                $"   4. aucun slot (bit0 && champ+2 == 0)   : {BattleManager.DiagLastAliveCount}"
+                + (BattleManager.DiagLastAliveCount == 0 ? "  OUI" : "  <-- NON"));
+            Console.WriteLine();
+            Console.WriteLine(
+                "  ET CE QUI ALIMENTE LA JAUGE (FUN_80055f94 l.96-106): les contributions +0x15B8,");
+            Console.WriteLine("  equipe A (0-5) additionnee, equipe B (6-11) soustraite:");
+            Console.Write("   ");
+            for (int i = 0; i < 12; i++)
+            {
+                Console.Write($"{BattleManager.DiagContribs[i],7}");
+                if (i == 5) { Console.Write("  |"); }
+            }
+            Console.WriteLine();
         }
 
         Console.WriteLine();

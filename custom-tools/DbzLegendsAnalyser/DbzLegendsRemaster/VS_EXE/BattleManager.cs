@@ -122,6 +122,16 @@ internal static class BattleManager
 
     internal static int DiagSceneCreateAttempts;
 
+    internal static int DiagLastGauge;
+
+    internal static int DiagLastD458;
+
+    internal static int DiagLastAliveCount = -1;
+
+    internal static int DiagCond1Pass;
+
+    internal static readonly int[] DiagContribs = new int[12];
+
     internal static readonly int[] DiagCtxStateVisits = new int[8];
 
     internal static void UpdateBattleManager()
@@ -133,6 +143,21 @@ internal static class BattleManager
             DiagLastCtxState = diagState;
             DiagLastCtxFlags = PsxRam.ReadI32(diagCtx + BattleState.CtxFlags);
             DiagCtxFlagsEverSeen |= DiagLastCtxFlags;
+            DiagLastGauge = PsxRam.ReadI32(diagCtx + BattleState.CtxCentralGauge);
+            DiagLastD458 = DAT_8008d458;
+            if (((uint)DiagLastCtxFlags & 0x18000008) == 0) { DiagCond1Pass++; }
+            int diagAlive = 0;
+            for (int ds = 0; ds < 12; ds++)
+            {
+                int rec = diagCtx + BattleState.CtxSlotRecords + ds * BattleState.CtxSlotRecordStride;
+                if ((PsxRam.ReadU16(rec) & 1) != 0 && (short)PsxRam.ReadU16(rec + 2) == 0) { diagAlive++; }
+            }
+            DiagLastAliveCount = diagAlive;
+            for (int ds = 0; ds < 12; ds++)
+            {
+                DiagContribs[ds] = (short)PsxRam.ReadU16(
+                    diagCtx + BattleState.CtxGaugeContribution + ds * BattleState.CtxSlotRecordStride);
+            }
             if (diagState >= 0 && diagState < DiagCtxStateVisits.Length)
             {
                 DiagCtxStateVisits[diagState]++;
