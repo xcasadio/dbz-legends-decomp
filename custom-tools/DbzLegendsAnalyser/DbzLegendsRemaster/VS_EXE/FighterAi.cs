@@ -147,8 +147,17 @@ internal static class FighterAi
     // stay raw literals here. +0x22C, +0x22D and the +0x231/+0x232/+0x233 bit-history bytes are
     // used by enough of this family that they deserve BattleState names; adding them is not this
     // file's to do.
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Nothing in the
+    // transliterated runtime touches them. The controller has SEVEN early exits before it decides
+    // anything, and from outside they are indistinguishable from "the AI chose to do nothing".
+    //   [0] entered  [1] target is itself  [2] own +0x138 bit 26  [3] target's +0x138 bit 26
+    //   [4] own 0x200FF and 0x20  [5] own bit 19  [6] the +0x22C warm-up  [7] reached the body
+    internal static readonly int[] DiagAiExits = new int[8];
+
     internal static int FUN_80023890(int param_1)
     {
+        DiagAiExits[0]++;
         short sVar1;
         byte bVar2;
         int iVar3;
@@ -187,16 +196,19 @@ internal static class FighterAi
 
         if (param_1 == local_58)
         {
+            DiagAiExits[1]++;
             goto LAB_8002393c;
         }
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x4000000) != 0)
         {
+            DiagAiExits[2]++;
             return -1;
         }
 
         if (((uint)PsxRam.ReadI32(local_58 + 0x138) & 0x4000000) != 0)
         {
+            DiagAiExits[3]++;
             goto LAB_8002393c;
         }
 
@@ -218,11 +230,13 @@ internal static class FighterAi
         if ((((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x200ff) != 0)
             && (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x20) != 0))
         {
+            DiagAiExits[4]++;
             return -1;
         }
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x80000) != 0)
         {
+            DiagAiExits[5]++;
             return -1;
         }
 
@@ -235,6 +249,7 @@ internal static class FighterAi
             {
                 if ((short)PsxRam.ReadU16(param_1 + 0x234) < 0x28)
                 {
+                    DiagAiExits[6]++;
                     return -1;
                 }
 
@@ -275,6 +290,7 @@ internal static class FighterAi
             }
         }
 
+        DiagAiExits[7]++;
         local_50 = PsxRam.ReadU8(param_1 + 0x16b);
 
         // Only the LOW half of local_4c is written here; the high half is still stack garbage until

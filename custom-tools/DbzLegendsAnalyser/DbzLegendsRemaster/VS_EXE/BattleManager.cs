@@ -152,6 +152,13 @@ internal static class BattleManager
 
     internal static readonly int[] DiagSlotPointers = new int[12];
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: the per-slot target index at ctx + slot*0x14 + 0x15C0. FighterTask's step 9.1
+    // (FUN_8004FA8C) turns it into the fighter's own +0xAC, and the CPU controller's FIRST act is
+    // to bail out when that resolves back to the fighter itself. So a wrong or unset target index
+    // is indistinguishable, from outside, from an AI that has decided not to attack.
+    internal static readonly int[] DiagSlotTargets = new int[12];
+
     internal static void UpdateBattleManager()
     {
         DiagManagerCalls++;
@@ -178,6 +185,8 @@ internal static class BattleManager
                     diagCtx + BattleState.CtxSlotRecords + ds * BattleState.CtxSlotRecordStride);
                 DiagSlotPointers[ds] = PsxRam.ReadI32(
                     diagCtx + BattleState.CtxFighterSlots + ds * 4);
+                DiagSlotTargets[ds] = (short)PsxRam.ReadU16(
+                    diagCtx + ds * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex);
             }
 
             for (int ds = 0; ds < 12; ds++)

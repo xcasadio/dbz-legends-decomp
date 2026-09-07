@@ -243,6 +243,14 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine();
 
+        Console.Write("  creneaux, index de cible (+0x15C0) :");
+        for (int i = 0; i < 12; i++)
+        {
+            Console.Write($" {BattleManager.DiagSlotTargets[i],3}");
+        }
+
+        Console.WriteLine();
+
         Console.WriteLine(
             $"  CtxRoundRequest cumule : 0x{BattleManager.DiagRoundRequestEverSeen:X8}"
             + $"   porte 0x180 franchie (FUN_80026d98) : {BattleManager.DiagFun80026d98Calls}");
@@ -286,6 +294,21 @@ internal static class VsBootDiagnostic
         }
 
         Console.WriteLine(anyCommand ? string.Empty : "   AUCUN mot de commande n'a ete produit.");
+
+        Console.Write("   les sorties precoces de l'IA (FUN_80023890) :");
+        {
+            string[] names =
+            {
+                "entrees", "cible=soi", "b26 propre", "b26 cible", "0x200FF+0x20", "b19",
+                "echauffement", "corps atteint",
+            };
+            for (int i = 0; i < names.Length; i++)
+            {
+                Console.Write($" {names[i]}:{FighterAi.DiagAiExits[i]}");
+            }
+        }
+
+        Console.WriteLine();
 
         Console.WriteLine();
         Console.WriteLine(
