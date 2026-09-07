@@ -1,22 +1,29 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.Validation;
 
 // JUSTIFICATION: backend MonoGame only
-// RELATION: bench for LibGte.RotAverage3, which is the one member of its family that was NOT
-// decoded from an image.
+// RELATION: bench for LibGte.RotAverage3 @ 0x800772E4 (VS.EXE) and its sibling RotAverage4
+// @ 0x8006D5D8.
 //
-// WHY THIS BENCH EXISTS AND WHAT IT IS ALLOWED TO ASSERT. RotAverage4 is CERTAIN: its 124-byte
-// body was read instruction by instruction at 0x8006D5D8. RotAverage3 has no such body anywhere in
-// the images -- it is reconstructed from the PSY-Q prototype, from RotAverage4's shape, and from
-// Avsz3. A bench that simply restated my own reconstruction would prove nothing: it would agree
-// with the implementation by construction and keep agreeing if both were wrong together.
+// WHY THIS BENCH EXISTS, AND WHY ITS PREMISE CHANGED. It was written when RotAverage3 had no known
+// body in any image and was RECONSTRUCTED from the PSY-Q prototype, from RotAverage4's shape and
+// from Avsz3. A bench restating a reconstruction proves nothing -- it agrees with the
+// implementation by construction and keeps agreeing if both are wrong together -- so the
+// load-bearing assertion was made a CROSS-CHECK AGAINST THE CERTAIN SIBLING instead.
 //
-// So the load-bearing assertion here is a CROSS-CHECK AGAINST THE CERTAIN SIBLING, not against
-// arithmetic of my own. Given the same three vertices, RotAverage3 and RotAverage4 run the same
-// single RTPT over them, so the three screen points RotAverage3 writes must be byte-identical to
-// the first three RotAverage4 writes. That comparison is decided by decoded code on one side.
+// The real body has since been found and decoded, and the cross-check held: same three vertices,
+// same single RTPT, same three screen points. Keeping it is still worth the lines, because it is
+// now a cross-check between two independently decoded routines rather than a proxy for one.
+//
+// WHAT THE RECONSTRUCTION MISSED, and what this bench therefore did not catch, is recorded here as
+// a limit rather than quietly fixed: the real routine has EIGHT parameters, writing IR0 and FLAG
+// through two out-pointers, and the reconstruction had six. Every assertion below passed anyway,
+// because the sole caller discards both outputs and the OTZ is identical either way. A bench that
+// compares two routines cannot see a parameter neither of them is asked for. The out-parameter
+// assertion added at the end is the narrow guard against that class, and its real answer was the
+// symbol table.
 //
 // The OTZ assertion is weaker on purpose and says so: it checks that RotAverage3's return equals
 // Avsz3's own published formula over the three Z results, which pins the CHOICE of AVSZ3 over
@@ -58,8 +65,13 @@ internal static class GteRotAverageValidation
         int[] flagOut = new int[1];
         LibGte.RotAverage4(v0, v1, v2, v3, quad, 0x00, 0x08, 0x10, 0x18, pOut, flagOut);
 
+        // Poisoned on purpose: the routine must WRITE these, and a version that ignored its two
+        // out-parameters -- which is exactly what the reconstruction did by not having them -- would
+        // leave the poison in place.
         byte[] tri = new byte[0x40];
-        int otz3 = LibGte.RotAverage3(v0, v1, v2, tri, 0x00, 0x08, 0x10);
+        int[] p3 = { 0x5A5A5A5A };
+        int[] flag3 = { 0x5A5A5A5A };
+        int otz3 = LibGte.RotAverage3(v0, v1, v2, tri, 0x00, 0x08, 0x10, p3, flag3);
 
         // THE ASSERTION THAT MATTERS: same vertices, same single RTPT, so the same screen points.
         for (int i = 0; i < 3; i++)
@@ -89,6 +101,17 @@ internal static class GteRotAverageValidation
         Check(otzExpected != otzFourTerm,
             $"le banc discrimine: AVSZ3 ({otzExpected}) et AVSZ4 ({otzFourTerm}) different sur ce cas");
         Check(otz3 != otzFourTerm, "RotAverage3 n'utilise pas AVSZ4");
+
+        // The two out-parameters the reconstruction did not have. They are written, and both are
+        // PARTIAL zeros because this port models neither IR0 nor the FLAG register -- the same gap
+        // RotAverage4 carries at the same point. The assertion is that they are WRITTEN, not that
+        // the value is meaningful: when someone models IR0 and FLAG, this is the check that fails
+        // and the signal to close both routines together.
+        Check(p3[0] != 0x5A5A5A5A, "RotAverage3 ecrit son parametre de sortie p (stdp @0x80077324)");
+        Check(flag3[0] != 0x5A5A5A5A,
+            "RotAverage3 ecrit son parametre de sortie flag (sw @0x80077328)");
+        Check(p3[0] == 0 && flag3[0] == 0,
+            "PARTIAL assume: IR0 et FLAG ne sont pas modelises, donc zero comme RotAverage4");
 
         Console.WriteLine(s_failures == 0
             ? "GTE-ROTAVG: toutes les verifications passent"
