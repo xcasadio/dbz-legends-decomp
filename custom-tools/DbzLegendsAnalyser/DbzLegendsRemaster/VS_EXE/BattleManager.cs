@@ -143,6 +143,15 @@ internal static class BattleManager
 
     internal static int DiagFun80026d98Calls;
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: the twelve slot records' own flag halfword, and the twelve fighter-slot pointers,
+    // as the last manager frame saw them. FUN_80026D98's two entry loops select slots by
+    // `record & 0x210` and by whether the pointer is non-zero, so both are needed to say why they
+    // select nothing.
+    internal static readonly int[] DiagSlotRecordFlags = new int[12];
+
+    internal static readonly int[] DiagSlotPointers = new int[12];
+
     internal static void UpdateBattleManager()
     {
         DiagManagerCalls++;
@@ -163,6 +172,14 @@ internal static class BattleManager
                 if ((PsxRam.ReadU16(rec) & 1) != 0 && (short)PsxRam.ReadU16(rec + 2) == 0) { diagAlive++; }
             }
             DiagLastAliveCount = diagAlive;
+            for (int ds = 0; ds < 12; ds++)
+            {
+                DiagSlotRecordFlags[ds] = PsxRam.ReadU16(
+                    diagCtx + BattleState.CtxSlotRecords + ds * BattleState.CtxSlotRecordStride);
+                DiagSlotPointers[ds] = PsxRam.ReadI32(
+                    diagCtx + BattleState.CtxFighterSlots + ds * 4);
+            }
+
             for (int ds = 0; ds < 12; ds++)
             {
                 DiagContribs[ds] = (short)PsxRam.ReadU16(

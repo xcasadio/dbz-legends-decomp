@@ -134,6 +134,21 @@ internal static class VsBootDiagnostic
                 : "   <-- une variante de VariantBackgroundColorTable: FUN_800414ec a tourne"));
 
         Console.WriteLine();
+        Console.Write("  creneaux, drapeaux du dossier (+0x15B0) :");
+        for (int i = 0; i < 12; i++)
+        {
+            Console.Write($" {BattleManager.DiagSlotRecordFlags[i]:X4}");
+        }
+
+        Console.WriteLine();
+        Console.Write("  creneaux, pointeur de combattant (+0x1520) :");
+        for (int i = 0; i < 12; i++)
+        {
+            Console.Write($" {(BattleManager.DiagSlotPointers[i] != 0 ? "X" : ".")}");
+        }
+
+        Console.WriteLine();
+
         Console.WriteLine(
             $"  CtxRoundRequest cumule : 0x{BattleManager.DiagRoundRequestEverSeen:X8}"
             + $"   porte 0x180 franchie (FUN_80026d98) : {BattleManager.DiagFun80026d98Calls}");
