@@ -5,6 +5,21 @@ tranquillement, et seule celle que le code lit compte. C'est ce qui a produit do
 dupliques et sept types divergents en tranche 1. Ce balayage les voit, et il voit aussi les
 `const`, que le premier balayage manquait.
 
+Deuxieme passe: STOCKAGE CONTENU DANS UNE REGION. La passe ci-dessus est indexee par NOM, donc
+elle ne peut pas voir un scalaire dont l'adresse tombe DANS une `RamRegion` declaree ailleurs sous
+un autre nom. C'est passe: AnimVmInterpreter tenait `private static int DAT_800990c8` pendant que
+BattleScene modelisait 0x800990C0..0x800990D7 en une seule region. Deux copies des memes octets, et
+une largeur fausse par-dessus (l'image dit `lbu`/`sb`, le scalaire etait un `int`, et un ecriture
+32 bits a +0x08 aurait ecrase +0x09..+0x0B).
+
+CE QUE CETTE PASSE NE VOIT PAS, dit ici parce qu'un vert doit etre lisible:
+  * les symboles dont le nom ne commence pas par DAT_/PTR_/RAM_/g_/_DAT_. Le premier temoin
+    negatif ecrit pour cette passe s'appelait TEMOIN_NEGATIF et n'a PAS declenche -- le
+    vérificateur etait vacuous et le temoin l'a montre. Renomme DAT_800990d0, il declenche. Le
+    filtre est volontaire (il cible les globales translitterees), mais il est une limite reelle.
+  * les regions dont la base ou la taille ne se resout pas. Elles sont listees comme angles morts
+    au lieu d'etre comptees comme propres, et le compte final le dit.
+
 Usage: python custom-tools/scripts/check_duplicate_symbols.py [--strict]
        --strict sort 1 sur les doublons de STOCKAGE, pas sur les doublons d'ADRESSE.
 
@@ -35,13 +50,48 @@ GHIDRA = re.compile(r'//\s*GHIDRA:.*?@\s*(0x[0-9A-Fa-f]{6,8})')
 INIT = re.compile(r'=\s*(?:unchecked\(\(int\)\s*)?(0x[0-9A-Fa-f]{6,8})')
 
 decls = defaultdict(list)   # symbole -> [(overlay, fichier, ligne, type, const?, adresse)]
+
+# LA PASSE QUI MANQUAIT, et le defaut qu'elle aurait attrape est reel. Ce balayage est indexe par
+# NOM: il compare les adresses de declarations qui portent le meme nom. Il ne peut donc pas voir un
+# scalaire dont l'adresse tombe DANS une region declaree ailleurs sous un autre nom -- et c'est
+# exactement ce qui s'est produit. AnimVmInterpreter tenait `private static int DAT_800990c8` et
+# `private static byte DAT_800990d4` pendant que BattleScene modelisait 0x800990C0..0x800990D7 en une
+# seule `RamRegion`. Deux copies des memes octets, invisibles a ce vérificateur, avec en prime une
+# largeur fausse: l'image dit `lbu`/`sb`, le scalaire etait un `int`, et un ecriture 32 bits a +0x08
+# aurait ecrase +0x09, +0x0A et +0x0B.
+#
+# La regle appliquee est celle que le portage a deja etablie: une ADRESSE n'est pas un STOCKAGE.
+# Un `const int` qui pointe dans une region est correct et attendu -- c'est comme cela qu'on
+# adresse un champ. Un scalaire non-const, ou un second `byte[]`, dans les bornes d'une region est
+# une seconde copie et un defaut.
+REGION = re.compile(r'RamRegion\(\s*([^,]+?)\s*,\s*([^,)]+?)\s*[,)]')
+CONST = re.compile(r'\bconst\s+(?:int|uint)\s+(\w+)\s*=\s*([^;]+);')
+LITERAL = re.compile(r'^(?:unchecked\(\(u?int\)\s*)?(0[xX][0-9A-Fa-f]+|\d+)\)?$')
+ARRAY = re.compile(r'\b(\w+)\s*=\s*new\s+byte\[([^\]]+)\]')
+ARITH = re.compile(r'^[0-9A-Fa-fxX*+\-() ]+$')
+regions = []   # [overlay, fichier, ligne, expr_base, expr_taille]
+sources = {}   # (overlay, fichier) -> lignes
+consts = defaultdict(dict)   # overlay -> nom -> valeur
 for folder in FOLDERS:
     d = os.path.join(ROOT, folder)
     for name in sorted(os.listdir(d)):
         if not name.endswith(".cs"):
             continue
         src = io.open(os.path.join(d, name), encoding="utf-8-sig").read().splitlines()
+        sources[(folder, name)] = src
         for i, line in enumerate(src, 1):
+            c = CONST.search(line)
+            if c:
+                lit = LITERAL.match(c.group(2).strip())
+                if lit:
+                    consts[folder][c.group(1)] = int(lit.group(1), 0)
+            a_ = ARRAY.search(line)
+            if a_:
+                consts[folder].setdefault("[]" + a_.group(1), a_.group(2).strip())
+            if "RamRegion(" in line and not line.lstrip().startswith("//"):
+                r = REGION.search(line)
+                if r:
+                    regions.append([folder, name, i, r.group(1).strip(), r.group(2).strip()])
             m = DECL.match(line)
             if not m:
                 continue
@@ -113,8 +163,91 @@ print("inter-overlay: %d (dont %d divergents, %d stockages dupliques)"
 # documente des deux cotes. Gater dessus bloquerait chaque commit pour un fait de conception.
 # Deux declarations sur une meme adresse DANS UN MEME overlay, en revanche, sont deux copies des
 # memes octets qui divergent des que l'une est ecrite: c'est cela que ce mode refuse.
+def arith(expr):
+    """Evalue une expression PUREMENT litterale. Rien d autre n est evalue: pas d appel, pas de
+    nom, pas d indexation -- un vérificateur ne doit pas executer le code qu il inspecte."""
+    expr = expr.strip()
+    if not ARITH.match(expr) or not any(ch.isdigit() for ch in expr):
+        return None
+    try:
+        return eval(expr, {"__builtins__": {}}, {})   # litteraux et * + - ( ) uniquement
+    except Exception:
+        return None
+
+def value_of(expr, folder, depth=0):
+    """Base ou taille: litteral, arithmetique litterale, `const`, longueur d un `new byte[...]`,
+    ou adresse GHIDRA d un symbole DAT_. Rend None quand rien ne tranche, ce qui compte comme un
+    angle mort declare plutot que comme un zero silencieux."""
+    if depth > 3:
+        return None
+    expr = expr.strip()
+    lit = LITERAL.match(expr)
+    if lit:
+        return int(lit.group(1), 0)
+    v = arith(expr)
+    if v is not None:
+        return v
+    sym = expr.split(".")[-1]
+
+    # RamRegion(addr, someByteArray): la taille est la longueur declaree du tableau.
+    for f in [folder] + [x for x in consts if x != folder]:
+        if "[]" + sym in consts[f]:
+            v = value_of(consts[f]["[]" + sym], f, depth + 1)
+            if v is not None:
+                return v
+    for f in [folder] + [x for x in consts if x != folder]:
+        if sym in consts[f]:
+            got = consts[f][sym]
+            return got if isinstance(got, int) else value_of(got, f, depth + 1)
+    for f, _, _, _, _, a in decls.get(sym, []):
+        if a and f == folder:
+            return int(a, 16)
+    for *_, a in decls.get(sym, []):
+        if a:
+            return int(a, 16)
+    return None
+
+print()
+print("=== VS_EXE : stockage declare DANS les bornes d une region")
+contained = []
+blind = []
+for folder, fname, line, base_expr, size_expr in regions:
+    base = value_of(base_expr, folder)
+    size = value_of(size_expr, folder)
+    if base is None or size is None:
+        blind.append((folder, fname, line, base_expr, size_expr,
+                      "base" if base is None else "taille"))
+        continue
+    for sym, v in decls.items():
+        for f, n, l, t, is_const, a in v:
+            if f != folder or a is None or is_const:
+                continue          # une ADRESSE n est pas un STOCKAGE: c est la regle du portage
+            if (n, l) == (fname, line):
+                continue          # la region elle-meme
+            addr = int(a, 16)
+            if base <= addr < base + size:
+                contained.append((folder, n, l, sym, t, a, fname, line, base, size))
+
+for folder, n, l, sym, t, a, fname, line, base, size in sorted(contained):
+    print("  %-22s %s/%s:%d %s @ %s  <-- DANS la region de %s:%d (0x%08X..0x%08X)"
+          % (sym, folder, n, l, t, a, fname, line, base & 0xFFFFFFFF,
+             (base + size) & 0xFFFFFFFF))
+
+# UNE REGION NON RESOLUE N EST PAS UN DEFAUT, MAIS ELLE REND CETTE PASSE AVEUGLE SUR ELLE.
+# Le dire est la seule chose qui donne un sens au vert: un balayage qui ne voit rien et rapporte
+# "0 probleme" ment par omission. Les tailles calculees a partir de donnees (Roster) et les
+# regions locales de banc en font partie.
+for folder, fname, line, base_expr, size_expr, which in sorted(blind):
+    print("  (angle mort) %s/%s:%d  %s non resolue  [base %s, taille %s]"
+          % (folder, fname, line, which, base_expr, size_expr))
+
+vs_blind = len([b for b in blind if b[0] == "VS_EXE"])
+print("regions vues: %d, resolues: %d, angles morts: %d (dont %d dans VS_EXE)"
+      % (len(regions), len(regions) - len(blind), len(blind), vs_blind))
+print("stockages contenus dans une region: %d" % len(contained))
+
 if "--strict" in sys.argv:
-    fail = sto_intra + div_intra
+    fail = sto_intra + div_intra + len([c for c in contained if c[0] == "VS_EXE"])
     print("STRICT: %d probleme(s) bloquant(s) intra-overlay "
-          "(stockages dupliques + types divergents)" % fail)
+          "(stockages dupliques + types divergents + stockages contenus dans une region)" % fail)
     sys.exit(1 if fail else 0)

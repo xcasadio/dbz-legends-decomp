@@ -205,11 +205,13 @@ que le mandat refuse.
 
 - **Pousser** le sous-module `PsxSdkMonogame` puis le superprojet. Rien n'a ete
   pousse; un clone frais ne construit pas.
-- `AnimVmInterpreter` garde des scalaires prives pour `+0x08` et `+0x14` de la
-  region `0x800990C0` que `BattleScene` modelise en une `RamRegion` — deux copies
-  des memes octets. Les largeurs divergent en plus (la region documente `+0x08`
-  comme un octet, le scalaire est un `int`) et l'original ecrit cette region a
-  quatre largeurs differentes. Fermer ca demande l'image; c'est desormais possible
-  via PCSX-Redux, ce ne l'etait pas quand le constat a ete fait.
+- ~~`AnimVmInterpreter` garde des scalaires prives pour `+0x08` et `+0x14`~~ **fait.**
+  L'image a tranche: `lbu`/`sb` a `0x8003698C` et `0x80036998`, donc des OCTETS. Le
+  scalaire etait un `int`, et une ecriture 32 bits a `+0x08` aurait ecrase `+0x09`,
+  `+0x0A` et `+0x0B` — trois champs que `BattleScene` documente separement. Les deux
+  passent desormais par `BattleScene.RAM_800990c0`, ce qui ferme la duplication et
+  **arme** la region au passage: `PsxRam` rend 0 en silence sur une adresse qu'aucune
+  region ne couvre, donc y acceder par adresse depuis un autre fichier etait une
+  hypothese d'ordre d'initialisation, pas une garantie.
 - `data/tracks/` (211 Mo), deux `.palettes.json` de `CH_BIN1` et un fichier de
   `DOC` ne sont pas revenus de la restauration.

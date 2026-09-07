@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
@@ -202,12 +202,21 @@ internal static class AnimVmInterpreter
             FUN_8003ecfc();
         }
 
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: these two bytes live INSIDE BattleScene's RAM_800990c0 region, and naming the
+        // array is what ARMS it -- LibGpu.RamRegion registers the bytes from BattleScene's static
+        // initialiser, and PsxRam answers 0 for any address no region covers, silently. Reaching
+        // through PsxRam by address here would work only if something had already touched
+        // BattleScene, which is an ordering assumption rather than a guarantee. The offsets fold to
+        // 8 and 0x14, and the form matches AnimCmdMesh's `p - AnimVm.DAT_801f2000` idiom.
+        byte[] rec = BattleScene.RAM_800990c0;
+
         FUN_80061f1c(DAT_800990c0);
-        DAT_800990c8 = DAT_800990c8 - 1;
+        rec[DAT_800990c8 - DAT_800990c0] = (byte)(rec[DAT_800990c8 - DAT_800990c0] - 1);
         FUN_80061f1c(DAT_800990cc);
-        if ((DAT_800990c8 & 1) != 0)
+        if ((rec[DAT_800990c8 - DAT_800990c0] & 1) != 0)
         {
-            DAT_800990d4 = (byte)(DAT_800990d4 + 1);
+            rec[DAT_800990d4 - DAT_800990c0] = (byte)(rec[DAT_800990d4 - DAT_800990c0] + 1);
         }
 
         if (((AnimVm.DAT_800b305a & 1) == 0) && (sVar8 == 0))
@@ -235,12 +244,23 @@ internal static class AnimVmInterpreter
 
     private const int DAT_800990cc = unchecked((int)0x800990CC);
 
-    // GHIDRA: DAT_800990c8 @ 0x800990C8 (VS.EXE)
-    // Decremented once per batch, and its low bit gates the counter below.
-    private static int DAT_800990c8;
+    // GHIDRA: DAT_800990c8 @ 0x800990C8, DAT_800990d4 @ 0x800990D4 (VS.EXE)
+    // ADDRESSES, NOT STORAGE -- and that distinction is the whole fix. Both were `private static`
+    // C# scalars here, which made them a SECOND COPY of bytes BattleScene already models as one
+    // region: RAM_800990c0 spans 0x800990C0..0x800990D7, so it covers both. Writes through the
+    // scalars never reached the bytes RenderBattleScene3D initialises, and vice versa.
+    //
+    // The width was wrong too, and that one had teeth. DAT_800990c8 was an `int`. The image says
+    // BYTE, twice over:
+    //     0x8003698C  lbu v0,-0x6f38(v0)   (90 42 90 C8)   ; load byte unsigned
+    //     0x80036998  sb  v0,-0x6f38(at)   (A0 22 90 C8)   ; store byte
+    //     0x800369C4  lbu v0,-0x6f2c(v0)                   ; DAT_800990d4, also a byte
+    // A 32-bit write at +0x08 would have clobbered +0x09, +0x0A and +0x0B, which BattleScene's own
+    // field map documents as three separate bytes holding 2, 8 and 0. The decrement is the only
+    // reason nothing had visibly broken: it read zeros it had written itself.
+    private const int DAT_800990c8 = unchecked((int)0x800990C8);
 
-    // GHIDRA: DAT_800990d4 @ 0x800990D4 (VS.EXE)
-    private static byte DAT_800990d4;
+    private const int DAT_800990d4 = unchecked((int)0x800990D4);
 
     // GHIDRA: FUN_8003ecfc @ 0x8003ECFC (VS.EXE)
     // BLOCKED: called only when the render-state reset above runs.
