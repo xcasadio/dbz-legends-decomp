@@ -1093,7 +1093,7 @@ internal static class SoundDriver
 
             PsxRam.WriteU16(iVar8 + SoundState.PendingVabHandle, 0xffff);
             PsxRam.WriteU16(iVar8 + SoundState.CompletedRequestId, 0);
-            FUN_80060364();
+            SoundEffects.FUN_80060364();
             PsxRam.WriteU16(iVar8 + 0x190, 0);
             PsxRam.WriteU16(iVar8 + 0x192, 0);
             LibEtc.VSyncCallback(() => TaskSystem.InvokeCallbackByAddress(Lab8005eb14Address));
@@ -1546,11 +1546,13 @@ internal static class SoundDriver
             FUN_8005f660();
         }
 
-        FUN_80060478();
+        SoundEffects.FUN_80060478();
         if ((short)PsxRam.ReadU16(iVar7 + 0x190) != 0)
         {
-            FUN_8006071c(
-                (short)PsxRam.ReadU16(iVar7 + 0x190), (short)PsxRam.ReadU16(iVar7 + 0x192));
+            // The callee's second parameter is `uint` in the image (SoundEffects.cs's own note
+            // decodes it), so the halfword is widened rather than sign-extended into it.
+            SoundEffects.FUN_8006071c(
+                (short)PsxRam.ReadU16(iVar7 + 0x190), PsxRam.ReadU16(iVar7 + 0x192));
         }
     }
 
@@ -2399,7 +2401,7 @@ internal static class SoundDriver
     // called six times by the init as (voice, 0x7FFF, 0x7FFF) for voices 0x11..0x16, i.e. "set both
     // volumes to maximum". PsxSdkMonogame exports no entry at this address under any name, so there
     // is nothing to call either; the volumes are simply never applied.
-    private static void FUN_8006bcd0(int param_1, int param_2, int param_3)
+    internal static void FUN_8006bcd0(int param_1, int param_2, int param_3)
     {
         _ = param_1;
         _ = param_2;
@@ -2412,7 +2414,7 @@ internal static class SoundDriver
     // the eight call sites in this file agree: (0x11..0x16, 0x40, 0x40) and (voice, 0x38, 0x38)
     // from the init, (voice, ws+0x143, ws+0x142) from the per-frame sweep, (cursor, 0x38, 0x38)
     // from FUN_8005f480. It is the per-voice volume/pan setter. Not exported by PsxSdkMonogame.
-    private static int FUN_8006bdd8(int param_1, int param_2, int param_3)
+    internal static int FUN_8006bdd8(int param_1, int param_2, int param_3)
     {
         _ = param_1;
         _ = param_2;
@@ -2440,7 +2442,7 @@ internal static class SoundDriver
     // AnimCmdSound.cs names it "the key-ON counterpart" of FUN_8006b88c from its own side of the
     // module, independently. The argument NAMES above are the shape the call sites impose, not a
     // closed reading of the body, so nothing downstream should rely on them.
-    private static int FUN_8006b4a0(
+    internal static int FUN_8006b4a0(
         int param_1, int param_2, int param_3, int param_4,
         int param_5, int param_6, int param_7, int param_8)
     {
@@ -2459,37 +2461,25 @@ internal static class SoundDriver
     // BLOCKED: 280 bytes, SDK by address. The KEY-OFF, called once per frame as FUN_8006b88c(0x11)
     // when the twelve-slot sweep found nothing to sound. AnimCmdSound.cs records the same
     // "(ushort voice) -> int" shape and the same role from its own call sites.
-    private static int FUN_8006b88c(int param_1)
+    internal static int FUN_8006b88c(int param_1)
     {
         _ = param_1;
         return 0;
     }
 
     // GHIDRA: FUN_80060364 @ 0x80060364 (VS.EXE)
-    // BLOCKED: 276 bytes. This one is GAME code -- 0x80060364 is below 0x800632C4 -- and it belongs
-    // to the same sound-driver module AnimCmdSound.cs describes as 0x8005EE5C..0x800602DB, whose
-    // front half (FUN_8005fb9c, FUN_8005fcec, FUN_8005fd9c, FUN_8005ff5c, FUN_80060144) is blocked
-    // there for the same reason. Called once, at the very end of the init, with no arguments.
-    // It is the next slice's work, not this one's.
-    private static void FUN_80060364()
-    {
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_80060478 @ 0x80060478 (VS.EXE)
-    // BLOCKED: 260 bytes, game code, same module. Called unconditionally once per frame by
-    // FUN_8005da78, with no arguments, after the voice sweep and before the +0x190 test. Same
-    // slice as FUN_80060364.
-    private static void FUN_80060478()
-    {
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_8006071c @ 0x8006071C (VS.EXE)
-    // BLOCKED: 720 bytes, game code, same module. The last thing FUN_8005da78 does, and only when
-    // the workspace's +0x190 is non-zero: FUN_8006071c(*(short *)(ws + 0x190), *(short *)(ws +
-    // 0x192)). Both arguments are read signed. Same slice as FUN_80060364.
-    private static void FUN_8006071c(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
+
 }

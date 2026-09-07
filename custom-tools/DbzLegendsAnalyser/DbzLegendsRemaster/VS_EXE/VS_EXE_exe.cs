@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
@@ -154,11 +154,11 @@ internal sealed class VS_EXE_exe
 
     // GHIDRA: DAT_8008d38c @ 0x8008D38C, DAT_8008d390 @ 0x8008D390, DAT_8008d394 @ 0x8008D394 (VS.EXE)
     // The background colour main copies into the DRAWENV every frame, blue first.
-    private static int DAT_8008d38c;
+    internal static int DAT_8008d38c;
 
-    private static int DAT_8008d390;
+    internal static int DAT_8008d390;
 
-    private static int DAT_8008d394;
+    internal static int DAT_8008d394;
 
     // JUSTIFICATION: backend MonoGame only
     // RELATION: read-only diagnostic accessors for Validation/VsBootDiagnostic.cs. The three
@@ -308,7 +308,7 @@ internal sealed class VS_EXE_exe
         DAT_8008d394 = 0;
 
         FileIo.SetupGeometry(0xa0, 0xef, 0x200, 0, 0, 0, 0x400, 0, 0, 0);
-        BattleScene.FUN_80042054(8, 0);
+        EffectSystem.FUN_80042054(8, 0);
         DAT_8008d4f0 = 1;
         FUN_80062a1c();
 
@@ -406,7 +406,7 @@ internal sealed class VS_EXE_exe
         FUN_80026a68();
 
         DAT_8008d444 = 0;
-        BattleScene.FUN_80042054(2, 4);
+        EffectSystem.FUN_80042054(2, 4);
 
         DeclareOrderingTableAddress();
         DAT_8008d420 = Drawenv800b0eb8Address;
@@ -582,7 +582,7 @@ internal sealed class VS_EXE_exe
     internal static int DAT_1f800128;
 
     // GHIDRA: DAT_8008d398 @ 0x8008D398 (VS.EXE)
-    // OWNERSHIP CAVEAT: this is BattleScene.FUN_80042054's own state word -- that function's real
+    // OWNERSHIP CAVEAT: this is EffectSystem.FUN_80042054's own state word -- that function's real
     // body (a many-case switch that reads and writes it repeatedly, per its own cross-references) is
     // still a BLOCKED stub in BattleScene.cs, so nothing currently writes this field and the guard
     // below never fires in this port's present state. Declared here, the first VS.EXE code (in this
@@ -591,7 +591,7 @@ internal sealed class VS_EXE_exe
     // Read via an UNSIGNED halfword (raw MIPS decode at 0x80041490: `lhu v0,0x29c(gp)`, gp-relative
     // to VS.EXE's own 0x8008D0FC per the project's PCSX-Redux evidence channel: 0x8008D0FC + 0x29C
     // = 0x8008D398) and compared unsigned (`sltiu`), hence the unsigned type.
-    private static ushort DAT_8008d398;
+    internal static ushort DAT_8008d398;
 
     // GHIDRA: DAT_800c3bfc @ 0x800C3BFC (VS.EXE)
     // BLOCKED: only ever address-taken by this function, never dereferenced, so its shape (which
@@ -644,7 +644,7 @@ internal sealed class VS_EXE_exe
     // every X, so the wider field reads back identically regardless of its high 16 bits. The
     // compiler's choice to narrow the load here is an optimisation on its side, not a different
     // source value -- the C source both sites compile from is the one already on Scratchpad.cs.
-    private static void FUN_800411b4()
+    internal static void FUN_800411b4()
     {
         DAT_1f80008c = Scratchpad.SVECTOR_1f80007c.vx;
         DAT_1f80008e = Scratchpad.SVECTOR_1f80007c.vy;
@@ -1281,7 +1281,7 @@ internal sealed class VS_EXE_exe
     // fully overwritten before every read and never carried across calls, so a local produces the
     // identical LoadImage argument without a second declaration over FileIo's private field, which
     // this file cannot reach.
-    private static void FUN_80061bd8(int param_1, int param_2)
+    internal static void FUN_80061bd8(int param_1, int param_2)
     {
         uint uVar7 = (uint)PsxRam.ReadI32(param_1);
         uint uVar11 = 0;
@@ -1384,7 +1384,7 @@ internal sealed class VS_EXE_exe
     // PARTIAL: what the thirty 0x24-byte records it implies (0x438 / 0x24 = 0x1e -- TITLE.EXE's own
     // comment says thirty, which is 0x1e; the count is not re-derived here) hold is not established
     // by this function, which only clears them.
-    private const int Dat8008d610Address = unchecked((int)0x8008D610);
+    internal const int Dat8008d610Address = unchecked((int)0x8008D610);
 
     private static readonly byte[] DAT_8008d610 = RamRegion(Dat8008d610Address, 0x438);
 
@@ -1403,6 +1403,14 @@ internal sealed class VS_EXE_exe
     private static void FUN_80026a68()
     {
         memset(DAT_8008d610, 0, 0, 0x438);
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: same shape and same reason as every other RegisterCallback in this file.
+        // CreateTask stores Lab80026888Address raw in the node at +0x04 and TaskSystem's per-list
+        // dispatch reaches only a body it has a registered delegate for. VS_EXE/SceneTransition.cs
+        // closed the body; without this line list 0xb would carry a live node that dispatches
+        // nothing -- and the 0x438-byte block this function just zeroed is exactly what that body
+        // fills, so the omission would be silent.
+        TaskSystem.RegisterCallback(Lab80026888Address, SceneTransition.LAB_80026888);
         TaskSystem.CreateTask(Lab80026888Address, 0, 0xb, 0, 1, TaskSystem.g_TaskListTail[0xb]);
     }
 

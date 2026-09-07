@@ -447,7 +447,7 @@ internal static class AnimCmdEffects
                 DAT_80099066 = 1;
             }
 
-            FUN_8003f994();
+            EffectSystem.FUN_8003f994();
         }
         else if ((uVar1 & 0x8000) == 0)
         {
@@ -514,7 +514,7 @@ internal static class AnimCmdEffects
                         return puVar5;
                     }
 
-                    iVar4 = FUN_8003fe98(iVar4, uVar6);
+                    iVar4 = EffectSystem.FUN_8003fe98(iVar4, uVar6);
                     iVar4 = PsxRam.ReadI32(iVar4 + 8);
                     PsxRam.WriteI32(AnimStreamBlockBase + (piVar10), iVar4);
                     if (iVar4 == 0)
@@ -1206,8 +1206,8 @@ internal static class AnimCmdEffects
 
             if (iVar3 != 0)
             {
-                FUN_80045130(DAT_80083c78Address, 0x40, iVar3, (short)uVar6);
-                iVar3 = FUN_80045130(DAT_80083cb4Address, 0x40, iVar3, (short)uVar6);
+                EffectSystem.FUN_80045130(DAT_80083c78Address, 0x40, iVar3, uVar6);
+                iVar3 = EffectSystem.FUN_80045130(DAT_80083cb4Address, 0x40, iVar3, uVar6);
 
                 if (iVar3 != 0 && PsxRam.ReadI32(DAT_80083cb8Address) != 0)
                 {
@@ -1318,33 +1318,10 @@ internal static class AnimCmdEffects
     private static readonly byte[] auStack_10 =
         LibGpu.RamRegion(auStack_10Address, 8);
 
-    // =====================================================================================
-    // The callees these eight handlers reach that are NOT in this slice. Each is declared so the
-    // call site above is real, in the original's order and with the original's arguments. None of
-    // them is invented here and none is a convenience API: they are the out-of-slice functions,
-    // named exactly as Ghidra names them.
-    // =====================================================================================
-
-    // GHIDRA: FUN_8003f994 @ 0x8003F994 (VS.EXE)
-    private static void FUN_8003f994()
-    {
-        // BLOCKED: 756 bytes. The per-frame transform interpolator opcode 12 drives through
-        // DAT_80099058..DAT_80099066. docs/structure-ch-bin-files.history.md §26.4 describes the
-        // GAME.EXE homologue at 0x8003FAE8: on the frame DAT_80099066 is 1 it differences the two
-        // resolved targets against the current position and rotation into a velocity triple, then
-        // on every later frame integrates the accumulators, writes the scratchpad coordinates as
-        // 4.12 fixed point and counts a frame budget down. It owns globals no slice has claimed.
-    }
-
     // GHIDRA: FUN_8003fe98 @ 0x8003FE98 (VS.EXE)
-    private static int FUN_8003fe98(int param_1, int param_2)
-    {
-        // BLOCKED: 192 bytes. AnimCmd_EffSet's effect constructor — its result's +0x08 is what
-        // lands in the DAT_801faaac slot. It belongs with the effect-object slice.
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/EffectSystem.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is the defect check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
     // NO LONGER DECLARED HERE, AND THAT IS A FIX, NOT A MOVE. This file used to carry an EMPTY
@@ -1377,29 +1354,9 @@ internal static class AnimCmdEffects
         return 0;
     }
 
-    // GHIDRA: CreateAttackEventTask @ 0x80043598 (VS.EXE)
-    // MOVED TO VS_EXE/FighterCombat.cs, where its real 312-byte body now lives with the rest of the
-    // attack-event chain. The empty stub that used to sit here is DELETED rather than left, and the
-    // deletion matters more than the move: C# binds an unqualified call to the enclosing class
-    // first, so AnimCmd_ChDanSet's own call below was resolving to this no-op and never to the real
-    // implementation. It compiled, it ran, and opcode 40's arm did nothing.
-    //
-    // That is the third time this port has hit one Ghidra address with two declarations, and the
-    // second time the duplicate silently won over a working body. The call site below is now
-    // QUALIFIED, which is what deleting a same-named private member requires: two static classes in
-    // one namespace do not merge, so an unqualified call would simply stop compiling rather than
-    // fall through.
-
     // GHIDRA: FUN_80045130 @ 0x80045130 (VS.EXE)
-    private static int FUN_80045130(int param_1, int param_2, int param_3, int param_4)
-    {
-        // BLOCKED: 1764 bytes. AnimCmd_HitzSet calls it twice, once per 0x3C-byte list record,
-        // with a bound of 0x40. It is the registration that puts the '@'-tagged nodes on the chain
-        // the same handler then walks. Slice 2.
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-        _ = param_4;
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/EffectSystem.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is the defect check_function_addresses.py exists to catch.
+
 }

@@ -57,22 +57,22 @@ namespace DbzLegendsRemaster.VS_EXE;
 // OWN sound driver front-end, a module occupying 0x8005EE5C..0x800602DB, and that module is not
 // transliterated. Its entry points, and what each is:
 //
-//   0x8005FB9C  FUN_8005fb9c(uint,ushort,short)   chse_call's target. Allocates a voice out of the
+//   0x8005FB9C  SoundEffects.FUN_8005fb9c(uint,ushort,short)   chse_call's target. Allocates a voice out of the
 //                                                 22-slot bank (DAT_8008d214 walking 0x11..0x16),
 //                                                 then FUN_8006b4a0 / FUN_8006bdd8 against the VAB
 //                                                 id at DAT_8008d284 + 0x158.
-//   0x8005FCEC  FUN_8005fcec(uint,short)          chse_vol's target. Sets volume on one voice, or
+//   0x8005FCEC  SoundEffects.FUN_8005fcec(uint,short)          chse_vol's target. Sets volume on one voice, or
 //                                                 on all six of 0x11..0x16 when the channel is 0.
-//   0x8005FD9C  FUN_8005fd9c(uint,ushort,short)   atse_call's target. Same shape as FUN_8005fb9c
+//   0x8005FD9C  SoundEffects.FUN_8005fd9c(uint,ushort,short)   atse_call's target. Same shape as FUN_8005fb9c
 //                                                 but against the OTHER VAB, DAT_8008d284 + 0x154,
 //                                                 and with a per-sound pitch/ADSR triple read out
 //                                                 of DAT_80084C10.
-//   0x8005FF5C  FUN_8005ff5c(short,uint,ushort)   voice_call's target. Streams an ADPCM voice clip:
+//   0x8005FF5C  SoundEffects.FUN_8005ff5c(short,uint,ushort)   voice_call's target. Streams an ADPCM voice clip:
 //                                                 SpuSetVoiceAttr on &DAT_800B0DDC pointed at the
 //                                                 buffer &DAT_801C1000, then DAT_8008d384 = 1.
 //   0x80060120  FUN_80060120(void)                returns DAT_8008d384.
 //   0x8006012C  FUN_8006012c(void)                DAT_8008d384 |= 0x40.
-//   0x80060144  FUN_80060144(uint)                0x8003EF04's target. A three-state machine over
+//   0x80060144  SoundEffects.FUN_80060144(uint)                0x8003EF04's target. A three-state machine over
 //                                                 DAT_8008d284 + 0x15C that walks a per-character
 //                                                 voice-line table at DAT_80084AD4 (3 halfwords per
 //                                                 character) and feeds FUN_8005ff5c.
@@ -186,7 +186,7 @@ internal static class AnimCmdSound
                 DAT_801fac43 = 0;
             }
 
-            FUN_8005fb9c(uVar1 & 0xffu, (ushort)(short)uVar3, (short)uVar4);
+            SoundEffects.FUN_8005fb9c(uVar1 & 0xffu, (ushort)(short)uVar3, (short)uVar4);
         }
 
         return streamPtr + 4;
@@ -242,7 +242,7 @@ internal static class AnimCmdSound
             DAT_801fac42 = (byte)uVar3;
             if (uVar5 == 0)
             {
-                FUN_8005fcec(uVar2, (short)uVar3);
+                SoundEffects.FUN_8005fcec(uVar2, (short)uVar3);
             }
         }
 
@@ -302,7 +302,7 @@ internal static class AnimCmdSound
 
                 if ((AnimVm.DAT_800b305a & 1) == 0)
                 {
-                    FUN_8005ff5c(0, 0, (ushort)(PsxRam.ReadU16(puVar4) & 0x7fff));
+                    SoundEffects.FUN_8005ff5c(0, 0, (ushort)(PsxRam.ReadU16(puVar4) & 0x7fff));
                     return streamPtr + 4;
                 }
 
@@ -386,7 +386,7 @@ internal static class AnimCmdSound
                 DAT_801fac43 = 0;
             }
 
-            FUN_8005fd9c(uVar1 & 0xffu, (ushort)(short)uVar3, (short)uVar4);
+            SoundEffects.FUN_8005fd9c(uVar1 & 0xffu, (ushort)(short)uVar3, (short)uVar4);
         }
 
         return streamPtr + 4;
@@ -440,7 +440,7 @@ internal static class AnimCmdSound
             uVar3 = uVar5 & 0xc0;
             if (uVar3 == 0x40)
             {
-                FUN_80060144((uint)(PsxRam.ReadU16(
+                SoundEffects.FUN_80060144((uint)(PsxRam.ReadU16(
                     PsxRam.ReadI32(PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8))) & 0x7f | 0x8000));
                 return puVar4;
             }
@@ -452,7 +452,7 @@ internal static class AnimCmdSound
                     return puVar4;
                 }
 
-                FUN_80060144((uint)(PsxRam.ReadU16(
+                SoundEffects.FUN_80060144((uint)(PsxRam.ReadU16(
                     PsxRam.ReadI32(PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8))) & 0x7f));
                 return puVar4;
             }
@@ -463,7 +463,7 @@ internal static class AnimCmdSound
             }
 
             uVar1 = PsxRam.ReadU16(puVar4);
-            iVar2 = FUN_80060144(0);
+            iVar2 = SoundEffects.FUN_80060144(0);
             if (iVar2 != 1)
             {
                 return streamPtr + 4;
@@ -540,65 +540,28 @@ internal static class AnimCmdSound
     // reads and still produce no audio. That is why the stubs below stay stubs.
 
     // GHIDRA: FUN_8005fb9c @ 0x8005FB9C (VS.EXE)
-    // BLOCKED: 336 bytes of the sound driver module, not of the animation VM. It walks the six-slot
-    // voice bank at DAT_8008d214 (0x11..0x16), keys off through FUN_8006b88c when the sound index
-    // is 0, and otherwise keys on through FUN_8006b4a0 against the VAB id at DAT_8008d284 + 0x158
-    // and sets the volume through FUN_8006bdd8. Porting it means porting the whole module — see the
-    // file header for why that is a separate slice.
-    // The original returns 0, or -1 when the VAB id is negative; the one caller in this file
-    // discards the result, so the 0 below is not load-bearing.
-    private static int FUN_8005fb9c(uint param_1, ushort param_2, short param_3)
-    {
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_8005fcec @ 0x8005FCEC (VS.EXE)
-    // BLOCKED: 176 bytes of the same module. Sets the volume of one voice through FUN_8006bdd8, or
-    // of all six of 0x11..0x16 when the channel is 0. Four call sites, only one of which is in this
-    // file; ExecuteAnimStreamBatch and StepVolumeRamp are two of the others. Its result is discarded
-    // at every one of them.
-    // Le type de retour est `void`, et ce fichier le declarait `int`. Les octets tranchent par les
-    // appelants: les QUATRE sites (0x80035120, 0x800369F8, 0x8003ECDC, 0x8003ED6C) ignorent $v0, ce
-    // que le commentaire ci-dessus disait deja. Deux des trois copies C# disaient `void`.
-    internal static void FUN_8005fcec(uint param_1, short param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_8005fd9c @ 0x8005FD9C (VS.EXE)
-    // BLOCKED: 448 bytes of the same module, and the atse counterpart of FUN_8005fb9c — the other
-    // VAB (DAT_8008d284 + 0x154), plus a per-sound triple read out of DAT_80084C10 and a single
-    // retry of FUN_8006b4a0 when the first key-on returns -1. Six call sites, five of them outside
-    // the animation VM. Result discarded at the call site in this file.
-    internal static int FUN_8005fd9c(uint param_1, ushort param_2, short param_3)
-    {
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_8005ff5c @ 0x8005FF5C (VS.EXE)
-    // BLOCKED: 340 bytes of the same module, and the one that actually starts an ADPCM voice clip —
-    // it fills the SpuVoiceAttr at &DAT_800B0DDC, points it at the clip buffer &DAT_801C1000, calls
-    // SpuSetVoiceAttr, and sets DAT_8008d384 to 1. Two call sites: voice_call's 0x00 sub-opcode
-    // here, and FUN_80060144. Because it is blocked, DAT_8008d384 never takes the value 1 in this
-    // port, which is the first of the two divergences listed in the file header. Result discarded
-    // at the call site in this file.
-    private static int FUN_8005ff5c(short param_1, uint param_2, ushort param_3)
-    {
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_80060144 @ 0x80060144 (VS.EXE)
-    // BLOCKED: 408 bytes of the same module — the voice-line state machine over DAT_8008d284 +
-    // 0x15C described in the FUN_8003ef04 comment above. All three of its call sites are in
-    // FUN_8003ef04.
-    // ITS RESULT IS LOAD-BEARING: FUN_8003ef04's 0x80 sub-opcode stores into g_animSharedVarTable
-    // only when it returns 1. The 0 below is the blocked stub's value and NOT the original's
-    // behaviour; it is the second divergence listed in the file header. It is 0 rather than 1
-    // because 0 is what every one of the original's own early returns yields, and 1 is reached only
-    // through state this port does not maintain.
-    private static int FUN_80060144(uint param_1)
-    {
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
+
 }

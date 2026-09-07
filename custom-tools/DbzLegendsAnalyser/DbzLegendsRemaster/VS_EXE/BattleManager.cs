@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -805,7 +805,7 @@ internal static class BattleManager
 
                 iVar14 = 0;
                 FUN_8005ee5c(0, 0, uVar13);
-                FUN_8005ef20(0, 0);
+                SoundEffects.FUN_8005ef20(0, 0);
 
                 // THE WINNER, and it is decided by the sign of the gauge alone: FUN_8005cf78
                 // returns cursor +0x14 when the gauge sits at exactly +30000 and cursor +0x16
@@ -1068,13 +1068,13 @@ internal static class BattleManager
                         sVar7 = (short)PsxRam.ReadU16(iVar15 + 0x2d64);
                         if (sVar7 == 0xe)
                         {
-                            BattleScene.FUN_80042054(5, 0x10);
+                            EffectSystem.FUN_80042054(5, 0x10);
                             sVar7 = (short)PsxRam.ReadU16(iVar15 + 0x2d64);
                         }
 
                         if (sVar7 == 4)
                         {
-                            BattleScene.FUN_80042054(4, 0x40);
+                            EffectSystem.FUN_80042054(4, 0x40);
                             iVar6 = PsxRam.ReadI32(((iVar14 << 0x10) >> 0xe) + iVar15
                                                    + BattleState.CtxFighterSlots);
                             if (iVar6 != 0)
@@ -1517,7 +1517,7 @@ internal static class BattleManager
             if (iVar14 != 0
                 && ((uint)PsxRam.ReadI32(PsxRam.ReadI32(iVar14 + 8) + 0x134) & 0x8000000) != 0)
             {
-                BattleScene.FUN_80042054(6, 0);
+                EffectSystem.FUN_80042054(6, 0);
                 if ((sbyte)PsxRam.ReadU8(
                         PsxRam.ReadI32(PsxRam.ReadI32(iVar8 + BattleState.CtxFighterSlots) + 8) + 0x16a)
                     == 0x28)
@@ -5190,13 +5190,9 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_8005ef20 @ 0x8005EF20 (VS.EXE)
-    // BLOCKED: 328 bytes. Called once, with (0, 0), immediately after FUN_8005ee5c on the
-    // round-is-over path.
-    internal static void FUN_8005ef20(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
 
     // GHIDRA: FUN_80060120 @ 0x80060120 (VS.EXE)
     // NOT STUBBED AND NOT REDECLARED. 12 bytes — `lh v0,0x288(gp)` and `jr ra`, i.e.
@@ -5263,6 +5259,12 @@ internal static class BattleManager
     {
         const int LAB_80029200 = unchecked((int)0x80029200);
 
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: the same shape as RegisterBattleManagerTask below. CreateTask stores
+        // LAB_80029200 raw in the node at +0x04 and TaskSystem's per-list dispatch reaches only a
+        // body it has a registered delegate for. VS_EXE/SceneTransition.cs closed the body; without
+        // this line the 0xc-byte workspace seeded with 2 on the next statement would never be read.
+        TaskSystem.RegisterCallback(LAB_80029200, SceneTransition.LAB_80029200);
         int iVar1 = TaskSystem.CreateTask(LAB_80029200, 0, 5, 0xc, 0, TaskSystem.g_TaskListTail[5]);
         PsxRam.WriteI32(PsxRam.ReadI32(iVar1 + 8), 2);
     }

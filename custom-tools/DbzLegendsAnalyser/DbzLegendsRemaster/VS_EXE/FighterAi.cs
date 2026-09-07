@@ -1806,7 +1806,7 @@ internal static class FighterAi
     //
     // BLOCKED: FUN_8005FD9C is the sound call. AnimCmdSound.cs owns 0x8005FD9C, but declares it
     // `private`, so it cannot be called from here; the stub below is this file's own and MUST be
-    // deleted once AnimCmdSound.FUN_8005fd9c is made `internal`. See the file header.
+    // deleted once SoundEffects.FUN_8005fd9c is made `internal`. See the file header.
     private static void FUN_800264d8(int param_1, int param_2, uint param_3, uint param_4, StackArgs args)
     {
         int iVar1;
@@ -1862,7 +1862,7 @@ internal static class FighterAi
                 uVar2 = 0xb;
             }
 
-            AnimCmdSound.FUN_8005fd9c(uVar2, 6, unchecked((short)0xe0));
+            SoundEffects.FUN_8005fd9c(uVar2, 6, unchecked((short)0xe0));
             VSync(0);
             VSync(0);
             VSync(0);

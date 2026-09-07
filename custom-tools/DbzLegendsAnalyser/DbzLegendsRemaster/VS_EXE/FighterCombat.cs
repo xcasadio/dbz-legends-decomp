@@ -913,7 +913,7 @@ internal static class FighterCombat
         PsxRam.WriteU8(fighter + 0x16b, PsxRam.ReadU8(fighter + 0x16a));
         PsxRam.WriteU8(fighter + 0x16a, (byte)state);
 
-        FUN_80026424(fighter);
+        SceneTransition.FUN_80026424(fighter);
     }
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
@@ -964,13 +964,9 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80026424 @ 0x80026424 (VS.EXE)
-    // BLOCKED: out of this slice. FighterSetState's tail call, run after every state/prevState
-    // transition.
-    private static void FUN_80026424(int param_1)
-    {
-        _ = param_1;
-    }
-
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SceneTransition.cs (180 bytes). FighterSetState's
+    // tail call below is qualified; an empty stub in the enclosing class silently beats a real body
+    // elsewhere.
     // GHIDRA: FUN_8004d574 @ 0x8004D574 (VS.EXE)
     // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterCombatArms.cs, which holds the four
     // attack-resolution arms this file used to stub. Call sites below reach it by qualified
@@ -2013,12 +2009,12 @@ internal static class FighterCombat
         {
             PsxRam.WriteI32(iVar4 + 0x78, PsxRam.ReadI32(iVar4 + 0x78) | 2);
 
-            byte bVar1 = FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
+            byte bVar1 = EffectSystem.FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
             PsxRam.WriteU8(iVar4 + 0x7e, (byte)(bVar1 & 0x3f));
 
             FUN_800539d0(iVar4);
 
-            byte uVar2 = FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
+            byte uVar2 = EffectSystem.FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
             PsxRam.WriteU8(iVar4 + 0x7e, uVar2);
 
             param_1 = unchecked((PsxRam.ReadU8(iVar4 + 0x7e) & 0xc0) << 0x18);
@@ -2080,7 +2076,7 @@ internal static class FighterCombat
                 short local_16 = 0;
                 short local_14 = 0;
 
-                FUN_800461fc(local_18, local_16, local_14, iVar4 + 0x48, iVar4 + 0x60);
+                EffectSystem.FUN_800461fc(local_18, local_16, local_14, iVar4 + 0x48, iVar4 + 0x60);
             }
 
             PsxRam.WriteI32(iVar4 + 0x78, PsxRam.ReadI32(iVar4 + 0x78) & 0x7fffffff);
@@ -2095,44 +2091,10 @@ internal static class FighterCombat
         TaskSystem.DeleteTask(TaskSystem.g_CurrentTask, 0xb);
     }
 
-    // GHIDRA: FUN_80052db4 @ 0x80052DB4 (VS.EXE)
-    // NO LONGER DECLARED HERE. CLOSED, in VS_EXE/SpriteDrawer.cs -- 1404 bytes and 136 incoming
-    // references, the function that puts every non-HUD sprite in this mode on the screen. The call
-    // below is qualified and its arguments carry the casts Ghidra's own prototype implies; the stub
-    // that used to sit here took eighteen plain ints and discarded them all.
-    // GHIDRA: FUN_80045b70 @ 0x80045B70 (VS.EXE)
-    // BLOCKED: 388 bytes, out of this slice. Ghidra's own signature is `undefined1
-    // FUN_80045b70(ushort param_1, short param_2)`; UpdateAttackEventTask's two calls above pass its own
-    // workspace's own +0x4c (param_1) and +0x4a (param_2) fields, both read as signed halfwords
-    // (`lh`), to compute an orientation/facing byte -- a table lookup (&DAT_80082e44, then a
-    // second table at an offset this slice does not resolve) this port does not chase further.
-    // Kept as a precise no-op returning 0.
-    internal static byte FUN_80045b70(short param_1, short param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
-
     // GHIDRA: FUN_800461fc @ 0x800461FC (VS.EXE)
-    // BLOCKED: 228 bytes, out of this slice. Ghidra's own signature is `void
-    // FUN_800461fc(SVECTOR *param_1, ushort *param_2, VECTOR *param_3)` -- a GTE rotate/translate
-    // (PushMatrix, RotMatrix, SetTransMatrix, SetRotMatrix, RotTrans, PopMatrix), the same
-    // PsxSdkMonogame GTE family VS_EXE/FileIo.cs's own scratchpad note already flags for a later
-    // slice. UpdateAttackEventTask's own call above builds param_1's three halfwords on its OWN C stack
-    // (local_18/local_16/local_14), which this port has no PSX address for -- the same gap this
-    // file's own AnimCmdEffects.cs sibling already documents for AnimCmd_CheffWait's identical
-    // "synthetic command built in a caller's stack frame" case. Passed here as three plain values
-    // instead of a pointer, since this stub is a no-op either way. param_2/param_3 stay real PSX
-    // addresses (workspace+0x48, workspace+0x60).
-    private static void FUN_800461fc(short param1Vx, short param1Vy, short param1Vz, int param_2, int param_3)
-    {
-        _ = param1Vx;
-        _ = param1Vy;
-        _ = param1Vz;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/EffectSystem.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is the defect check_function_addresses.py exists to catch.
 
     // ============================================================================================
     // WAVE 3 — FighterTask.cs step 9.4's third arm (FUN_8004cea0) and everything it reaches.

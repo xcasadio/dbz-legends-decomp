@@ -222,7 +222,7 @@ internal static class AnimVmInterpreter
         if (((AnimVm.DAT_800b305a & 1) == 0) && (sVar8 == 0))
         {
             PsxRam.WriteU16(iVar9 + 0x78, 0);
-            AnimCmdSound.FUN_8005fcec(0, 0);
+            SoundEffects.FUN_8005fcec(0, 0);
             if ((PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 8) != 0)
             {
                 BattleManager.FUN_8005ee5c(0, 0, 0x30);
@@ -236,7 +236,7 @@ internal static class AnimVmInterpreter
     // NOT IN THIS TRANCHE
     // =====================================================================================
     // The tail also reaches into the battle and scene subsystems — tranche 2 — through
-    // AnimCmdSound.FUN_8005fcec and BattleManager.FUN_8005ee5c / BattleManager.DAT_8008d320, each
+    // SoundEffects.FUN_8005fcec and BattleManager.FUN_8005ee5c / BattleManager.DAT_8008d320, each
     // BLOCKED in its own file rather than duplicated here. StepVolumeRamp and RollAndUploadClutRange below are
     // this tranche's own functions and are now closed; DAT_800990c0/cc/c8/d4 just below are plain
     // addresses into BattleScene's already-modelled RAM_800990c0 region, not stubs.
@@ -273,7 +273,7 @@ internal static class AnimVmInterpreter
     // disassembly at 0x8003ed30..0x8003ed40 (`bgez`/`slt` on opposite operand orders for the
     // slope<0 and slope>=0 cases) — and on overshoot the slope is cleared and the candidate clamped
     // to the target. The (possibly clamped) volume is written back to DAT_801fac42 and pushed to the
-    // driver through AnimCmdSound.FUN_8005fcec on channel DAT_801fac41, unconditionally, every call
+    // driver through SoundEffects.FUN_8005fcec on channel DAT_801fac41, unconditionally, every call
     // where the ramp is active. FUN_8005fcec is itself BLOCKED (sound-driver module, see
     // AnimCmdSound.cs); its argument here is exact regardless.
     private static void StepVolumeRamp()
@@ -300,7 +300,7 @@ internal static class AnimVmInterpreter
             }
 
             AnimCmdSound.DAT_801fac42 = (byte)uVar3;
-            AnimCmdSound.FUN_8005fcec(AnimCmdSound.DAT_801fac41, (short)uVar3);
+            SoundEffects.FUN_8005fcec(AnimCmdSound.DAT_801fac41, (short)uVar3);
         }
     }
 

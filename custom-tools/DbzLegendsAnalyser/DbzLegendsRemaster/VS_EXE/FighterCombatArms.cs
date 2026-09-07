@@ -14,7 +14,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 //   1. copy the 8 bytes at DAT_8008d160/DAT_8008d164 into an 8-byte stack local (an SVECTOR-shaped
 //      {vx, vy, vz, pad} — FUN_800437ec reads exactly three shorts out of it);
-//   2. fire a sound/effect cue through BattleManager.FUN_8005ef20(<cue id>, fighter + 0x114), the cue id being a
+//   2. fire a sound/effect cue through SoundEffects.FUN_8005ef20(<cue id>, fighter + 0x114), the cue id being a
 //      literal that differs per function and, in two of the four, per branch;
 //   3. IF the target's state byte (+0x16A) is already 0x17 — and, in two of the four, the target's
 //      task node also already points at this attacker — do nothing but re-fire FUN_800437ec with
@@ -115,7 +115,7 @@ internal static class FighterCombatArms
     // THE LAYOUT IS THE ORIGINAL'S OWN, taken from the instructions, not invented. At 0x8004D348
     // `addiu v0, s8, 0x10` makes v0 the destination of the 8-byte copy, so auStack_18 sits at
     // s8+0x10 and auStack_14 at s8+0x14; at 0x8004D4DC `addiu v0, s8, 0x18` / `addiu a1, s8, 0x10`
-    // builds the two pointer arguments of `FUN_800437ec(&local_10, auStack_18, 2)`, so local_10 is
+    // builds the two pointer arguments of `EffectSystem.FUN_800437ec(&local_10, auStack_18, 2)`, so local_10 is
     // at s8+0x18 and its two neighbours local_e / local_c follow it as halfwords. Rebased to 0
     // here, the frame is: +0x00 auStack_18, +0x04 auStack_14, +0x08 local_10, +0x0A local_e,
     // +0x0C local_c — the same relative distances the console uses.
@@ -196,7 +196,7 @@ internal static class FighterCombatArms
         PsxRam.WriteI32(Fun8004d32cFrameAddress + 0x00, DAT_8008d160);
         PsxRam.WriteI32(Fun8004d32cFrameAddress + 0x04, DAT_8008d164);
 
-        BattleManager.FUN_8005ef20(1, param_1 + BattleState.FighterZeroedFrom114);
+        SoundEffects.FUN_8005ef20(1, param_1 + BattleState.FighterZeroedFrom114);
 
         // Each component is stored the moment it is computed, in the original's own order, rather
         // than computed into three C# locals and flushed at the end: the three rand() draws share
@@ -224,11 +224,11 @@ internal static class FighterCombatArms
         if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x17
             && PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8) == param_3)
         {
-            FUN_800437ec(Fun8004d32cFrameAddress + 0x08, Fun8004d32cFrameAddress + 0x00, 2);
+            EffectSystem.FUN_800437ec(Fun8004d32cFrameAddress + 0x08, Fun8004d32cFrameAddress + 0x00, 2);
         }
         else
         {
-            FUN_800437ec(Fun8004d32cFrameAddress + 0x08, Fun8004d32cFrameAddress + 0x00, 0);
+            EffectSystem.FUN_800437ec(Fun8004d32cFrameAddress + 0x08, Fun8004d32cFrameAddress + 0x00, 0);
             FighterCombat.FighterSetState(param_1, param_2);
 
             // Two stores with a real load between them, exactly as the original writes them.
@@ -254,15 +254,15 @@ internal static class FighterCombatArms
         PsxRam.WriteI32(Fun8004d574FrameAddress + 0x00, DAT_8008d160);
         PsxRam.WriteI32(Fun8004d574FrameAddress + 0x04, DAT_8008d164);
 
-        BattleManager.FUN_8005ef20(9, param_1 + BattleState.FighterZeroedFrom114);
+        SoundEffects.FUN_8005ef20(9, param_1 + BattleState.FighterZeroedFrom114);
 
         if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x17)
         {
-            FUN_800437ec(param_1 + 0x124, Fun8004d574FrameAddress + 0x00, 2);
+            EffectSystem.FUN_800437ec(param_1 + 0x124, Fun8004d574FrameAddress + 0x00, 2);
         }
         else
         {
-            FUN_800437ec(param_1 + 0x124, Fun8004d574FrameAddress + 0x00, 0xf);
+            EffectSystem.FUN_800437ec(param_1 + 0x124, Fun8004d574FrameAddress + 0x00, 0xf);
             FighterCombat.FighterSetState(param_1, param_2);
 
             PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfa640000));
@@ -305,24 +305,24 @@ internal static class FighterCombatArms
 
         if (param_2 == 0x19)
         {
-            BattleManager.FUN_8005ef20(6, param_1 + BattleState.FighterZeroedFrom114);
+            SoundEffects.FUN_8005ef20(6, param_1 + BattleState.FighterZeroedFrom114);
         }
         else if (param_2 < 0x1a)
         {
             if (param_2 == 0x18)
             {
-                BattleManager.FUN_8005ef20(5, param_1 + BattleState.FighterZeroedFrom114);
+                SoundEffects.FUN_8005ef20(5, param_1 + BattleState.FighterZeroedFrom114);
             }
         }
         else if (param_2 == 0x1a)
         {
-            BattleManager.FUN_8005ef20(7, param_1 + BattleState.FighterZeroedFrom114);
+            SoundEffects.FUN_8005ef20(7, param_1 + BattleState.FighterZeroedFrom114);
         }
 
         if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x17
             && PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8) == param_3)
         {
-            FUN_800437ec(param_1 + 0x124, Fun8004d694FrameAddress + 0x00, 2);
+            EffectSystem.FUN_800437ec(param_1 + 0x124, Fun8004d694FrameAddress + 0x00, 2);
         }
         else
         {
@@ -331,14 +331,14 @@ internal static class FighterCombatArms
                 param_3 + BattleState.FighterZeroedFrom114,
                 Fun8004d694FrameAddress + 0x00);
 
-            ushort uVar3 = FighterCombat.FUN_80045b70(
+            ushort uVar3 = EffectSystem.FUN_80045b70(
                 (short)PsxRam.ReadU16(Fun8004d694FrameAddress + 0x04),
                 (short)PsxRam.ReadU16(Fun8004d694FrameAddress + 0x02));
 
             PsxRam.WriteU16(Fun8004d694FrameAddress + 0x02, 0);
             PsxRam.WriteU16(Fun8004d694FrameAddress + 0x00, (ushort)((uVar3 & 0x80) << 8));
 
-            FUN_800437ec(param_1 + 0x124, Fun8004d694FrameAddress + 0x00, 0xc);
+            EffectSystem.FUN_800437ec(param_1 + 0x124, Fun8004d694FrameAddress + 0x00, 0xc);
             FighterCombat.FighterSetState(param_1, (ushort)param_2);
 
             PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfa640000));
@@ -424,22 +424,22 @@ internal static class FighterCombatArms
 
         if (iVar5 == 1)
         {
-            BattleManager.FUN_8005ef20(2, param_1 + BattleState.FighterZeroedFrom114);
+            SoundEffects.FUN_8005ef20(2, param_1 + BattleState.FighterZeroedFrom114);
         }
         else if (iVar5 < 2)
         {
             if (iVar5 == 0)
             {
-                BattleManager.FUN_8005ef20(1, param_1 + BattleState.FighterZeroedFrom114);
+                SoundEffects.FUN_8005ef20(1, param_1 + BattleState.FighterZeroedFrom114);
             }
         }
         else if (iVar5 == 2)
         {
-            BattleManager.FUN_8005ef20(3, param_1 + BattleState.FighterZeroedFrom114);
+            SoundEffects.FUN_8005ef20(3, param_1 + BattleState.FighterZeroedFrom114);
         }
         else if (iVar5 == 3)
         {
-            BattleManager.FUN_8005ef20(4, param_1 + BattleState.FighterZeroedFrom114);
+            SoundEffects.FUN_8005ef20(4, param_1 + BattleState.FighterZeroedFrom114);
         }
 
         AnimCmdMesh.ComputeYawPitchToTarget(
@@ -447,14 +447,14 @@ internal static class FighterCombatArms
             param_3 + BattleState.FighterZeroedFrom114,
             Fun8004d9f4FrameAddress + 0x00);
 
-        ushort uVar4 = FighterCombat.FUN_80045b70(
+        ushort uVar4 = EffectSystem.FUN_80045b70(
             (short)PsxRam.ReadU16(Fun8004d9f4FrameAddress + 0x04),
             (short)PsxRam.ReadU16(Fun8004d9f4FrameAddress + 0x02));
 
         PsxRam.WriteU16(Fun8004d9f4FrameAddress + 0x02, 0);
         PsxRam.WriteU16(Fun8004d9f4FrameAddress + 0x00, (ushort)((uVar4 & 0x80) << 8));
 
-        FUN_800437ec(param_1 + 0x124, Fun8004d9f4FrameAddress + 0x00, 0x11);
+        EffectSystem.FUN_800437ec(param_1 + 0x124, Fun8004d9f4FrameAddress + 0x00, 0x11);
         FighterCombat.FighterSetState(param_1, param_2);
 
         if (((PsxRam.ReadI32(param_1 + 0x138) & 0x800) == 0 || (sbyte)PsxRam.ReadU8(param_3 + 0x16a) != 0x25)
@@ -511,48 +511,10 @@ internal static class FighterCombatArms
         }
     }
 
-    // =====================================================================================
-    // The callees these four functions reach that are NOT in this slice, plus the one that IS
-    // already ported but is not reachable from here. Each is declared so the call site above is
-    // real, in the original's order and with the original's arguments.
-    //
-    // TWO CALLEES ARE NOT DECLARED HERE, because they are already ported and REACHABLE, and are
-    // called by qualified name rather than redeclared (the duplicate-address defect this repo has
-    // shipped before — compare addresses, not names):
-    //   FighterCombat.FighterSetState @ 0x80047C64 — a real body, `internal`.
-    //   Kernel.rand @ 0x80079B4C in VS.EXE — PsxSdkMonogame/Kernel.cs carries it under TITLE.EXE's
-    //   address 0x8006FD80, but read-memory at 0x80079B4C gives
-    //   `A0 00 0A 24 / 08 00 40 01 / 2F 00 09 24` = `li t2,0xA0 / jr t2 / li t1,0x2F`, the standard
-    //   psyq BIOS stub for A0(0x2Fh) = rand. Same BIOS entry, same LCG, one storage for the seed —
-    //   so this is the same function at a different overlay's stub address, not a second one.
-    // =====================================================================================
-
-    // GHIDRA: FUN_8005ef20 @ 0x8005EF20 (VS.EXE)
-    // NOT DECLARED HERE. BattleManager.cs already carries this address (still a BLOCKED stub of its
-    // own, 328 bytes); this file reaches it by qualified name rather than adding a second empty
-    // body at the same address, which is the defect check_function_addresses.py exists to catch.
-
     // GHIDRA: FUN_800437ec @ 0x800437EC (VS.EXE)
-    // BLOCKED: 212 bytes. Declared nowhere else in the port. SEVEN call sites in the whole overlay
-    // and all seven are in this file. Ghidra's signature is
-    // `void FUN_800437ec(undefined2 *param_1, undefined2 *param_2, undefined2 param_3)`; the two
-    // pointers are passed here as PSX addresses (ints), which is what they are.
-    //
-    // ITS BODY IS VISIBLE AND IS NOT REPRODUCED, on purpose — it is out of this slice. What is
-    // worth recording, because it is the trap this repository keeps falling into: its first act is
-    // `FUN_80053330(&LAB_800436d0, 0, 0xb, 0x58, 0, DAT_80083bbc)`, i.e. TaskSystem.CreateTask with
-    // 0x800436D0 as the entry point. Whoever ports this must ALSO register that entry point as a
-    // callback, or the node will be created and dispatch nothing. On success it copies three
-    // halfwords from param_1 into the new node's workspace at +0x3C/+0x3E/+0x40 and three from
-    // param_2 at +0x44/+0x46/+0x48, and links +0xC/+0x50/+0x54 into the workspace itself. So
-    // param_1 and param_2 are both three-halfword vectors: a position (or a fighter's +0x124) and
-    // the 8-byte block copied from DAT_8008d160.
-    private static void FUN_800437ec(int param_1, int param_2, ushort param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/EffectSystem.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is the defect check_function_addresses.py exists to catch.
 
     // GHIDRA: ComputeYawPitchToTarget @ 0x80045F34 (VS.EXE)
     // NOT DECLARED HERE, AND THIS ONE WAS A REAL LOSS while it was. AnimCmdMesh.cs ports it IN FULL

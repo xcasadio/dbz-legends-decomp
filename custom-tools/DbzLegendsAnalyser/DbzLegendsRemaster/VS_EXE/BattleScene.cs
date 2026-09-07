@@ -499,7 +499,7 @@ internal static class BattleScene
             // bzero(&DAT_801f2000, 0x8c48) — the animation workspace's own extent, the same clear
             // AnimCmd_RenderEntryGroup performs. AnimVm.cs owns the region.
             Array.Clear(AnimVm.RAM_801f2000, 0, 0x8C48);
-            AnimCmdSound.FUN_8005fcec(0, 0);
+            SoundEffects.FUN_8005fcec(0, 0);
 
             uVar12 = 0;
             uVar4 = 0;
@@ -846,7 +846,7 @@ internal static class BattleScene
                 {
                     if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 8) != 0)
                     {
-                        FUN_80042054(5, 0x20);
+                        EffectSystem.FUN_80042054(5, 0x20);
                     }
 
                     iVar2 = (int)FileIo.ReadFile(
@@ -941,7 +941,7 @@ internal static class BattleScene
     //
     //   1. The mode split on the battle context's +0x10 bit 3. Clear — the ordinary path — and it
     //      raises bit 27 of +0x138 on all six fighters. Set, and it instead demands
-    //      FUN_80042054(9,0) == 7 before doing anything, hard-codes two rotations, copies fighter 0's
+    //      EffectSystem.FUN_80042054(9,0) == 7 before doing anything, hard-codes two rotations, copies fighter 0's
     //      placement box into the workspace, then flattens ALL six fighters to one shared box
     //      (min -32767/-3000/-32767, max 32767/120/32767) and points the scratchpad camera at
     //      (0xFFFFB1E0, 0, 0xFFFF98F1). That is the replay/camera mode; the ordinary path leaves the
@@ -1042,7 +1042,7 @@ internal static class BattleScene
         }
         else
         {
-            iVar4 = FUN_80042054(9, 0);
+            iVar4 = EffectSystem.FUN_80042054(9, 0);
             if (iVar4 != 7)
             {
                 return;
@@ -1092,7 +1092,7 @@ internal static class BattleScene
             Scratchpad.DAT_1f8000c4 = unchecked((int)0xffffb1e0);
             Scratchpad.DAT_1f8000c8 = 0;
             Scratchpad.DAT_1f8000cc = unchecked((int)0xffff98f1);
-            FUN_80042054(4, 0x20);
+            EffectSystem.FUN_80042054(4, 0x20);
             PsxRam.WriteU16(PsxRam.ReadI32(local_b8 + 0x18) + 4, 0);
             PsxRam.WriteU8(PsxRam.ReadI32(local_b8 + 0x18) + 0x16a, 0);
         }
@@ -1612,7 +1612,7 @@ internal static class BattleScene
 
             if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 8) != 0)
             {
-                FUN_80042054(5, 0x20);
+                EffectSystem.FUN_80042054(5, 0x20);
             }
 
             PsxRam.WriteU16(Local18Address, 0x8000);
@@ -1629,7 +1629,7 @@ internal static class BattleScene
                 return;
             }
 
-            iVar5 = FUN_8005f530();
+            iVar5 = SoundEffects.FUN_8005f530();
             if (iVar5 == 0)
             {
                 return;
@@ -1733,13 +1733,13 @@ internal static class BattleScene
 
                 if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 0x8000000) == 0)
                 {
-                    iVar5 = FUN_80042054(9, 0);
+                    iVar5 = EffectSystem.FUN_80042054(9, 0);
                     if (iVar5 != 7)
                     {
                         return;
                     }
 
-                    FUN_80042054(4, 0x40);
+                    EffectSystem.FUN_80042054(4, 0x40);
                     PsxRam.WriteI32(BattleManager.DAT_8008d320 + 0x10,
                         unchecked((int)((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) | 2)));
                     FUN_8005ed70(-1, -1);
@@ -1971,111 +1971,10 @@ internal static class BattleScene
     // anywhere else in the port) and there is nothing to gain by withholding it.
     internal static int DAT_8008d3f4;
 
-    // GHIDRA: FUN_800424b0 @ 0x800424B0 (VS.EXE)
-    // TWIN OF TITLE_EXE/DisplayMachine.cs's UpdateScreenFade @ 0x80038684 — named for it rather
-    // than kept raw, on the same footing this project already gives VS_EXE/TaskSystem.cs's
-    // DeleteTask ("the C# name comes from there, the Ghidra symbol is still raw"). The match is
-    // recorded in docs/tasks/VS_EXE_TRANCHE4.md, not asserted fresh here: 932 bytes on both sides,
-    // 19 words differ under a strict compare and ZERO differ once the mask is extended to follow
-    // `lui`/`addu` through gp-relative offsets, and all 15 callees line up. This function's own
-    // 126-line decompilation (fetched separately, from Ghidra) agrees statement for statement with
-    // TITLE_EXE/DisplayMachine.cs's UpdateScreenFade once each TITLE address below is read as its
-    // VS.EXE counterpart:
-    //
-    //   TITLE_EXE_exe.DAT_800a897a & 1   (VM-suspend gate)   -> AnimVm.DAT_800b305a & 1 (this file
-    //                                                           already uses it, e.g. line 365)
-    //   TITLE_EXE_exe.DAT_80083454       (the state word)    -> VS_EXE_exe.DAT_8008d398 (already
-    //                                                           declared, ushort, at VS_EXE_exe.cs
-    //                                                           line ~514)
-    //   DisplayMachine._DAT_800834b4     (the fade step)     -> DAT_8008d3f4, above
-    //   g_FadeQuad.r0 (POLY_GT4Ref, the readback byte)       -> DAT_800c3c00
-    //   g_FadeQuad.{b,g,r}{0,1,2,3}  (twelve ramp bytes,     -> DAT_800c3c00/01/02, 0c/0d/0e,
-    //     stride 0xC — PsxSdkMonogame/PrimitiveRef.cs)          18/19/1a, 24/25/26
-    //   TaskSystem.DeleteTask(g_CurrentTask, ...)            -> the same call, unchanged: VS_EXE's
-    //                                                           own TaskSystem.cs already carries
-    //                                                           g_CurrentTask / g_CurrentTaskListIndex
-    //
-    // ONE FRAME of the fade: walks the twelve-byte ramp table toward 0x00 or 0xFF, one step
-    // (DAT_8008d3f4) per frame, and on the frame the ramp lands rewrites DAT_8008d398 and deletes
-    // its own task (guarded by DAT_8008d398 bit 0x4000 — see below). TITLE's own comment on the
-    // twin records that only the first byte is ever READ BACK; the other eleven are write-only
-    // mirrors of it, and case 6 (a three-frame step counter, not a per-frame delta: 0 -> 0x20,
-    // then 1 -> 8, then 2 -> the terminal state) writes all twelve directly without reading any.
-    //
-    // THE RAMP TABLE'S SHAPE. DAT_800c3c00..26, twelve bytes at stride 0xC in four groups of three
-    // (00/01/02, 0C/0D/0E, 18/19/1A, 24/25/26), sits at exactly POLY_GT4Ref's r/g/b triples
-    // (+4/+16/+28/+40 off a packet's own tag). VS_EXE_exe.cs's own DAT_800c3bfc constant
-    // (0x800C3C00 - 4, i.e. this packet's own tag address) is submitted through AddPrim at
-    // `DAT_8008d420 + 0x206c` by that file's FUN_800411b4 — the same call shape as TITLE's own
-    // `AddPrim(g_ActiveDrawEnvAddress + 0x206c, &g_FadeQuad)` — circumstantial confirmation that
-    // DAT_800c3bfc IS this overlay's g_FadeQuad. VS_EXE_exe.cs's own comment on that constant still
-    // calls the shape BLOCKED, written before this evidence existed; that comment sits outside this
-    // slice's ownership and is left exactly as it stands, so the twelve fields keep their raw
-    // Ghidra names here rather than adopting r0/g0/b0 etc. PROPOSED, not applied: once that
-    // comment is revisited, retype DAT_800c3bfc as a POLY_GT4Ref and rename these twelve bytes to
-    // its r/g/b fields.
-    //
-    // Ghidra prints the ramp accumulator and the "did we land on a terminal value" flag as
-    // `unaff_s0` / `bVar1` because the switch is an indirect `jr v0` through a jump table and it
-    // cannot see their definitions on every path; both are in fact assigned on every path that
-    // reads them, exactly as TITLE's own comment on the twin explains for its copy.
-    //
-    // BLOCKED ON A FILE THIS SLICE DOES NOT OWN, not on any remaining semantic gap — the body above
-    // is the full translation, not a placeholder for one. Every arm reads and writes
-    // VS_EXE_exe.DAT_8008d398, the SAME state word FUN_80042054 (below) dispatches on; that field
-    // is already declared in VS_EXE_exe.cs with a comment anticipating exactly this reader ("when
-    // FUN_80042054 is transliterated it must use THIS field rather than a second one over the same
-    // address"). Reusing it rather than declaring a second cell over 0x8008D398 is this project's
-    // own duplicate-symbol rule — but the existing declaration is `private`, and this task's brief
-    // scopes edits to VS_EXE/BattleScene.cs exclusively, so that declaration cannot be widened from
-    // here. The fix is one word, `private` -> `internal`, on VS_EXE_exe.cs's `DAT_8008d398` field
-    // (line ~514): TITLE_EXE_exe.cs's own twin field, DAT_80083454, already carries exactly that
-    // modifier for exactly this reason — it is read from DisplayMachine.cs, a different class in
-    // the same namespace, the same relationship BattleScene.cs would have to VS_EXE_exe.cs here.
-    // A shadow field declared in this file instead would compile, but would run this function
-    // against its OWN private copy of the state word while FUN_800411b4's `DAT_8008d398 > 1` guard
-    // and every other future reader kept watching the real one — a silent behavioural fork, which
-    // is worse than a stub. Left as a stub instead, per the mandate: a precise BLOCKED comment is a
-    // better outcome than an invented one, and every line of the real body is recorded above rather
-    // than only asserted, so applying the fix is mechanical rather than a second investigation.
-    internal static void UpdateScreenFade()
-    {
-        // BLOCKED: see this function's own comment above. The full body needs read/write access to
-        // VS_EXE_exe.DAT_8008d398, which is `private` to a different class this slice does not own.
-    }
-
     // GHIDRA: FUN_80042054 @ 0x80042054 (VS.EXE)
-    // BLOCKED. Called with (9,0), (4,0x20), (5,0x20) and (4,0x40) from this file, and with (8,0) and
-    // (2,4) from main. Two of those call sites READ THE RESULT and compare it against 7 —
-    // RenderBattleScene3D's camera arm and phase 4's sub-step 3 — so the return value is live.
-    //
-    // SOUCHE JADIS EN TRIPLE, declaree plutot que cachee — et c'est ce qui l'a fait fusionner.
-    // VS_EXE_exe.cs et BattleManager.cs portaient chacun une souche `void` pour la meme adresse, si
-    // bien que trois fonctions du port arboraient l'annotation `GHIDRA: FUN_80042054`. Les octets
-    // ont tranche la signature: sur onze appelants dans l'image, DEUX lisent $v0 (0x80035918 et
-    // 0x800372E0), donc la fonction retourne bien une valeur et les deux copies `void` perdaient
-    // l'information. Les deux souches sont supprimees; celle-ci est la seule, en `internal`.
-    //
-    // CONSEQUENCE OF THE STUB, stated so it is not mistaken for a port defect: returning 0 makes
-    // both `!= 7` tests fire, so the camera-mode arm of RenderBattleScene3D and the closing arm of
-    // phase 4 return early. Both are behind the battle context's +0x10 bit 3, which nothing in this
-    // port sets today, so neither is reached in the first place.
-    //
-    // UPDATE: its own callee, FUN_800424b0 (0x800424B0), is no longer an unrelated stub — it is
-    // TITLE_EXE/DisplayMachine.cs's UpdateScreenFade, above, and this function is that same file's
-    // ControlScreenFade twin by the identical evidence (docs/tasks/VS_EXE_TRANCHE4.md). Porting it
-    // for real hits the SAME VS_EXE_exe.DAT_8008d398 accessibility blocker UpdateScreenFade's own
-    // comment records, plus a second, larger one this comment does not attempt to close: unlike
-    // UpdateScreenFade (twelve raw bytes), ControlScreenFade's case 8 stamps g_FadeQuad's full
-    // geometry (x/y/u/v/clut/tpage, not just r/g/b), which this slice has deliberately NOT modelled
-    // as a POLY_GT4Ref over DAT_800c3bfc — see UpdateScreenFade's comment on why. Still returns 0
-    // rather than reaching for either.
-    internal static int FUN_80042054(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/EffectSystem.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is the defect check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_800600b0 @ 0x800600B0 (VS.EXE)
     // CLOSED. 112 bytes, 0x800600B0..0x8006011F. Two callers in this file — phase 0's sound-driver
@@ -2290,9 +2189,8 @@ internal static class BattleScene
     }
 
     // GHIDRA: FUN_8005f530 @ 0x8005F530 (VS.EXE)
-    // BLOCKED: the second readiness query of the same sub-step. Zero means not ready.
-    private static int FUN_8005f530()
-    {
-        return 0;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SoundEffects.cs. The call sites in this file
+    // reach it by qualified name; an empty stub in the enclosing class silently beats a real
+    // body elsewhere.
+
 }

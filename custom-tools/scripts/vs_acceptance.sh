@@ -38,3 +38,13 @@ echo "seam: $SEAM/5"
 
 echo "=== diag-select 400 (temoin de non-regression: 49396) ==="
 dotnet run --project "$PROJ" --no-build -- --diag-select 400 2>&1 | grep -E "VRAM page0"
+
+# The VS.EXE round-start chain, end to end. The two environment variables are the
+# measurement, not a detail: DBZ_PAD_PRESS_MASK=0x0800 is R1 (PSX pad bit 11), the
+# button that drives the round-start override at 0x80056358, and frame 300 is early
+# enough to leave 600 of the 900 frames inside the round. Every phase count below is
+# linear in that frame, so changing either number changes every number printed.
+echo "=== diag-vs 900, R1 @ frame 300 (temoins: phases 2..9 = 1200, sprites 15120/7198) ==="
+DBZ_PAD_PRESS_MASK=0x0800 DBZ_PAD_PRESS_FRAME=300 \
+  dotnet run --project "$PROJ" --no-build -- --diag-vs 900 2>&1 \
+  | grep -E "LES PHASES|pad port|DESSINEUR DE SPRITES"
