@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -222,6 +222,8 @@ internal static class FighterTask
                                 // nommes CtxActingSlotTeamA / CtxActingSlotTeamB dans BattleState.
                                 // Les acces bruts ci-dessous sont laisses tels quels: les reecrire
                                 // toucherait une transliteration deja verifiee pour un gain nul.
+                                DiagPhaseEntries[8]++;
+
                                 if (PsxRam.ReadU16(PsxRam.ReadI32(iVar3 + BattleState.FighterBattleContext) + 0x14)
                                         == (ushort)PsxRam.ReadU8(iVar3 + BattleState.FighterSlotIndex)
                                     && ((uint)PsxRam.ReadI32(

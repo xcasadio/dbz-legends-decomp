@@ -304,13 +304,51 @@ sources, le dessineur soumet 7198 quads. Mais **aucune opcode d'attaque 0x23..0x
 n'est produite**, donc les deux racines de la chaine de jauge — `FUN_8004ee48` et
 `FUN_8004e758` — ne sont jamais appelees et `AddSlotGaugeContribution` non plus.
 
-Ce n'est plus « il manque une fonction ». C'est une condition d'etat. Les deux
-pistes, dans cet ordre, et **a mesurer, pas a raisonner** :
+Ce n'est plus « il manque une fonction ». **C'est un etat de combattant qui n'est
+jamais atteint, et la chaine est tracee jusqu'a son dernier maillon connu** —
+mesuree avec des sondes, pas raisonnee. Le banc imprime maintenant :
 
-1. **La distance.** Les bras d'attaque de l'IA sont gates sur une distance
-   `< 0x2C1` et les combattants demarrent aux bornes de l'arene. Instrumenter la
-   distance reelle par frame avant tout le reste : si elle ne descend jamais sous
-   0x2C1, le probleme est le deplacement, pas la decision.
+```
+LA PORTE DU BRAS D ATTAQUE DE L IA (+0x138 bit 0x10, FighterAi.cs:600):
+ FUN_8004b9cc appelee : 0   FUN_800261ec appelee : 0   dont -1 precoce : 0
+ FUN_8004a9e8 (seul ecrivain du bit 0x10) appelee : 0   dernier local_10 : -1
+```
+
+**LA CHAINE, DE L'OPCODE D'ATTAQUE VERS L'AMONT.** Chaque fleche est un seul
+ecrivain ou un seul appelant, verifie par `find-cross-references` :
+
+1. La jauge veut une opcode 0x23..0x28. Seul `FUN_8002631c` en produit.
+2. Le ladder de l'IA qui l'appelle (`FighterAi.cs:600`) est garde par le **bit 0x10
+   du +0x138** du combattant.
+3. Le seul ecrivain du bit 0x10 de tout l'overlay est **`FUN_8004a9e8` @ 0x8004A9E8**
+   (`FighterAction.cs`). Mesure : appele **0 fois**.
+4. Il n'est atteint que depuis `FUN_8004b9cc` (0x8004B9CC), et seulement quand cette
+   fonction obtient un `local_10` de 0x23..0x25 — que lui donne `FUN_800261ec`, la
+   fonction fermee a la derniere session. Mesure : `FUN_8004b9cc` appelee **0 fois**.
+5. `FUN_8004b9cc` a **un seul appelant**, `FUN_8004c198` @ 0x8004C198 (l'etape 9.4 de
+   `FighterTask.cs:325`), et il n'y route que quand le **bit 0x20** est pose.
+6. Le seul ecrivain du bit 0x20 est **`FUN_8004b33c` @ 0x8004B33C**, atteint depuis
+   `FUN_8004bb70` quand la commande vaut 0x2A — et `FUN_8004c198` ne route vers
+   `FUN_8004bb70` que quand le **bit 0x08** est pose.
+7. Le bit 0x08 vient de `FighterCombat.FUN_8004a97c` @ 0x8004A97C.
+
+**OU CA S'ARRETE, MESURE.** `+0x138 cumules : 0x70040006` : les bits 1 et 2 sont
+poses, **et ni 0x08, ni 0x10, ni 0x20 ne le sont jamais**. Donc `FUN_8004c198`
+prend systematiquement son dernier bras, `bits 6 != 0` -> `FUN_8004bf50`, et le
+combattant tourne en rond dans l'etat « bits 1|2 » sans jamais entrer dans la
+sequence d'action.
+
+**LA PROCHAINE QUESTION, precise :** qui pose et qui efface les bits 1 et 2 du
++0x138 (`FighterAction.cs:58` et `:71` sont les ecrivains), et quelle entree fait
+sortir un combattant de cet etat. C'est la meme forme de question que la chaine de
+demarrage de round : un seul ecrivain, un seul appelant, une sonde par maillon.
+**Ne pas raisonner : les sondes de `FighterAction.cs` sont deja en place, en
+ajouter une par bras de `FUN_8004c198` et relancer.**
+
+Deux pistes secondaires si celle-la se ferme :
+
+1. **La distance.** `BattleCamera.cs:511` compare une separation a `0x2C1` et les
+   combattants demarrent aux bornes de l'arene.
 2. **Une vraie entree joueur.** `DBZ_PAD_PRESS_MASK` ne presse qu'un bouton pendant
    deux frames. Une sequence d'attaque du decodeur de `FighterInput.cs` (la boussole
    a huit points des boutons de face) n'a jamais ete jouee au banc.

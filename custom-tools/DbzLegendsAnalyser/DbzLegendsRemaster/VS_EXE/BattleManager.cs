@@ -1867,12 +1867,11 @@ internal static class BattleManager
     //      interpolation through the newly embedded DAT_80084234 table.
     //  20. THE FINAL SUBMISSION: ten primitives at ctx+0x2DCC, an eleventh when CtxTallyValue > 9.
     //
-    // WHAT IS STILL NOT CLOSED. BuildSlotDigitQuads stays its own BLOCKED stub -- its own header explains
-    // why (two pointer tables with no self-referential span to embed against). FUN_80026d98 is
-    // declared below as a stub for the same reason its own comment gives: its own dependency chain
-    // (FUN_80027340 and four functions past it) is unported. Most of the eighteen CtxFlags bits and
-    // the sixteen ctx+0x2F3C..0x2F7E "pose" halfwords are POSITIONS this port can now name, not
-    // MEANINGS this slice closes -- consistent with the file header's own PARTIAL above.
+    // WHAT IS STILL NOT CLOSED. Nothing in the CODE: BuildSlotDigitQuads is transliterated below
+    // and FUN_80026d98 is closed as RunFighterSubstitution in VS_EXE/FighterSubstitution.cs. What
+    // remains open is MEANING, not coverage: most of the eighteen CtxFlags bits and the sixteen
+    // ctx+0x2F3C..0x2F7E "pose" halfwords are POSITIONS this port can name and not MEANINGS this
+    // slice closes -- consistent with the file header's own PARTIAL above.
     //
     // EVERY LOOP BELOW KEEPS the file's own established `iVarN = iVarN * 0x10000; ... iVarN *
     // 0x10000 >> 0x10` idiom literally, for the same reason RunBattleRound's own header gives: it is

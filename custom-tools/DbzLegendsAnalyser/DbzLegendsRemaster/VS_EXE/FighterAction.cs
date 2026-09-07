@@ -30,7 +30,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // A SECOND WAVE through this file, ported after the eight above, adds five more leaves —
 // FUN_8004b9cc, FUN_8004bb70, FUN_8004bd3c, FUN_8004bf50, FUN_8004ad80 — plus one more decisive
-// supporting leaf (FUN_8004b33c) and two BLOCKED stubs (FUN_800261ec, FUN_8004b68c) for callees
+// supporting leaf (FUN_8004b33c) and two addresses left to other slices at the time (FUN_800261ec, since closed in this file; FUN_8004b68c, closed in FighterMotion.cs) for callees
 // this file's own scope does not reach. See the "WAVE 2" header comment further down, right
 // before FUN_8004b9cc, for the full account, including why a sixth address named in that wave's
 // brief (FUN_8004aa9c) is deliberately absent from this file.
@@ -193,6 +193,22 @@ internal static class FighterAction
         return uVar1;
     }
 
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Nothing in the
+    // transliterated runtime touches them. They exist because the AI's whole attack ladder in
+    // FighterAi.cs:600 is gated on the fighter's +0x138 bit 0x10, the bench measured that bit as
+    // never raised, and FUN_8004a9e8 below is the ONLY writer of it in the overlay. These say
+    // which of its three callers is not arriving.
+    internal static int DiagFun8004b9ccCalls;
+
+    internal static int DiagFun800261ecCalls;
+
+    internal static int DiagFun800261ecReturnedMinusOne;
+
+    internal static int DiagFun8004a9e8Calls;
+
+    internal static int DiagLocal10EverSeen = -1;
+
     // GHIDRA: FUN_8004a9e8 @ 0x8004A9E8 (VS.EXE)
     // 92 bytes. NOT one of the eight named addresses for this wave — added because FUN_8004b8a0
     // below calls it directly and, per this file's own header note, leaving that call site
@@ -201,6 +217,7 @@ internal static class FighterAction
     // Two statements: stamp the given state, then set +0x138 bit 4 (0x10).
     internal static void FUN_8004a9e8(int param_1, ushort param_2)
     {
+        DiagFun8004a9e8Calls++;
         FighterCombat.FighterSetState(param_1, param_2);
         PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) | 0x10);
     }
@@ -277,6 +294,7 @@ internal static class FighterAction
     // dispatches nowhere — reproduced exactly, not a gap.
     internal static void FUN_8004b9cc(int param_1)
     {
+        DiagFun8004b9ccCalls++;
         if ((short)PsxRam.ReadU16(param_1 + 4) == 0)
         {
             PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xffffff9f));
@@ -298,6 +316,7 @@ internal static class FighterAction
                 local_10 = FighterMotion.FUN_8004b68c(param_1);
             }
 
+            DiagLocal10EverSeen = local_10;
             if (local_10 == -1)
             {
                 FighterCombat.FUN_8004a638(param_1, 0);
@@ -321,8 +340,8 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_800261ec @ 0x800261EC (VS.EXE)
-    // BLOCKED: 304 bytes, out of this slice. Called from FUN_8004b9cc above as
-    // FUN_800261ec(fighter) when +0x138 bits 0x30000000 are both clear. 304 bytes, one caller.
+    // 304 bytes, one caller: FUN_8004b9cc above, as FUN_800261ec(fighter) when the fighter's
+    // +0x138 bits 0x30000000 are both clear.
     //
     // WHAT IT IS: the SHORT form of the archetype walk FighterAi.FUN_80023890 does in full. That
     // function reads all nine bytes of the twelve-byte row and resolves nine leaf pointers; this
@@ -353,19 +372,23 @@ internal static class FighterAction
     // 0x800262BC reaches. One arm, two ways in.
     private static int FUN_800261ec(int param_1)
     {
+        DiagFun800261ecCalls++;
         int iVar2 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0xac) + 8);
         if (param_1 == iVar2)
         {
+            DiagFun800261ecReturnedMinusOne++;
             return -1;
         }
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x4000000) != 0)
         {
+            DiagFun800261ecReturnedMinusOne++;
             return -1;
         }
 
         if (((uint)PsxRam.ReadI32(iVar2 + 0x138) & 0x4000000) != 0)
         {
+            DiagFun800261ecReturnedMinusOne++;
             return -1;
         }
 

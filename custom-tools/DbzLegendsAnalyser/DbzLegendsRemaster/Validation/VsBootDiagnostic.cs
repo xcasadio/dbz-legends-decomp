@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using DbzLegendsRemaster.VS_EXE;
 using PsxSdkMonogame;
 
@@ -323,6 +323,17 @@ internal static class VsBootDiagnostic
             Console.WriteLine(
                 "  ou son paquet n'atterrit dans aucune region modelisee. Les deux se voient ici.");
         }
+
+        Console.WriteLine();
+        Console.WriteLine();
+        Console.WriteLine("  LA PORTE DU BRAS D ATTAQUE DE L IA (+0x138 bit 0x10, FighterAi.cs:600):");
+        Console.WriteLine(
+            $"   FUN_8004b9cc appelee : {FighterAction.DiagFun8004b9ccCalls}"
+            + $"   FUN_800261ec appelee : {FighterAction.DiagFun800261ecCalls}"
+            + $"   dont -1 precoce : {FighterAction.DiagFun800261ecReturnedMinusOne}");
+        Console.WriteLine(
+            $"   FUN_8004a9e8 (seul ecrivain du bit 0x10) appelee : {FighterAction.DiagFun8004a9e8Calls}"
+            + $"   dernier local_10 : {FighterAction.DiagLocal10EverSeen}");
 
         Console.WriteLine();
         Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
