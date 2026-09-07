@@ -124,6 +124,16 @@ internal static class VsBootDiagnostic
         }
 
         Console.WriteLine();
+        int bgR = VS_EXE_exe.DiagBackgroundR;
+        int bgG = VS_EXE_exe.DiagBackgroundG;
+        int bgB = VS_EXE_exe.DiagBackgroundB;
+        Console.WriteLine(
+            $"fond du DRAWENV : RGB({bgR}, {bgG}, {bgB})"
+            + ((bgR == 0 && bgG == 0 && bgB == 200)
+                ? "   <-- le defaut code en dur: FUN_800414ec n'a PAS tourne"
+                : "   <-- une variante de VariantBackgroundColorTable: FUN_800414ec a tourne"));
+
+        Console.WriteLine();
         Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");

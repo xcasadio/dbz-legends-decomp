@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
@@ -139,6 +139,20 @@ internal sealed class VS_EXE_exe
     private static int DAT_8008d390;
 
     private static int DAT_8008d394;
+
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: read-only diagnostic accessors for Validation/VsBootDiagnostic.cs. The three
+    // globals above stay private -- the original's are file-local and nothing outside writes them.
+    // These exist because the DRAWENV background colour is the one thing about this overlay that is
+    // visible without any rendering at all, which makes it a cheap, machine-checkable proof of how
+    // far boot got: main seeds (0, 0, 200), the hardcoded dark blue, and FUN_800414ec then
+    // overwrites all three from VariantBackgroundColorTable @ 0x80082C30 with one of eight
+    // variants. Seeing a variant colour means that function ran; seeing 0/0/200 means it did not.
+    internal static int DiagBackgroundR => DAT_8008d394;
+
+    internal static int DiagBackgroundG => DAT_8008d390;
+
+    internal static int DiagBackgroundB => DAT_8008d38c;
 
     // GHIDRA: DAT_8008d334 @ 0x8008D334 (VS.EXE)
     // The CLUT id of the all-white 256-entry palette main builds on the stack and uploads to
