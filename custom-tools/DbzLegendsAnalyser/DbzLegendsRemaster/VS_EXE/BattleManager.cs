@@ -1722,19 +1722,1678 @@ internal static class BattleManager
     // =====================================================================================
 
     // GHIDRA: FUN_8005a5b0 @ 0x8005A5B0 (VS.EXE)
-    // BLOCKED: 8500 bytes, by far the largest thing this slice reaches, and it runs on EVERY path
-    // of every state including the suspended one. Whatever the manager's real per-frame work is, the
-    // bulk of it is in here.
+    // THE BATTLE MANAGER'S PER-FRAME BODY. 8500 bytes, 1078 decompiled lines, by far the largest
+    // thing this slice reaches, and it runs on EVERY path of every state including the suspended
+    // one. param_1 is declared `short *`, so every Ghidra index below is a HALFWORD index; this
+    // port keeps every access as a PsxRam call at the corresponding BYTE address instead, exactly
+    // the discipline the rest of this file already uses.
+    //
+    // THE SHAPE, confirmed against the decompilation line by line:
+    //   1. Top gate: everything up to the per-slot primitive submission sits inside
+    //      `if ((AnimVm.DAT_800b305a & 1) == 0)` -- the VM-suspend bit clear, i.e. running.
+    //   2. Zero local_b8 (twelve halfwords -- the 32768-entry auStack_100b8 Ghidra also declares
+    //      does not exist on the real 200-byte frame, and is not modelled).
+    //   3. Clamp four CtxSlotRecords fields per slot.
+    //   4. Gated on CtxFlags bit 0x10000000: the "a slot just went idle" one-shot -- see the block
+    //      comment at its own site for the full list of what it touches.
+    //   5. Gated on CtxFlags bit 0x20000000: THE TEAM-WIPE BRANCH -- this is the writer of CtxState
+    //      = 2 BattleState.cs's own header now records.
+    //   6. Two unconditional per-team passes stamping SubRecordFlags bit 0x08 and SubRecordOrdinal.
+    //   7. A per-slot reseed of subrecord+0x18/+0x1A keyed on SubRecordOrdinal, through the newly
+    //      embedded DAT_80083e1c/1e table.
+    //   8. THE PER-SLOT RENDER LOOP: an animated-value follower, ki/HP shadow copies, SubRecordFlags
+    //      sync, and a three-way colour pick (through Roster.cs's own portrait coordinate table).
+    //   9. Two small per-slot counters (subrecord+0xE, subrecord+0x16) driving local_b8's dirty bits.
+    //  10. THE NUMERIC-READOUT TARGET STATE MACHINE at subrecord+0x24 -- an eleven-tier hold/advance
+    //      sequence tracking CtxSlotRecords+0xA.
+    //  11. The twelve-slot HUD sub-loop: FUN_80057a7c, FUN_80058120 (twice) and FUN_80058338.
+    //  12. THE PER-SLOT PRIMITIVE SUBMISSION -- runs on every path, suspended VM included.
+    //  13. Suspended-VM early exit: submit the tally icon's own primitives and return.
+    //  14. Walk the published cursor at ctx+0x1A onto the next alive+marked slot.
+    //  15. Outside state 1, force CtxRoundRequest to zero.
+    //  16. CtxRoundRequest bits 0/1: THE TEAM-A/TEAM-B TALLIES.
+    //  17. CtxRoundRequest bit 2: THE WIN/LOSS COMPUTE, and bits 0x100/0x180 gating FUN_80026d98
+    //      (BLOCKED -- see its own declaration below).
+    //  18. Gated on CtxFlags bit 0x100000: THE TALLY ICON'S OWN MAX-SCAN over CtxSlotRecords+0xA.
+    //  19. THE TALLY ICON'S OWN DISPLAY STATE MACHINE on CtxTallyState, including the keyframe
+    //      interpolation through the newly embedded DAT_80084234 table.
+    //  20. THE FINAL SUBMISSION: ten primitives at ctx+0x2DCC, an eleventh when CtxTallyValue > 9.
+    //
+    // WHAT IS STILL NOT CLOSED. FUN_80058338 stays its own BLOCKED stub -- its own header explains
+    // why (two pointer tables with no self-referential span to embed against). FUN_80026d98 is
+    // declared below as a stub for the same reason its own comment gives: its own dependency chain
+    // (FUN_80027340 and four functions past it) is unported. Most of the eighteen CtxFlags bits and
+    // the sixteen ctx+0x2F3C..0x2F7E "pose" halfwords are POSITIONS this port can now name, not
+    // MEANINGS this slice closes -- consistent with the file header's own PARTIAL above.
+    //
+    // EVERY LOOP BELOW KEEPS the file's own established `iVarN = iVarN * 0x10000; ... iVarN *
+    // 0x10000 >> 0x10` idiom literally, for the same reason FUN_80055f94's own header gives: it is
+    // how the original's `short` induction variables survive into the object code, and the
+    // truncation is what bounds them. THREE SETS OF GOTOS could not be kept as C# `goto`: two jump
+    // INTO a sibling if/else arm (the SubRecordOrdinal sync at 0x8005AE38 and the numeric-readout
+    // state machine's own LAB_8005b880/LAB_8005b890 pair), reproduced the same way this file's other
+    // forced departures are, by duplicating the shared statement in both arms; one (LAB_8005ad30, the
+    // knock-out-counter arm) collapses to an unconditional `iVar21 = 0x60000` on every path and is
+    // reproduced with a boolean flag rather than a literal goto. LAB_8005c624 (three call sites, one
+    // statement) and LAB_8005c6a0 (one call site reached both by fall-through and by an actual
+    // forward `goto` out of the suspended-VM branch, which C# allows since it does not jump into a
+    // block) are the two the port keeps as-is.
     private static void FUN_8005a5b0(int param_1)
+    {
+        byte uVar1;
+        sbyte cVar2;
+        ushort uVar3;
+        short sVar4;
+        int iVar5;
+        int iVar6;
+        short sVar7;
+        short sVar8;
+        int iVar9;
+        uint uVar10;
+        int puVar11;
+        int psVar12;
+        int puVar13;
+        int iVar14;
+        ushort uVar15;
+        bool bVar16;
+        int psVar17;
+        int iVar19;
+        int puVar20;
+        int ot;
+        int iVar21;
+        ushort[] local_b8 = new ushort[12];
+
+        puVar20 = param_1 + BattleState.CtxSlotSubRecords;
+
+        if ((AnimVm.DAT_800b305a & 1) == 0)
+        {
+            // 0x8005A5D8 -- zero the twelve halfwords of local_b8. The 32768-entry auStack_100b8
+            // Ghidra declares does not exist on the real 200-byte frame (addiu sp,sp,-0xc8); only
+            // this 12-entry scratch does, and this loop is its only initialiser.
+            iVar21 = 0;
+            iVar5 = 0;
+            do
+            {
+                local_b8[iVar5 >> 0x10] = 0;
+                iVar21 = iVar21 + 1;
+                iVar5 = iVar21 * 0x10000;
+            } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005A600 -- clamp four CtxSlotRecords fields per slot, all SIGNED halfword loads:
+            // +0x2 -> [0,0x640], CtxKiGauge -> [0,16000], +0x6 -> [0,20000], +0xA -> [0,99].
+            iVar21 = 0;
+            iVar5 = 0;
+            do
+            {
+                iVar5 = iVar5 >> 0x10;
+                if (0x640 < (short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2))
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2, 0x640);
+                }
+                if ((short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2) < 0)
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2, 0);
+                }
+                if (16000 < (short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge))
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge, 16000);
+                }
+                if ((short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge) < 0)
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge, 0);
+                }
+                if (20000 < (short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6))
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6, 20000);
+                }
+                if ((short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6) < 0)
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6, 0);
+                }
+                if (99 < (short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xA))
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xA, 99);
+                }
+                iVar21 = iVar21 + 1;
+                if ((short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xA) < 0)
+                {
+                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xA, 0);
+                }
+                iVar5 = iVar21 * 0x10000;
+            } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005A688 -- gated on CtxFlags bit 0x10000000: a 12-slot scan for the first slot with
+            // record+2 == 0 and record flags bit 0x200 set. On a hit: OR 0x4000000 into that slot's
+            // OWN fighter's +0x138 (no null guard in the original -- none added here, Rule 12), keep
+            // only record-flag bits 0x81 and set 0x1000, clear SubRecordFlags bit 0x200, zero three
+            // CtxSlotRecords fields (+0x6, CtxKiGauge, +0x2) and three SUBRECORD fields (+0x2, +0x4,
+            // +0x6), store 0x80 (or 0x40 when CtxFlags bit 0x4000 is clear) at ctx+0x2D64, the slot
+            // index at ctx+0x2D66, touch the ctx+0x2C14 per-slot halfword for this slot, OR
+            // 0x10000600 into CtxFlags, then broadcast bit 0x2000000 into every fighter task's +0x138.
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x10000000) == 0)
+            {
+                uVar3 = 0;
+                psVar12 = param_1 + 0x22;
+                iVar5 = 0;
+                puVar13 = puVar20;
+                do
+                {
+                    iVar5 = iVar5 >> 0x10;
+                    if ((short)PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2) == 0
+                        && (PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+                    {
+                        int fighterTask = PsxRam.ReadI32(param_1 + BattleState.CtxFighterSlots + iVar5 * 4);
+                        int fighter = PsxRam.ReadI32(fighterTask + 8);
+                        PsxRam.WriteI32(fighter + 0x138, (int)((uint)PsxRam.ReadI32(fighter + 0x138) | 0x4000000));
+
+                        PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                            (ushort)((PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x81) | 0x1000));
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) & 0xfdff));
+                        PsxRam.WriteU16(psVar12 + 4, 0);
+                        PsxRam.WriteU16(psVar12 + 2, 0);
+                        PsxRam.WriteU16(psVar12, 0);
+                        PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6, 0);
+                        PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge, 0);
+                        PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2, 0);
+
+                        sVar8 = 0x80;
+                        if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x4000) == 0)
+                        {
+                            sVar8 = 0x40;
+                        }
+                        PsxRam.WriteU16(param_1 + 0x2d64, (ushort)sVar8);
+                        iVar5 = (int)((uint)uVar3 << 0x10) >> 0xf;
+                        PsxRam.WriteU16(param_1 + 0x2d66, uVar3);
+                        uVar15 = PsxRam.ReadU16(param_1 + iVar5 + 0x2c14);
+                        iVar21 = 0;
+                        if ((uVar15 & 0x200) != 0)
+                        {
+                            PsxRam.WriteU16(param_1 + iVar5 + 0x2c14, (ushort)(uVar15 & 0xf9f7));
+                        }
+                        PsxRam.WriteU16(param_1 + iVar5 + 0x2c14, (ushort)(PsxRam.ReadU16(param_1 + iVar5 + 0x2c14) & 0xfbef));
+                        PsxRam.WriteI32(param_1 + BattleState.CtxFlags, (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) | 0x10000600));
+
+                        iVar5 = 0;
+                        do
+                        {
+                            iVar5 = PsxRam.ReadI32((iVar5 >> 0xe) + param_1 + BattleState.CtxFighterSlots);
+                            if (iVar5 != 0)
+                            {
+                                iVar5 = PsxRam.ReadI32(iVar5 + 8);
+                                PsxRam.WriteI32(iVar5 + 0x138, (int)((uint)PsxRam.ReadI32(iVar5 + 0x138) | 0x2000000));
+                            }
+                            iVar21 = iVar21 + 1;
+                            iVar5 = iVar21 * 0x10000;
+                        } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+                    }
+                    else
+                    {
+                        psVar12 = psVar12 + 0x1c0;
+                        puVar13 = puVar13 + 0x1c0;
+                    }
+                    uVar3 = (ushort)(uVar3 + 1);
+                    iVar5 = (int)((uint)uVar3 << 0x10);
+                } while ((short)uVar3 < 0xc);
+            }
+
+            // 0x8005A788 -- gated on CtxFlags bit 0x20000000: THE TEAM-WIPE BRANCH, mirrored for
+            // slots 0..5 and 6..11. uVar10 is the slot ctx+0x2D66 named (the slot the previous gate,
+            // above, just marked down). Its own record is force-set to 0x10, CtxRoundRequest gets its
+            // team-A (bit 0) or team-B (bit 1) tally armed, and if that slot was the active team's own
+            // acting-slot cursor (CtxActingSlotTeamA / CtxActingSlotTeamB) the cursor is walked to the
+            // next living+marked slot. ON A FULL TEAM WIPE -- the cursor search exhausts with no slot
+            // left alive at all -- CtxState is written 2 (sh v1,0x0(s2) @ 0x8005AE04, mirrored by the
+            // team-B arm's own sh v0,0x0(param_1)), which is the writer BattleState.cs records.
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x20000000) != 0)
+            {
+                uVar10 = PsxRam.ReadU16(param_1 + 0x2d66);
+                PsxRam.WriteU16(param_1 + (int)uVar10 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords, 0x10);
+                if ((int)uVar10 < 6)
+                {
+                    PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                        (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 1));
+                    if (((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x70) >> 4 == uVar10)
+                    {
+                        PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                            (int)(((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0xffffff8f) | 0x150));
+                    }
+
+                    if ((short)PsxRam.ReadU16(param_1 + BattleState.CtxActingSlotTeamA) == uVar10)
+                    {
+                        iVar21 = 0;
+                        iVar5 = 0;
+                        do
+                        {
+                            sVar8 = (short)iVar21;
+                            if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0
+                                && (PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+                            {
+                                PsxRam.WriteU16(param_1 + BattleState.CtxActingSlotTeamA, (ushort)sVar8);
+                                break;
+                            }
+                            iVar21 = iVar21 + 1;
+                            sVar8 = (short)iVar21;
+                            iVar5 = iVar21 * 0x10000;
+                        } while (iVar21 * 0x10000 >> 0x10 < 6);
+
+                        if (sVar8 == 6)
+                        {
+                            iVar21 = 0;
+                            iVar5 = 0;
+                            do
+                            {
+                                iVar6 = iVar5 + 1;
+                                if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0)
+                                {
+                                    break;
+                                }
+                                iVar21 = iVar6 * 0x10000;
+                                iVar5 = iVar6;
+                            } while (iVar6 * 0x10000 >> 0x10 < 6);
+                            iVar21 = iVar5 << 0x10;
+
+                            if ((short)iVar5 < 6)
+                            {
+                                iVar21 = 0;
+                                iVar5 = 0;
+                                do
+                                {
+                                    iVar5 = PsxRam.ReadI32((iVar5 >> 0xe) + param_1 + BattleState.CtxFighterSlots);
+                                    if (iVar5 != 0)
+                                    {
+                                        iVar5 = PsxRam.ReadI32(iVar5 + 8);
+                                        PsxRam.WriteI32(iVar5 + 0x138, (int)((uint)PsxRam.ReadI32(iVar5 + 0x138) | 0x2000000));
+                                    }
+                                    iVar21 = iVar21 + 1;
+                                    iVar5 = iVar21 * 0x10000;
+                                } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+
+                                sVar8 = 0;
+                                iVar21 = 0;
+                                iVar5 = 0;
+                                do
+                                {
+                                    if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0
+                                        && (PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) + 0x2c14) & 0x80) == 0)
+                                    {
+                                        sVar8 = (short)(sVar8 + 1);
+                                    }
+                                    iVar21 = iVar21 + 1;
+                                    iVar5 = iVar21 * 0x10000;
+                                } while (iVar21 * 0x10000 >> 0x10 < 6);
+
+                                if (sVar8 == 0)
+                                {
+                                    iVar21 = 0;
+                                    iVar5 = 0;
+                                    do
+                                    {
+                                        iVar5 = iVar5 >> 0x10;
+                                        iVar21 = iVar21 + 1;
+                                        if ((PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0)
+                                        {
+                                            PsxRam.WriteU16(param_1 + iVar5 * 2 + 0x2c14,
+                                                (ushort)(PsxRam.ReadU16(param_1 + iVar5 * 2 + 0x2c14) & 0xff1f));
+                                            break;
+                                        }
+                                        iVar5 = iVar21 * 0x10000;
+                                    } while (iVar21 * 0x10000 >> 0x10 < 6);
+                                }
+
+                                if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x4000) == 0)
+                                {
+                                    PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                                        (int)(((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0xffffcfff) | 0x4000));
+                                }
+                                PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                                    (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) | 0x8000));
+                                iVar21 = 0;
+                            }
+
+                            if (iVar21 >> 0x10 == 6)
+                            {
+                                iVar5 = 0;
+                                do
+                                {
+                                    iVar21 = PsxRam.ReadI32(((int)(uVar10 << 0x10) >> 0xe) + param_1 + BattleState.CtxFighterSlots);
+                                    if (iVar21 != 0)
+                                    {
+                                        iVar21 = PsxRam.ReadI32(iVar21 + 8);
+                                        PsxRam.WriteI32(iVar21 + 0x138, (int)((uint)PsxRam.ReadI32(iVar21 + 0x138) | 0x80000000));
+                                    }
+                                    iVar5 = iVar5 + 1;
+                                } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+                                PsxRam.WriteU16(param_1, 2);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                        (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 2));
+
+                    if ((short)PsxRam.ReadU16(param_1 + BattleState.CtxActingSlotTeamB) == uVar10)
+                    {
+                        sVar8 = 6;
+                        do
+                        {
+                            if ((PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0
+                                && (PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+                            {
+                                PsxRam.WriteU16(param_1 + BattleState.CtxActingSlotTeamB, (ushort)sVar8);
+                                break;
+                            }
+                            sVar8 = (short)(sVar8 + 1);
+                        } while (sVar8 < 0xc);
+
+                        if (sVar8 == 0xc)
+                        {
+                            iVar5 = 0x60000;
+                            uVar3 = 6;
+                            do
+                            {
+                                iVar5 = iVar5 >> 0x10;
+                                uVar15 = (ushort)(uVar3 + 1);
+                                if ((PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0)
+                                {
+                                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                                        (ushort)(PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0xff9f));
+                                    PsxRam.WriteU16(param_1 + BattleState.CtxActingSlotTeamB, uVar3);
+                                    if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x2000) == 0)
+                                    {
+                                        PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                                            (ushort)(PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) | 0x80));
+                                    }
+                                    PsxRam.WriteU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                                        (ushort)(PsxRam.ReadU16(param_1 + iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) | 0x210));
+                                    PsxRam.WriteU16(param_1 + iVar5 * 2 + 0x2c14,
+                                        (ushort)(PsxRam.ReadU16(param_1 + iVar5 * 2 + 0x2c14) | 0x400));
+                                    uVar15 = uVar3;
+                                    break;
+                                }
+                                iVar5 = (int)((uint)uVar15 << 0x10);
+                                uVar3 = uVar15;
+                            } while ((short)uVar15 < 0xc);
+
+                            if (uVar15 == 0xc)
+                            {
+                                iVar5 = 6;
+                                // DAT_1f80012c @ 0x1F80012C -- VS.EXE's own scratchpad word (a
+                                // TITLE.EXE 0..2 loading-picture counter reuses the same physical
+                                // slot; see Scratchpad.cs's conflict note). Read by raw address, the
+                                // same treatment VS_EXE/BattleScene.cs already gives it, since
+                                // VS_EXE_exe.cs's own storage field is private to that file.
+                                // GHIDRA: DAT_1f80012c @ 0x1F80012C (VS.EXE) -- a scratchpad word.
+                                // VS_EXE_exe.cs declares the scalar, `private static int
+                                // DAT_1f80012c`, and main clears it to 0 at boot; it is private, so
+                                // this file cannot read that copy and declaring a second scalar would
+                                // fork the storage, so the value is read BY ADDRESS instead, the same
+                                // treatment VS_EXE/BattleScene.cs already gives this exact word. See
+                                // Scratchpad.cs's own conflict note: TITLE.EXE keeps an unrelated 0..2
+                                // loading-picture counter in this same physical slot.
+                                const int Dat1f80012cAddress = 0x1F80012C;
+
+                                bool tookGoto = false;
+                                if (PsxRam.ReadI32(Dat1f80012cAddress) == 4)
+                                {
+                                    tookGoto = true;
+                                }
+                                else
+                                {
+                                    iVar21 = 0x60000;
+                                    if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x4000) == 0)
+                                    {
+                                        PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                                            (int)(((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0xffffcfff) ^ 0x4000));
+                                        tookGoto = true;
+                                    }
+                                }
+                                // LAB_8005ad30 -- both the counter-equals-4 test and the fall-through
+                                // after clearing bit 0x4000 land here with iVar21 = 0x60000.
+                                if (tookGoto)
+                                {
+                                    iVar21 = 0x60000;
+                                }
+
+                                do
+                                {
+                                    sVar8 = (short)iVar5;
+                                    iVar5 = iVar5 + 1;
+                                    if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0)
+                                    {
+                                        break;
+                                    }
+                                    iVar21 = iVar5 * 0x10000;
+                                    sVar8 = (short)iVar5;
+                                } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+                                // param_1[0xb15] is slot 6's own CtxSlotRecords+2 field (6 * 10 +
+                                // 0xad9 = 0xb15) -- the same "countdown" field the top clamp reads,
+                                // hardcoded to team B's own first slot. The original tests it through
+                                // `-(field == 0) & 0xc == 0xc`, a boolean-to-mask compiler artifact
+                                // with no edge-case divergence from the plain equality it encodes;
+                                // written directly as that equality rather than reproducing the mask.
+                                if (sVar8 == 0xc
+                                    && (short)PsxRam.ReadU16(param_1 + 6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2) == 0)
+                                {
+                                    iVar5 = 0;
+                                    do
+                                    {
+                                        iVar21 = PsxRam.ReadI32(((int)(uVar10 << 0x10) >> 0xe) + param_1 + BattleState.CtxFighterSlots);
+                                        if (iVar21 != 0)
+                                        {
+                                            iVar21 = PsxRam.ReadI32(iVar21 + 8);
+                                            PsxRam.WriteI32(iVar21 + 0x138, (int)((uint)PsxRam.ReadI32(iVar21 + 0x138) | 0x80000000));
+                                        }
+                                        iVar5 = iVar5 + 1;
+                                    } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+                                    PsxRam.WriteU16(param_1, 2);
+                                    PsxRam.WriteU16(param_1 + 8, (ushort)(PsxRam.ReadU16(param_1 + 8) | 0x4000));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                PsxRam.WriteI32(param_1 + BattleState.CtxFlags, (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0xcfffffff));
+            }
+
+            // 0x8005AE38 -- UNCONDITIONAL per-team passes: sync SubRecordFlags bit 0x08 (the acting-
+            // slot mark) to CtxActingSlotTeamA / CtxActingSlotTeamB, then stamp SubRecordOrdinal --
+            // literal 5 for every team-A slot and 9 for every team-B slot first, THEN overwritten with
+            // a sequential 0,1,2 (6,7,8 for team B) for at most three slots per team, acting slot
+            // first among ties (matches SubRecordFlags bit 0x80 && bit 0x08), then the remaining
+            // marked slots (bit 0x80 && !bit 0x08). Two goto targets (LAB_8005ae78, LAB_8005aee8)
+            // each jump into the sibling arm of an if/else the same way LAB_800561d4 does in
+            // FUN_80055f94 above; written the same way, as if/else-if/else with the shared write
+            // repeated in both arms rather than merged.
+            iVar5 = 0;
+            puVar13 = puVar20;
+            do
+            {
+                if ((short)PsxRam.ReadU16(param_1 + BattleState.CtxActingSlotTeamA) == (short)iVar5)
+                {
+                    if ((PsxRam.ReadU16(puVar13) & 8) == 0)
+                    {
+                        uVar3 = (ushort)((PsxRam.ReadU16(puVar13) & 0xfff9) | 8);
+                        PsxRam.WriteU16(puVar13, uVar3);
+                    }
+                }
+                else
+                {
+                    uVar3 = (ushort)(PsxRam.ReadU16(puVar13) & 0xfff1);
+                    if ((PsxRam.ReadU16(puVar13) & 8) != 0)
+                    {
+                        PsxRam.WriteU16(puVar13, uVar3);
+                    }
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 6);
+
+            iVar5 = 6;
+            do
+            {
+                if ((short)PsxRam.ReadU16(param_1 + BattleState.CtxActingSlotTeamB) == (short)iVar5)
+                {
+                    if ((PsxRam.ReadU16(puVar13) & 8) == 0)
+                    {
+                        uVar3 = (ushort)((PsxRam.ReadU16(puVar13) & 0xfff9) | 8);
+                        PsxRam.WriteU16(puVar13, uVar3);
+                    }
+                }
+                else
+                {
+                    uVar3 = (ushort)(PsxRam.ReadU16(puVar13) & 0xfff1);
+                    if ((PsxRam.ReadU16(puVar13) & 8) != 0)
+                    {
+                        PsxRam.WriteU16(puVar13, uVar3);
+                    }
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            iVar5 = 0;
+            puVar13 = puVar20;
+            do
+            {
+                PsxRam.WriteU16(puVar13 + BattleState.SubRecordOrdinal, 5);
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 6);
+
+            psVar12 = param_1 + 0xaa0;
+            iVar5 = 6;
+            do
+            {
+                PsxRam.WriteU16(psVar12 + BattleState.SubRecordOrdinal, 9);
+                iVar5 = iVar5 + 1;
+                psVar12 = psVar12 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            uVar3 = 0;
+            iVar5 = 0;
+            puVar13 = puVar20;
+            do
+            {
+                if (uVar3 == 3) break;
+                if ((PsxRam.ReadU16(puVar13) & 0x80) != 0 && (PsxRam.ReadU16(puVar13) & 8) != 0)
+                {
+                    PsxRam.WriteU16(puVar13 + BattleState.SubRecordOrdinal, uVar3);
+                    uVar3 = (ushort)(uVar3 + 1);
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 6);
+
+            iVar5 = 0;
+            puVar13 = puVar20;
+            do
+            {
+                if (uVar3 == 3) break;
+                if ((PsxRam.ReadU16(puVar13) & 0x80) != 0 && (PsxRam.ReadU16(puVar13) & 8) == 0)
+                {
+                    PsxRam.WriteU16(puVar13 + BattleState.SubRecordOrdinal, uVar3);
+                    uVar3 = (ushort)(uVar3 + 1);
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 6);
+
+            uVar3 = 6;
+            puVar13 = param_1 + 0xaa0;
+            iVar5 = 6;
+            do
+            {
+                if (uVar3 == 9) break;
+                if ((PsxRam.ReadU16(puVar13) & 0x80) != 0 && (PsxRam.ReadU16(puVar13) & 8) != 0)
+                {
+                    PsxRam.WriteU16(puVar13 + BattleState.SubRecordOrdinal, uVar3);
+                    uVar3 = (ushort)(uVar3 + 1);
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            puVar13 = param_1 + 0xaa0;
+            iVar5 = 6;
+            do
+            {
+                if (uVar3 == 9) break;
+                if ((PsxRam.ReadU16(puVar13) & 0x80) != 0 && (PsxRam.ReadU16(puVar13) & 8) == 0)
+                {
+                    PsxRam.WriteU16(puVar13 + BattleState.SubRecordOrdinal, uVar3);
+                    uVar3 = (ushort)(uVar3 + 1);
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005AF64 -- when SubRecordOrdinal (subrecord+0x14) has changed since last frame (its
+            // own shadow copy at subrecord+0x12 disagrees), reseed subrecord+0x18 -> +0x1C and
+            // +0x1A -> +0x1E, look the new ordinal up in DAT_80083e1c/1e (12 rows of two shorts,
+            // 0x80083E1C..0x80083E4C -- the gap Roster.cs's own 300-byte record closes on one side and
+            // this file's own Dat80083e4cAddress table closes on the other, single-owner confirmed
+            // with find-cross-references) into SubRecordNumericReadout (subrecord+0x20) and
+            // subrecord+0x22, zero subrecord+0x16, and OR SubRecordFlags bit 0x100.
+            iVar5 = 0;
+            psVar12 = param_1 + 0x36;
+            puVar13 = puVar20;
+            do
+            {
+                if (PsxRam.ReadU16(psVar12 - 4) != PsxRam.ReadU16(psVar12 - 2))
+                {
+                    PsxRam.WriteU16(psVar12 - 4, PsxRam.ReadU16(psVar12 - 2));
+                    PsxRam.WriteU16(psVar12 + 2, PsxRam.ReadU16(psVar12 + 6));
+                    PsxRam.WriteU16(psVar12 + 4, PsxRam.ReadU16(psVar12 + 8));
+                    PsxRam.WriteU16(psVar12 + 10, PsxRam.ReadU16(Dat80083e1cAddress + PsxRam.ReadU16(psVar12 - 2) * 4));
+                    sVar8 = (short)PsxRam.ReadU16(Dat80083e1eAddress + PsxRam.ReadU16(psVar12 - 2) * 4);
+                    PsxRam.WriteU16(psVar12, 0);
+                    PsxRam.WriteU16(psVar12 + 12, (ushort)sVar8);
+                    PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 0x100));
+                }
+                psVar12 = psVar12 + 0x1c0;
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005B04C -- the per-slot RENDER LOOP: an animated-value follower (subrecord+0x2
+            // steps by up to +/-20 per frame towards CtxSlotRecords+0x2, arming subrecord+0x10's low
+            // 5 bits as a one-shot on the first step and marking local_b8 bit 0x08), a plain shadow
+            // copy of CtxKiGauge into subrecord+0x4 (marks local_b8 bit 0x10) and of CtxSlotRecords+0x6
+            // into subrecord+0x6 (no mark), SubRecordFlags bits 0x80/0x200 synced to CtxSlotRecords
+            // (the 0x200 sync also ORs CtxSlotRecords bit 0x10), then a three-way colour pick on
+            // SubRecordFlags bit 0x6000 vs CtxSlotRecords bit 0x6000 -- match: 0x80/0xE0 threshold
+            // repaint of a 3-byte colour at subrecord+0x5C..0x5E (mirrored to a per-team-A 3-byte
+            // colour at ctx+iVar21*0xF0+0x179C..0x179E when iVar21<6); mismatch and subrecord+0x5C
+            // (as signed char) == -0x50: force the 3-byte colour to 0xE0 (same mirror), sync
+            // SubRecordFlags bits 0x6000 from CtxSlotRecords, then look CtxSlotRecords bits
+            // 0x2000/0x4000 up in one of three columns of Roster.cs's own 12-byte-stride portrait
+            // table (Dat80084184Address; the same table FUN_80057a7c reads its own default pair
+            // from) and fan the two looked-up values out into subrecord+0x6E/+0x64/+0x74/+0x6C/+0x65/
+            // +0x7C/+0x6D/+0x7D/+0x75 (and, when iVar21<6, the matching ctx+iVar21*0xF0+0x17Ax/Bx
+            // mirror); mismatch and not -0x50: force the 3-byte colour to 0xB0 (same mirror). Ends
+            // by syncing SubRecordFlags bit 1 to CtxSlotRecords bit 1.
+            iVar5 = 0;
+            psVar12 = param_1 + 0x7e;
+            puVar13 = puVar20;
+            do
+            {
+                sVar7 = (short)iVar5;
+                sVar8 = (short)PsxRam.ReadU16(psVar12 - 0x5c);
+                iVar6 = (int)sVar8;
+                iVar21 = (int)(short)PsxRam.ReadU16(param_1 + sVar7 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2);
+                if (iVar6 != iVar21)
+                {
+                    if (iVar21 < iVar6)
+                    {
+                        if ((PsxRam.ReadU16(psVar12 - 0x4e) & 0x1f) == 0)
+                        {
+                            PsxRam.WriteU16(psVar12 - 0x4e, (ushort)(sVar8 * 0x20 + 0x1e));
+                        }
+                        sVar8 = (short)PsxRam.ReadU16(psVar12 - 0x5c);
+                        sVar4 = (short)(sVar8 - 1);
+                        if (0x13 < (int)sVar8 - (int)(short)PsxRam.ReadU16(param_1 + sVar7 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 2))
+                        {
+                            sVar4 = (short)(sVar8 - 0x14);
+                        }
+                    }
+                    else
+                    {
+                        if ((PsxRam.ReadU16(psVar12 - 0x4e) & 0x1f) != 0)
+                        {
+                            goto LAB_8005b26c;
+                        }
+                        sVar4 = (short)(sVar8 + 1);
+                        if (0x13 < iVar21 - iVar6)
+                        {
+                            sVar4 = (short)(sVar8 + 0x14);
+                        }
+                    }
+                    PsxRam.WriteU16(psVar12 - 0x5c, (ushort)sVar4);
+                    local_b8[iVar5] = (ushort)(local_b8[iVar5] | 8);
+                }
+            LAB_8005b26c:
+                iVar21 = (int)sVar7;
+                if (PsxRam.ReadU16(psVar12 - 0x5a) != PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge))
+                {
+                    PsxRam.WriteU16(psVar12 - 0x5a, PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxKiGauge));
+                    local_b8[iVar21] = (ushort)(local_b8[iVar21] | 0x10);
+                }
+                if (PsxRam.ReadU16(psVar12 - 0x58) != PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6))
+                {
+                    PsxRam.WriteU16(psVar12 - 0x58, PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 6));
+                }
+                uVar3 = PsxRam.ReadU16(puVar13);
+                if ((uVar3 & 0x80) != (PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x80))
+                {
+                    PsxRam.WriteU16(puVar13, (ushort)(uVar3 ^ 0x80));
+                    uVar3 = PsxRam.ReadU16(puVar13);
+                }
+                if ((uVar3 & 0x200) != (PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200))
+                {
+                    PsxRam.WriteU16(puVar13, (ushort)((uVar3 ^ 0x200) | 0x10));
+                    PsxRam.WriteU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                        (ushort)(PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) | 0x10));
+                }
+                iVar6 = iVar21 * 0xf0;
+                if ((PsxRam.ReadU16(puVar13) & 0x6000) == (PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x6000))
+                {
+                    if (0xaf < PsxRam.ReadU8(psVar12 - 2))
+                    {
+                        PsxRam.WriteU8(psVar12 - 2, 0x80);
+                        PsxRam.WriteU8(psVar12 - 1, 0x80);
+                        PsxRam.WriteU8(psVar12, 0x80);
+                        if (iVar21 < 6)
+                        {
+                            PsxRam.WriteU8(param_1 + iVar6 + 0x179c, 0x80);
+                            PsxRam.WriteU8(param_1 + iVar6 + 0x179d, 0x80);
+                            PsxRam.WriteU8(param_1 + iVar6 + 0x179e, 0x80);
+                        }
+                    }
+                }
+                else if ((sbyte)PsxRam.ReadU8(psVar12 - 2) == -0x50)
+                {
+                    PsxRam.WriteU8(psVar12 - 2, 0xe0);
+                    PsxRam.WriteU8(psVar12 - 1, 0xe0);
+                    PsxRam.WriteU8(psVar12, 0xe0);
+                    if (iVar21 < 6)
+                    {
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179c, 0xe0);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179d, 0xe0);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179e, 0xe0);
+                    }
+                    uVar3 = PsxRam.ReadU16(puVar13);
+                    PsxRam.WriteU16(puVar13, (ushort)(uVar3 & 0x9fff));
+                    uVar15 = PsxRam.ReadU16(param_1 + iVar21 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords);
+                    PsxRam.WriteU16(puVar13, (ushort)((uVar3 & 0x9fff) | (uVar15 & 0x6000)));
+
+                    int colTable0;
+                    int colTable1;
+                    if ((uVar15 & 0x2000) == 0)
+                    {
+                        if ((uVar15 & 0x4000) == 0)
+                        {
+                            colTable0 = Dat80084184Address;
+                            colTable1 = Dat80084184Address + 2;
+                        }
+                        else
+                        {
+                            colTable0 = Dat80084184Address + 4;
+                            colTable1 = Dat80084184Address + 6;
+                        }
+                    }
+                    else
+                    {
+                        colTable0 = Dat80084184Address + 8;
+                        colTable1 = Dat80084184Address + 0xa;
+                    }
+                    int col0 = colTable0 + iVar21 * 12;
+                    int col1 = colTable1 + iVar21 * 12;
+
+                    PsxRam.WriteU16(psVar12 + 0x10,
+                        (ushort)((((short)PsxRam.ReadU16(col0) >> 6) + (PsxRam.ReadU16(col1) >> 4 & 0x10)) & 0x1f));
+                    uVar1 = (byte)((PsxRam.ReadU16(col0) & 0x3f) << 2);
+                    PsxRam.WriteU8(psVar12 + 0x16, uVar1);
+                    PsxRam.WriteU8(psVar12 + 6, uVar1);
+                    cVar2 = (sbyte)((sbyte)PsxRam.ReadU16(col0) * 4 + 0x2f);
+                    PsxRam.WriteU8(psVar12 + 0x1e, (byte)cVar2);
+                    PsxRam.WriteU8(psVar12 + 0xe, (byte)cVar2);
+                    uVar3 = PsxRam.ReadU16(col1);
+                    PsxRam.WriteU8(psVar12 + 0xf, (byte)uVar3);
+                    PsxRam.WriteU8(psVar12 + 7, (byte)uVar3);
+                    cVar2 = (sbyte)((sbyte)PsxRam.ReadU16(col1) + 0x2f);
+                    PsxRam.WriteU8(psVar12 + 0x1f, (byte)cVar2);
+                    PsxRam.WriteU8(psVar12 + 0x17, (byte)cVar2);
+                    if (iVar21 < 6)
+                    {
+                        PsxRam.WriteU16(param_1 + iVar21 * 0xf0 + 0x17ae,
+                            (ushort)((((short)PsxRam.ReadU16(col0) >> 6) + (PsxRam.ReadU16(col1) >> 4 & 0x10)) & 0x1f));
+                        uVar1 = (byte)((PsxRam.ReadU16(col0) & 0x3f) << 2);
+                        PsxRam.WriteU8(param_1 + iVar21 * 0xf0 + 0x17b4, uVar1);
+                        PsxRam.WriteU8(param_1 + iVar21 * 0xf0 + 0x17a4, uVar1);
+                        cVar2 = (sbyte)((sbyte)PsxRam.ReadU16(col0) * 4 + 0x2f);
+                        PsxRam.WriteU8(param_1 + iVar21 * 0xf0 + 0x17bc, (byte)cVar2);
+                        PsxRam.WriteU8(param_1 + iVar21 * 0xf0 + 0x17ac, (byte)cVar2);
+                        uVar3 = PsxRam.ReadU16(col1);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x17ad, (byte)uVar3);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x17a5, (byte)uVar3);
+                        cVar2 = (sbyte)((sbyte)PsxRam.ReadU16(col1) + 0x2f);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x17bd, (byte)cVar2);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x17b5, (byte)cVar2);
+                    }
+                }
+                else
+                {
+                    PsxRam.WriteU8(psVar12 - 2, 0xb0);
+                    PsxRam.WriteU8(psVar12 - 1, 0xb0);
+                    PsxRam.WriteU8(psVar12, 0xb0);
+                    if (iVar21 < 6)
+                    {
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179c, 0xb0);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179d, 0xb0);
+                        PsxRam.WriteU8(param_1 + iVar6 + 0x179e, 0xb0);
+                    }
+                }
+                psVar12 = psVar12 + 0x1c0;
+                if ((PsxRam.ReadU16(puVar13) & 1) != (PsxRam.ReadU16(param_1 + sVar7 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1))
+                {
+                    PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) ^ 1));
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005B598 -- a per-slot countdown/count-up at subrecord+0xE, gated on SubRecordFlags
+            // bits 8/2 (down while !8, up while 8 && !4), clamped to [0,4], arming SubRecordFlags bit
+            // 2 (down hits 0) or bit 4 (up hits 4). Every taken path (both bit-8 arms; the bit8==0 &&
+            // bit2!=0 combination does nothing at all, matching the original: the outer `if` has no
+            // else) ends by marking local_b8 bit 0x3c -- reproduced by writing it once at the tail of
+            // each taken arm rather than through the original's two forward gotos into a shared tail.
+            iVar5 = 0;
+            puVar11 = param_1 + 0x2e;
+            puVar13 = puVar20;
+            do
+            {
+                uVar3 = PsxRam.ReadU16(puVar13);
+                if ((uVar3 & 8) == 0)
+                {
+                    if ((uVar3 & 2) == 0)
+                    {
+                        ushort counter = (ushort)(PsxRam.ReadU16(puVar11) - 1);
+                        PsxRam.WriteU16(puVar11, counter);
+                        if ((int)((uint)counter << 0x10) < 0)
+                        {
+                            PsxRam.WriteU16(puVar11, 0);
+                        }
+                        if (PsxRam.ReadU16(puVar11) == 0)
+                        {
+                            PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 2));
+                        }
+                        local_b8[iVar5] = (ushort)(local_b8[iVar5] | 0x3c);
+                    }
+                }
+                else if ((uVar3 & 4) == 0)
+                {
+                    ushort counter = (ushort)(PsxRam.ReadU16(puVar11) + 1);
+                    PsxRam.WriteU16(puVar11, counter);
+                    if (4 < (short)counter)
+                    {
+                        PsxRam.WriteU16(puVar11, 4);
+                    }
+                    if (PsxRam.ReadU16(puVar11) == 4)
+                    {
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 4));
+                    }
+                    local_b8[iVar5] = (ushort)(local_b8[iVar5] | 0x3c);
+                }
+                puVar11 = puVar11 + 0x1c0;
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005B6A4 -- while SubRecordFlags bit 0x100 is up (the "ordinal just changed" mark
+            // Block 6 above raises), count subrecord+0x16 up to 8 and clear the bit once it gets
+            // there, marking local_b8 bit 0x3c every frame the bit is up.
+            iVar5 = 0;
+            psVar12 = param_1 + 0x36;
+            puVar13 = puVar20;
+            do
+            {
+                if ((PsxRam.ReadU16(puVar13) & 0x100) != 0)
+                {
+                    sVar8 = (short)PsxRam.ReadU16(psVar12);
+                    PsxRam.WriteU16(psVar12, (ushort)(sVar8 + 1));
+                    if (8 < (short)(sVar8 + 1))
+                    {
+                        PsxRam.WriteU16(psVar12, 8);
+                    }
+                    if (PsxRam.ReadU16(psVar12) == 8)
+                    {
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) & 0xfeff));
+                    }
+                    local_b8[iVar5] = (ushort)(local_b8[iVar5] | 0x3c);
+                }
+                psVar12 = psVar12 + 0x1c0;
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005B764 -- the per-slot NUMERIC-READOUT TARGET state machine at subrecord+0x24
+            // (mode), tracking CtxSlotRecords+0xA (the same [0,99] field the top clamp bounds, read
+            // here as `target`) against a shadow copy at subrecord+0xA. Mode bit 1 clear: seed the
+            // shadow from `target` once it settles above 1, arming mode bit 1. Mode bit 1 set, bit 2
+            // clear, bit 4 clear: a 0..4 tier counter at subrecord+0x28 that, on reaching 4, arms mode
+            // bit 4 and, on reaching 8, resets itself, seeds a hold value at subrecord+0x2A / a repeat
+            // count of 0xB at subrecord+0x2C, arms mode bit 2, and (when `target` is non-zero) swaps
+            // the shadow to it. Mode bits 1+2 set: an 11-tier hold/advance sequence at subrecord+0x2A
+            // (values 0x11 down to 0x17 select which comparison runs; reaching 0x17 clears mode bit 2
+            // and sets bit 1) whose two goto targets (LAB_8005b880, LAB_8005b890) are two entries into
+            // one shared "advance the tier" tail, reproduced below by running that tail once at the
+            // end of each branch that reaches it rather than through the original's cross-branch
+            // gotos; subrecord+0x2C then counts 0xB down towards 0, wrapping to 0xB at 0x17-worth of
+            // ticks. Mode bit 1 clear... already handled above; mode bit 2 set with bit 1 clear cannot
+            // occur (bit 2 is only ever armed alongside bit 1).
+            iVar5 = 0;
+            puVar13 = param_1 + 0x44;
+            do
+            {
+                uVar3 = PsxRam.ReadU16(puVar13);
+                sVar8 = (short)iVar5;
+                if ((uVar3 & 1) == 0)
+                {
+                    uVar3 = PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa);
+                    if (uVar3 != PsxRam.ReadU16(puVar13 - 0x1a) && 1 < (short)uVar3)
+                    {
+                        PsxRam.WriteU16(puVar13 - 0x1a, uVar3);
+                        PsxRam.WriteU16(puVar13 + 2, uVar3);
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 1));
+                    }
+                }
+                else if ((uVar3 & 2) == 0)
+                {
+                    if ((uVar3 & 4) == 0)
+                    {
+                        uVar3 = (ushort)(PsxRam.ReadU16(puVar13 + 4) + 1);
+                        PsxRam.WriteU16(puVar13 + 4, uVar3);
+                        if (uVar3 == 4)
+                        {
+                            PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 8));
+                        }
+                        if (PsxRam.ReadU16(puVar13 + 4) == 8)
+                        {
+                            PsxRam.WriteU16(puVar13 + 6, 0);
+                            PsxRam.WriteU16(puVar13 + 8, 0xb);
+                            PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) | 4));
+                            if (PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa) != 0)
+                            {
+                                PsxRam.WriteU16(puVar13 + 2, PsxRam.ReadU16(puVar13 - 0x1a));
+                                PsxRam.WriteU16(puVar13 - 0x1a, PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ushort target = PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa);
+                        bool advance;
+                        if (target == PsxRam.ReadU16(puVar13 - 0x1a))
+                        {
+                            advance = PsxRam.ReadU16(puVar13 + 6) != 0x11;
+                        }
+                        else
+                        {
+                            if (PsxRam.ReadU16(puVar13 + 6) == 0x11)
+                            {
+                                if (target == 0)
+                                {
+                                    PsxRam.WriteU16(puVar13 + 6, 0x12);
+                                }
+                                else
+                                {
+                                    PsxRam.WriteU16(puVar13 + 6, 6);
+                                    PsxRam.WriteU16(puVar13 + 8, 0xc);
+                                    PsxRam.WriteU16(puVar13 + 2, PsxRam.ReadU16(puVar13 - 0x1a));
+                                    if (target != 0)
+                                    {
+                                        PsxRam.WriteU16(puVar13 - 0x1a, target);
+                                    }
+                                }
+                            }
+                            advance = true;
+                        }
+                        if (advance)
+                        {
+                            uVar3 = (ushort)(PsxRam.ReadU16(puVar13 + 6) + 1);
+                            PsxRam.WriteU16(puVar13 + 6, uVar3);
+                            if (uVar3 == 5 || uVar3 == 0xb)
+                            {
+                                PsxRam.WriteU16(puVar13 + 6, 0x11);
+                                PsxRam.WriteU16(puVar13 + 2, PsxRam.ReadU16(puVar13 - 0x1a));
+                            }
+                            if (PsxRam.ReadU16(puVar13 + 6) == 0x17)
+                            {
+                                PsxRam.WriteU16(puVar13, (ushort)((PsxRam.ReadU16(puVar13) & 0xfffb) | 2));
+                            }
+                        }
+                        if ((short)PsxRam.ReadU16(puVar13 + 8) != 0xb)
+                        {
+                            iVar21 = (short)PsxRam.ReadU16(puVar13 + 8) + 1;
+                            PsxRam.WriteU16(puVar13 + 8, (ushort)iVar21);
+                            if (iVar21 * 0x10000 >> 0x10 == 0x11)
+                            {
+                                PsxRam.WriteU16(puVar13 + 8, 0xb);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    uVar3 = (ushort)(PsxRam.ReadU16(puVar13 + 4) - 1);
+                    PsxRam.WriteU16(puVar13 + 4, uVar3);
+                    if (uVar3 == 4)
+                    {
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) & 0xfff7));
+                    }
+                    if (PsxRam.ReadU16(puVar13 + 4) == 0xffff)
+                    {
+                        PsxRam.WriteU16(puVar13 + 4, 0);
+                        PsxRam.WriteU16(puVar13 + 2, 0);
+                        PsxRam.WriteU16(puVar13 - 0x1a, 0);
+                        PsxRam.WriteU16(puVar13, (ushort)(PsxRam.ReadU16(puVar13) & 0xfff8));
+                    }
+                }
+                iVar5 = iVar5 + 1;
+                puVar13 = puVar13 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+            // 0x8005BA88 -- the twelve-slot HUD/portrait sub-loop: FUN_80057a7c and the two
+            // FUN_80058120 calls receive the per-slot sub-record itself (puVar13, walking
+            // CtxSlotSubRecords same as puVar20 below), FUN_80058338 the raw context plus the slot
+            // index (it does its own `ctx + slot*0x1C0 + 0x20` indexing, per its own header). Then
+            // subrecord+0x10's low 5 bits count down by one, the same field Block 7's threshold reset
+            // seeds to `value*0x20+0x1e`.
+            iVar5 = 0;
+            puVar11 = param_1 + 0x30;
+            puVar13 = puVar20;
+            do
+            {
+                FUN_80057a7c(puVar13, (short)iVar5);
+                FUN_80058120(puVar13, 0);
+                FUN_80058120(puVar13, 1);
+                FUN_80058338(param_1, (short)iVar5);
+                puVar13 = puVar13 + 0x1c0;
+                if ((PsxRam.ReadU16(puVar11) & 0x1f) != 0)
+                {
+                    PsxRam.WriteU16(puVar11, (ushort)(PsxRam.ReadU16(puVar11) - 1));
+                }
+                iVar5 = iVar5 + 1;
+                puVar11 = puVar11 + 0x1c0;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+        }
+
+        // 0x8005BAF4 -- THE PER-SLOT PRIMITIVE SUBMISSION, and it runs on EVERY path, suspended VM
+        // included: `ot` is the same `(0x7ff - otz) * 4 + 0x70 + DAT_8008d420` ordering-table formula
+        // UpdateCentralGaugeBar's own PART FOUR already carries (see its header for why
+        // PsxRam.ReadI32(Dat8008d420Address) currently answers zero), here keyed on the ctx-head
+        // halfword at +0x1C rather than ctx+0x3030 -- a second, function-local OTZ this slice has not
+        // seen named or written anywhere, so it stays a raw offset. Ten primitives per slot, all
+        // drawn from the subrecord FUN_80057a7c/FUN_80058120 above just filled in: subrecord+0x80
+        // (only when subrecord+0x24 bit 8 is clear) or +0x198/+0xD0 for the swapped body sprite,
+        // +0xA8, +0x58, +0x30 unconditionally, and four more (+0x148, +0x170, +0xF8 and the raw
+        // psVar12 cursor at subrecord+0x120) only when subrecord+0x24 bit 4 is set.
+        const int Dat8008d420Address = unchecked((int)0x8008D420);
+
+        iVar5 = 0;
+        psVar12 = param_1 + 0x140;
+        ot = (int)((0x7ff - (uint)PsxRam.ReadU16(param_1 + 0x1c)) * 4 + 0x70 + PsxRam.ReadI32(Dat8008d420Address));
+        do
+        {
+            if ((PsxRam.ReadU16(psVar12 - 0xfc) & 8) == 0)
+            {
+                LibGpu.AddPrim(ot, puVar20 + 0x80);
+                puVar13 = puVar20 + 0x198;
+            }
+            else
+            {
+                puVar13 = puVar20 + 0xd0;
+            }
+            LibGpu.AddPrim(ot, puVar13);
+            LibGpu.AddPrim(ot, puVar20 + 0xa8);
+            LibGpu.AddPrim(ot, puVar20 + 0x58);
+            LibGpu.AddPrim(ot, puVar20 + 0x30);
+            if ((PsxRam.ReadU16(psVar12 - 0xfc) & 4) != 0)
+            {
+                LibGpu.AddPrim(ot, puVar20 + 0x148);
+                LibGpu.AddPrim(ot, puVar20 + 0x170);
+                LibGpu.AddPrim(ot, puVar20 + 0xf8);
+                LibGpu.AddPrim(ot, psVar12);
+            }
+            psVar12 = psVar12 + 0x1c0;
+            iVar5 = iVar5 + 1;
+            puVar20 = puVar20 + 0x1c0;
+        } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+        // 0x8005BC1C -- while the animation VM is suspended, the manager's only remaining act is the
+        // tally icon's own primitive submission (see the tally-state block far below for what
+        // CtxTallyState bit 4 means): no bit, nothing else runs at all this frame; bit set, submit
+        // the ten tally primitives at ctx+0x2DCC and fall into the same LAB_8005c6a0 tail every other
+        // path reaches (the extra-digit check at the very end of the function).
+        iVar5 = 0;
+        if ((AnimVm.DAT_800b305a & 1) != 0)
+        {
+            psVar12 = param_1 + 0x2dcc;
+            if ((PsxRam.ReadU16(param_1 + BattleState.CtxTallyState) & 4) == 0)
+            {
+                return;
+            }
+            iVar5 = 0;
+            do
+            {
+                LibGpu.AddPrim(ot, psVar12);
+                iVar5 = iVar5 + 1;
+                psVar12 = psVar12 + 0x28;
+            } while (iVar5 * 0x10000 >> 0x10 < 10);
+            goto LAB_8005c6a0;
+        }
+
+        // 0x8005BC70 -- walk the published cursor at ctx+0x1A forward, mod 12, until it lands on a
+        // slot that is both alive (record bit 0) and marked (record bit 0x200), or exhausts twelve
+        // tries.
+        do
+        {
+            if ((PsxRam.ReadU16(param_1 + (short)PsxRam.ReadU16(param_1 + 0x1a) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 1) != 0
+                && (PsxRam.ReadU16(param_1 + (short)PsxRam.ReadU16(param_1 + 0x1a) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+            {
+                break;
+            }
+            iVar21 = (short)PsxRam.ReadU16(param_1 + 0x1a) + 1;
+            PsxRam.WriteU16(param_1 + 0x1a, (ushort)iVar21);
+            iVar5 = iVar5 + 1;
+            if (0xb < iVar21 * 0x10000 >> 0x10)
+            {
+                PsxRam.WriteU16(param_1 + 0x1a, 0);
+            }
+        } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+        // 0x8005BCF8 -- outside state 1 (THE ROUND), CtxRoundRequest is force-cleared every frame.
+        if (PsxRam.ReadU16(param_1 + BattleState.CtxState) != 1)
+        {
+            PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest, 0);
+        }
+
+        // 0x8005BD1C -- CtxRoundRequest bit 0: THE TEAM-A TALLY. Count marked (0x200) and just-downed
+        // (0x1000) slots 0..5; subtract 3 (the "3 vs the rest" handicap the central-gauge scaling
+        // above also uses); while more than 3 remain just-downed, walk slots 0..5 again converting
+        // excess 0x1000 marks to a plain 0x10 (clearing 0x1000 and 0x200 on both CtxSlotRecords and,
+        // in lockstep, SubRecordFlags bit 0x200) until the excess is used up. CtxRoundRequest bit 2
+        // is armed either way. Bit 1: THE TEAM-B TALLY, the same shape over slots 6..11.
+        if (PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) != 0)
+        {
+            iVar5 = 0;
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 1) != 0)
+            {
+                iVar6 = 0;
+                iVar21 = 0;
+                do
+                {
+                    if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+                    {
+                        iVar5 = iVar5 + 1;
+                    }
+                    iVar6 = iVar6 + 1;
+                    if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x1000) != 0)
+                    {
+                        iVar5 = iVar5 + 1;
+                    }
+                    iVar21 = iVar6 * 0x10000;
+                } while (iVar6 * 0x10000 >> 0x10 < 6);
+                iVar5 = iVar5 + -3;
+                iVar21 = 0;
+                if (0 < iVar5 * 0x10000)
+                {
+                    iVar6 = 0;
+                    do
+                    {
+                        iVar6 = iVar6 >> 0x10;
+                        iVar21 = iVar21 + 1;
+                        if ((PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x1000) != 0)
+                        {
+                            PsxRam.WriteU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                                (ushort)((PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0xedff) | 0x10));
+                            iVar5 = iVar5 + -1;
+                            PsxRam.WriteU16(param_1 + iVar6 * BattleState.CtxSlotSubRecordStride + BattleState.CtxSlotSubRecords,
+                                (ushort)(PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotSubRecordStride + BattleState.CtxSlotSubRecords) & 0xfdff));
+                        }
+                        iVar6 = iVar21 * 0x10000;
+                    } while (0 < iVar5 << 0x10);
+                }
+                PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                    (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffffe | 4));
+            }
+            iVar5 = 0;
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 2) != 0)
+            {
+                iVar6 = 6;
+                iVar21 = 0x60000;
+                do
+                {
+                    if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x200) != 0)
+                    {
+                        iVar5 = iVar5 + 1;
+                    }
+                    iVar6 = iVar6 + 1;
+                    if ((PsxRam.ReadU16(param_1 + (iVar21 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x1000) != 0)
+                    {
+                        iVar5 = iVar5 + 1;
+                    }
+                    iVar21 = iVar6 * 0x10000;
+                } while (iVar6 * 0x10000 >> 0x10 < 0xc);
+                iVar5 = iVar5 + -3;
+                iVar21 = 6;
+                if (0 < iVar5 * 0x10000)
+                {
+                    iVar6 = 0x60000;
+                    do
+                    {
+                        iVar6 = iVar6 >> 0x10;
+                        iVar21 = iVar21 + 1;
+                        if ((PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x1000) != 0)
+                        {
+                            PsxRam.WriteU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords,
+                                (ushort)((PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0xedff) | 0x10));
+                            iVar5 = iVar5 + -1;
+                            PsxRam.WriteU16(param_1 + iVar6 * BattleState.CtxSlotSubRecordStride + BattleState.CtxSlotSubRecords,
+                                (ushort)(PsxRam.ReadU16(param_1 + iVar6 * BattleState.CtxSlotSubRecordStride + BattleState.CtxSlotSubRecords) & 0xfdff));
+                        }
+                        iVar6 = iVar21 * 0x10000;
+                    } while (0 < iVar5 << 0x10);
+                }
+                PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                    (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffffd | 4));
+            }
+
+            // 0x8005BF10 -- CtxRoundRequest bit 2: THE WIN/LOSS COMPUTE. uVar3 is the OR of every
+            // slot's own record flags. Bit 0x10 up anywhere means at least one slot is marked
+            // "gone" (record bit 4, 0x10): sweep all twelve slots for the pattern record&0x210==0x10,
+            // arming CtxRoundRequest bit 0x20 the instant any slot matches it (before the 0x8000 test
+            // that follows), and latch bVar16 true only when that same slot's own bit 0x8000 is also
+            // up. bVar16 selects CtxRoundRequest bit 8 + CtxFlags bit 0x8000000 (a hit was found) or
+            // bit 0x80 (none was). The mirrored second sweep does the same for pattern
+            // record&0x210==0x210 into bit 0x10 / bit 0x100, its own CtxFlags 0x8000000 raise gated on
+            // bit 8 not already being set by the first sweep. Bit 2 itself is cleared unconditionally
+            // at the end. Bits 0x100/0x180 then gate FUN_80026d98 and are cleared right after it runs;
+            // FUN_80026d98 itself is BLOCKED (see its own declaration below) so this call reproduces
+            // the gate but not the callee.
+            uVar3 = 0;
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 4) != 0)
+            {
+                iVar5 = 0;
+                do
+                {
+                    sVar8 = (short)iVar5;
+                    iVar5 = iVar5 + 1;
+                    uVar3 = (ushort)(uVar3 | PsxRam.ReadU16(param_1 + sVar8 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords));
+                } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+
+                bVar16 = false;
+                if ((uVar3 & 0x10) != 0)
+                {
+                    iVar21 = 0;
+                    iVar5 = 0;
+                    do
+                    {
+                        if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x210) == 0x10)
+                        {
+                            PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                                (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 0x20));
+                            if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x8000) != 0)
+                            {
+                                bVar16 = true;
+                            }
+                        }
+                        iVar21 = iVar21 + 1;
+                        iVar5 = iVar21 * 0x10000;
+                    } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+
+                    if (bVar16)
+                    {
+                        PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                            (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 8));
+                        PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                            (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) | 0x8000000));
+                    }
+                    else
+                    {
+                        PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                            (int)(((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xffffffdf) | 0x80));
+                    }
+
+                    bVar16 = false;
+                    iVar21 = 0;
+                    iVar5 = 0;
+                    do
+                    {
+                        if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x210) == 0x210)
+                        {
+                            PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                                (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 0x40));
+                            if ((PsxRam.ReadU16(param_1 + (iVar5 >> 0x10) * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords) & 0x8000) != 0)
+                            {
+                                bVar16 = true;
+                            }
+                        }
+                        iVar21 = iVar21 + 1;
+                        iVar5 = iVar21 * 0x10000;
+                    } while (iVar21 * 0x10000 >> 0x10 < 0xc);
+
+                    if (bVar16)
+                    {
+                        PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                            (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 0x10));
+                        PsxRam.WriteI32(param_1 + BattleState.CtxFlags,
+                            (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxFlags) | 0x8000000));
+                        if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 8) == 0)
+                        {
+                            PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                                (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) | 0x100));
+                        }
+                    }
+                    else if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 8) == 0)
+                    {
+                        PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                            (int)(((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xffffffbf) | 0x100));
+                    }
+                }
+                PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                    (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffffb));
+            }
+
+            if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0x180) != 0)
+            {
+                FUN_80026d98(param_1);
+                PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
+                    (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffe7f));
+            }
+        }
+
+        // 0x8005C048 -- gated on CtxFlags bit 0x100000 (and none of 0x18000008), THE TALLY ICON'S OWN
+        // MAX-SCAN: walk up to twelve slots (DAT_801ff100 != 0 -- SELECT.EXE's own handover word, read
+        // through SharedHighRam the same way the pad-override block above does -- stops the walk after
+        // seven when a mode is armed) looking for a new maximum of CtxSlotRecords+0xA (the same [0,99]
+        // numeric-readout target field). On a new maximum: store it in CtxTallyValue, arm CtxTallyPhase
+        // = 2 and CtxTallyHold = 0x40, seed the first digit's four glyph-position bytes at
+        // ctx+0x2F40..0x2F58 from the ones place, seed its four coordinate halfwords at
+        // ctx+0x2F3C..0x2F58 from DAT_800842b0/b2 (part of the same contiguous keyframe span embedded
+        // below), and -- only when the value is 10 or more -- the second digit's own four glyph bytes
+        // at ctx+0x2F68..0x2F80 and four coordinate halfwords at ctx+0x2F64..0x2F7E from
+        // DAT_800842b4/b6. Ends by arming CtxTallyState bit 0 (growing) when bit 2 is clear, and
+        // demoting bit 3 (shrinking) to bit 0 when the icon was already shrinking.
+        if ((PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x100000) != 0
+            && (PsxRam.ReadI32(param_1 + BattleState.CtxFlags) & 0x18000008) == 0)
+        {
+            iVar5 = 0;
+            psVar12 = param_1 + 0x2f4e;
+            do
+            {
+                if (SharedHighRam.SHORT_ARRAY_801ff000[Dat801ff100ShortIndex] != 0 && 6 < (short)iVar5)
+                {
+                    break;
+                }
+                psVar17 = psVar12;
+                if ((int)(uint)PsxRam.ReadU16(param_1 + BattleState.CtxTallyValue)
+                    < (int)(short)PsxRam.ReadU16(param_1 + (short)iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa))
+                {
+                    PsxRam.WriteU16(param_1 + BattleState.CtxTallyValue,
+                        PsxRam.ReadU16(param_1 + (short)iVar5 * BattleState.CtxSlotRecordStride + BattleState.CtxSlotRecords + 0xa));
+                    sVar8 = (short)PsxRam.ReadU16(param_1 + BattleState.CtxTallyValue);
+                    PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, 2);
+                    PsxRam.WriteU16(param_1 + BattleState.CtxTallyHold, 0x40);
+                    cVar2 = (sbyte)((sbyte)((uint)((sVar8 % 10) * 0x10000) >> 0x10) * 0x18);
+                    PsxRam.WriteU8(psVar12 + 2, (byte)cVar2);
+                    PsxRam.WriteU8(psVar12 - 0xe, (byte)cVar2);
+                    PsxRam.WriteU8(psVar12 + 0xa, (byte)(cVar2 + 0x18));
+                    PsxRam.WriteU8(psVar12 - 6, (byte)(cVar2 + 0x18));
+                    sVar7 = (short)PsxRam.ReadU16(Dat800842b0Address);
+                    iVar21 = ((int)sVar8 / 10) * 0x10000;
+                    PsxRam.WriteU16(psVar12 - 2, (ushort)PsxRam.ReadU16(Dat800842b0Address));
+                    PsxRam.WriteU16(psVar12 - 0x12, (ushort)sVar7);
+                    sVar8 = (short)PsxRam.ReadU16(Dat800842b2Address);
+                    PsxRam.WriteU16(psVar12 - 8, 0xa8);
+                    PsxRam.WriteU16(psVar12 - 0x10, 0xa8);
+                    PsxRam.WriteU16(psVar12 + 8, 0xb8);
+                    PsxRam.WriteU16(psVar12, 0xb8);
+                    PsxRam.WriteU16(psVar12 + 6, (ushort)sVar8);
+                    PsxRam.WriteU16(psVar12 - 0xa, (ushort)sVar8);
+                    if (iVar21 >> 0x10 != 0)
+                    {
+                        psVar17 = psVar12 + 0x28;
+                        cVar2 = (sbyte)((sbyte)((uint)iVar21 >> 0x10) * 0x18);
+                        PsxRam.WriteU8(psVar12 + 0x2a, (byte)cVar2);
+                        PsxRam.WriteU8(psVar12 + 0x1a, (byte)cVar2);
+                        PsxRam.WriteU8(psVar12 + 0x32, (byte)(cVar2 + 0x18));
+                        PsxRam.WriteU8(psVar12 + 0x22, (byte)(cVar2 + 0x18));
+                        sVar8 = (short)PsxRam.ReadU16(Dat800842b4Address);
+                        PsxRam.WriteU16(psVar12 + 0x26, PsxRam.ReadU16(Dat800842b4Address));
+                        PsxRam.WriteU16(psVar12 + 0x16, (ushort)sVar8);
+                        sVar8 = (short)PsxRam.ReadU16(Dat800842b6Address);
+                        PsxRam.WriteU16(psVar12 + 0x20, 0xa8);
+                        PsxRam.WriteU16(psVar12 + 0x18, 0xa8);
+                        PsxRam.WriteU16(psVar12 + 0x30, 0xb8);
+                        PsxRam.WriteU16(psVar17, 0xb8);
+                        PsxRam.WriteU16(psVar12 + 0x2e, (ushort)sVar8);
+                        PsxRam.WriteU16(psVar12 + 0x1e, (ushort)sVar8);
+                    }
+                    uVar3 = PsxRam.ReadU16(param_1 + BattleState.CtxTallyState);
+                    if ((uVar3 & 4) == 0)
+                    {
+                        PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, (ushort)((uVar3 & 0xfff5) | 5));
+                        uVar3 = PsxRam.ReadU16(param_1 + BattleState.CtxTallyState);
+                    }
+                    if ((uVar3 & 8) != 0)
+                    {
+                        PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, (ushort)((uVar3 & 0xfff5) | 1));
+                    }
+                }
+                iVar5 = iVar5 + 1;
+                psVar12 = psVar17;
+            } while (iVar5 * 0x10000 >> 0x10 < 0xc);
+        }
+
+        // 0x8005C0D0 -- THE TALLY ICON'S OWN DISPLAY STATE MACHINE, on CtxTallyState. Bit 2 clear:
+        // nothing left to do this frame, return outright (no primitive submission at all -- the two
+        // callers that reach this function with the VM suspended already special-cased that, see the
+        // early-return block above). Bit 1 set: THE INSTANT SHOW -- when neither bit 0 (growing) nor
+        // bit 3 (shrinking) is up, snap all sixteen ctx+0x2F3C..0x2F7E pose halfwords to their held
+        // values (0xA8 or 0xB8, matching InitCentralGaugeBar's own neutral-pose convention); either
+        // way, force the state to bit 3 (shrinking) and write it through the shared LAB_8005c624 tail
+        // (duplicated at each of its three call sites below rather than reached by goto, since C#
+        // cannot jump into a sibling branch the way the original does here twice).
+        //
+        // Bit 1 clear, bit 0 clear (shrinking): once per 8-tick hold (CtxTallyPhase != 4 gates a
+        // one-shot), step every one of those sixteen halfwords by its own signed delta and add 2 to
+        // CtxTallyPhase; then count CtxTallyHold down, and once it hits zero arm bit 1 (instant-show
+        // pending) through the shared tail. Bit 0 set, CtxTallyPhase == 0x10: the hold has fully
+        // drained -- clear bit 0, reset CtxTallyPhase and reseed CtxTallyHold to 0x40. Bit 0 set,
+        // CtxTallyPhase != 0x10 (shrinking, not yet home): the SHRINK keyframe interpolation, reading
+        // DAT_80084234's own pose table with an 11-step (0 or 8-based) selector and subtracting the
+        // interpolated delta from each of the eleven ctx+0x2DDC-based primitive slots; decrement
+        // CtxTallyPhase by 2.
+        //
+        // Bit 1 clear, bit 0 set (growing): the mirrored GROW keyframe interpolation. "Mirrored" is
+        // ONLY the phase direction -- CtxTallyPhase is incremented by 2 here and decremented by 2 on
+        // the shrink path. The interpolation itself is IDENTICAL: both loops SUBTRACT the delta,
+        // `sVar8 - (short)(iVar14 / iVar19)`, against the same table and the same selector. An
+        // earlier version of this comment said the grow loop added; the code never did, and reading
+        // "mirrored" as "opposite sign" is exactly the wrong inference to leave lying here.
+        uVar3 = PsxRam.ReadU16(param_1 + BattleState.CtxTallyState);
+        if ((uVar3 & 4) == 0)
+        {
+            return;
+        }
+        if ((uVar3 & 2) != 0)
+        {
+            if ((uVar3 & 9) == 0)
+            {
+                PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, 0xe);
+                PsxRam.WriteU16(param_1 + 0x2f46, 0xa8);
+                PsxRam.WriteU16(param_1 + 0x2f3e, 0xa8);
+                PsxRam.WriteU16(param_1 + 0x2f56, 0xb8);
+                PsxRam.WriteU16(param_1 + 0x2f4e, 0xb8);
+                PsxRam.WriteU16(param_1 + 0x2f6e, 0xa8);
+                PsxRam.WriteU16(param_1 + 0x2f66, 0xa8);
+                PsxRam.WriteU16(param_1 + 0x2f7e, 0xb8);
+                PsxRam.WriteU16(param_1 + 0x2f76, 0xb8);
+            }
+            uVar3 = (ushort)((PsxRam.ReadU16(param_1 + BattleState.CtxTallyState) & 0xfffc) | 8);
+            PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, uVar3);
+        }
+        else if ((uVar3 & 1) == 0)
+        {
+            if ((uVar3 & 8) == 0)
+            {
+                if (PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) != 4)
+                {
+                    PsxRam.WriteU16(param_1 + 0x2f3c, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f3c) - 1));
+                    PsxRam.WriteU16(param_1 + 0x2f44, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f44) + 7));
+                    PsxRam.WriteU16(param_1 + 0x2f4c, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f4c) - 1));
+                    PsxRam.WriteU16(param_1 + 0x2f3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f3e) - 4));
+                    PsxRam.WriteU16(param_1 + 0x2f54, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f54) + 7));
+                    PsxRam.WriteU16(param_1 + 0x2f4e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f4e) + 4));
+                    PsxRam.WriteU16(param_1 + 0x2f46, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f46) - 4));
+                    PsxRam.WriteU16(param_1 + 0x2f64, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f64) - 7));
+                    PsxRam.WriteU16(param_1 + 0x2f56, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f56) + 4));
+                    PsxRam.WriteU16(param_1 + 0x2f6c, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f6c) + 1));
+                    PsxRam.WriteU16(param_1 + 0x2f74, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f74) - 7));
+                    PsxRam.WriteU16(param_1 + 0x2f66, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f66) - 4));
+                    PsxRam.WriteU16(param_1 + 0x2f7c, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f7c) + 1));
+                    PsxRam.WriteU16(param_1 + 0x2f76, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f76) + 4));
+                    PsxRam.WriteU16(param_1 + 0x2f6e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f6e) - 4));
+                    PsxRam.WriteU16(param_1 + 0x2f7e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x2f7e) + 4));
+                    PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, (ushort)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) + 2));
+                }
+                PsxRam.WriteU16(param_1 + BattleState.CtxTallyHold, (ushort)((short)PsxRam.ReadU16(param_1 + BattleState.CtxTallyHold) - 1));
+                if (PsxRam.ReadU16(param_1 + BattleState.CtxTallyHold) == 0)
+                {
+                    uVar3 = (ushort)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyState) | 2);
+                    PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, uVar3);
+                }
+            }
+            else if (PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) == 0)
+            {
+                uVar3 = (ushort)(uVar3 & 0xfff0);
+                PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, uVar3);
+            }
+            else
+            {
+                iVar5 = 0;
+                if ((ushort)PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) < 9)
+                {
+                    sVar8 = (short)PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase);
+                    iVar21 = 0x16;
+                }
+                else
+                {
+                    iVar5 = 0x16;
+                    iVar21 = 0x2c;
+                    sVar8 = (short)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) - 8);
+                }
+                iVar6 = 0;
+                iVar19 = (int)sVar8;
+                psVar12 = param_1 + 0x2ddc;
+
+                // trap(0x1c00) / trap(0x1800) -- the same safe-division trap pair FUN_80058120's own
+                // header documents above, guarding a runtime-variable divisor the compiler could not
+                // fold into a magic multiply. `iVar14 / iVar19` below reaches the same halt through
+                // C#'s own DivideByZeroException / OverflowException instead of a guarded break.
+                do
+                {
+                    sVar8 = (short)PsxRam.ReadU16(Dat80084234Address + iVar21 * 2);
+                    iVar14 = (int)sVar8 - (int)(short)PsxRam.ReadU16(Dat80084234Address + iVar5 * 2);
+                    sVar7 = (short)PsxRam.ReadU16(Dat80084234Address + (iVar21 + 1) * 2);
+                    iVar9 = (int)sVar7 - (int)(short)PsxRam.ReadU16(Dat80084234Address + (iVar5 + 1) * 2);
+                    iVar21 = iVar21 + 2;
+                    iVar5 = iVar5 + 2;
+                    iVar6 = iVar6 + 1;
+                    sVar8 = (short)(sVar8 - (short)(iVar14 / iVar19));
+                    PsxRam.WriteU16(psVar12 + 8, (ushort)sVar8);
+                    PsxRam.WriteU16(psVar12 - 8, (ushort)sVar8);
+                    sVar7 = (short)(sVar7 - (short)(iVar9 / iVar19));
+                    PsxRam.WriteU16(psVar12 + 0x10, (ushort)sVar7);
+                    PsxRam.WriteU16(psVar12, (ushort)sVar7);
+                    psVar12 = psVar12 + 0x28;
+                } while (iVar6 * 0x10000 >> 0x10 < 0xb);
+                PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, (ushort)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) - 2));
+            }
+        }
+        else if (PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) == 0x10)
+        {
+            PsxRam.WriteU16(param_1 + BattleState.CtxTallyState, (ushort)(uVar3 & 0xfffe));
+            PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, 0);
+            PsxRam.WriteU16(param_1 + BattleState.CtxTallyHold, 0x40);
+        }
+        else
+        {
+            iVar5 = 0;
+            if ((ushort)PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) < 9)
+            {
+                sVar8 = (short)PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase);
+                iVar21 = 0x16;
+            }
+            else
+            {
+                iVar5 = 0x16;
+                iVar21 = 0x2c;
+                sVar8 = (short)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) - 8);
+            }
+            iVar6 = 0;
+            iVar19 = (int)sVar8;
+            psVar12 = param_1 + 0x2ddc;
+            do
+            {
+                sVar8 = (short)PsxRam.ReadU16(Dat80084234Address + iVar21 * 2);
+                iVar14 = (int)sVar8 - (int)(short)PsxRam.ReadU16(Dat80084234Address + iVar5 * 2);
+                sVar7 = (short)PsxRam.ReadU16(Dat80084234Address + (iVar21 + 1) * 2);
+                iVar9 = (int)sVar7 - (int)(short)PsxRam.ReadU16(Dat80084234Address + (iVar5 + 1) * 2);
+                iVar21 = iVar21 + 2;
+                iVar5 = iVar5 + 2;
+                iVar6 = iVar6 + 1;
+                sVar8 = (short)(sVar8 - (short)(iVar14 / iVar19));
+                PsxRam.WriteU16(psVar12 + 8, (ushort)sVar8);
+                PsxRam.WriteU16(psVar12 - 8, (ushort)sVar8);
+                sVar7 = (short)(sVar7 - (short)(iVar9 / iVar19));
+                PsxRam.WriteU16(psVar12 + 0x10, (ushort)sVar7);
+                PsxRam.WriteU16(psVar12, (ushort)sVar7);
+                psVar12 = psVar12 + 0x28;
+            } while (iVar6 * 0x10000 >> 0x10 < 0xb);
+            PsxRam.WriteU16(param_1 + BattleState.CtxTallyPhase, (ushort)(PsxRam.ReadU16(param_1 + BattleState.CtxTallyPhase) + 2));
+        }
+
+        // 0x8005C674 -- THE FINAL SUBMISSION, on every path that reaches here: ten primitives at
+        // ctx+0x2DCC (stride 0x28), then, only while CtxTallyValue is 10 or more, the eleventh --
+        // LAB_8005c6a0, the same tail the suspended-VM early exit above jumps into directly.
+        psVar12 = param_1 + 0x2dcc;
+        iVar5 = 0;
+        do
+        {
+            LibGpu.AddPrim(ot, psVar12);
+            iVar5 = iVar5 + 1;
+            psVar12 = psVar12 + 0x28;
+        } while (iVar5 * 0x10000 >> 0x10 < 10);
+    LAB_8005c6a0:
+        if (9 < (ushort)PsxRam.ReadU16(param_1 + BattleState.CtxTallyValue))
+        {
+            LibGpu.AddPrim(ot, psVar12);
+        }
+    }
+
+    // GHIDRA: DAT_80083e1c @ 0x80083E1C (VS.EXE) -- FUN_8005a5b0's own per-ordinal reseed table,
+    // twelve rows of two signed halfwords, 4-byte stride, indexed by SubRecordOrdinal (values 0, 1,
+    // 2, 5, 6, 7, 8, 9 are the only ones the function ever stores there; the table itself runs the
+    // full twelve rows, the same shape every other twelve-slot table in this file uses). Checked
+    // with find-cross-references before embedding: both DAT_80083e1c and DAT_80083e1e have exactly
+    // ONE reference in the whole overlay, both from this function (0x8005B124 and 0x8005B13C). The
+    // span is closed on both sides by neighbours this port already owns: VS_EXE/Roster.cs's own
+    // DAT_80083cf0 record ends at 0x80083E1C exactly (0x80083CF0 + 0x12C), and this file's own
+    // Dat80083e4cAddress table begins at 0x80083E4C -- 0x80083E1C..0x80083E4C is the whole gap, and
+    // this table fills every byte of it.
+    private const int Dat80083e1cAddress = unchecked((int)0x80083E1C);
+    private const int Dat80083e1eAddress = unchecked((int)0x80083E1E);
+
+    internal static readonly byte[] DAT_80083e1c = LibGpu.RamRegion(Dat80083e1cAddress, new byte[]
+    {
+        0x0A, 0x00, 0x32, 0x00, 0x0A, 0x00, 0x5A, 0x00, 0x0A, 0x00, 0x82, 0x00, 0x74, 0xFF, 0x50, 0x00,
+        0x74, 0xFF, 0x50, 0x00, 0x74, 0xFF, 0x50, 0x00, 0x36, 0x01, 0x32, 0x00, 0x36, 0x01, 0x5A, 0x00,
+        0x36, 0x01, 0x82, 0x00, 0xCC, 0x01, 0x50, 0x00, 0xCC, 0x01, 0x50, 0x00, 0xCC, 0x01, 0x50, 0x00,
+    });
+
+    // GHIDRA: DAT_80084234 @ 0x80084234 (VS.EXE) -- the tally icon's own keyframe/pose table, read
+    // by the CtxTallyState interpolation as pairs of signed halfwords (x, y) at a plain 2-byte
+    // stride, and ALSO read by the tally icon's own max-scan (0x8005C10C) as four individually-named
+    // scalars -- DAT_800842b0/b2/b4/b6 are simply the LAST FOUR HALFWORDS of this same 132-byte span,
+    // not a second table: 0x80084234 + 0x7C = 0x800842B0, and Ghidra gives each of the four its own
+    // symbol only because that later code reaches them by direct name rather than by the
+    // interpolation loop's own computed offset. The whole span is single-owner (find-cross-references
+    // on 0x80084234 and on 0x800842B0 each return exactly this function) and closes exactly on this
+    // file's own already-declared Dat800842b8Address (0x80084234 + 0x84 = 0x800842B8) -- the same
+    // kind of exact-boundary check PTR_DAT_80083f90's own comment above already uses.
+    private const int Dat80084234Address = unchecked((int)0x80084234);
+    private const int Dat800842b0Address = Dat80084234Address + 0x7C;
+    private const int Dat800842b2Address = Dat80084234Address + 0x7E;
+    private const int Dat800842b4Address = Dat80084234Address + 0x80;
+    private const int Dat800842b6Address = Dat80084234Address + 0x82;
+
+    internal static readonly byte[] DAT_80084234 = LibGpu.RamRegion(Dat80084234Address, new byte[]
+    {
+        0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF,
+        0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF, 0xE0, 0xFF, 0xF0, 0xFF,
+        0xE0, 0xFF, 0xF0, 0xFF, 0x60, 0x01, 0x70, 0x01, 0x50, 0x01, 0x60, 0x01, 0x10, 0x00, 0x20, 0x00,
+        0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00,
+        0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00, 0x10, 0x00, 0x20, 0x00,
+        0x20, 0x01, 0x30, 0x01, 0x10, 0x01, 0x20, 0x01, 0x10, 0x00, 0x20, 0x00, 0x20, 0x00, 0x30, 0x00,
+        0x30, 0x00, 0x40, 0x00, 0x40, 0x00, 0x50, 0x00, 0x50, 0x00, 0x60, 0x00, 0x60, 0x00, 0x70, 0x00,
+        0x70, 0x00, 0x80, 0x00, 0x80, 0x00, 0x90, 0x00, 0x90, 0x00, 0xA0, 0x00, 0x10, 0x01, 0x2A, 0x01,
+        0x02, 0x01, 0x10, 0x01,
+    });
+
+    // GHIDRA: FUN_80026d98 @ 0x80026D98 (VS.EXE)
+    // BLOCKED: called once per frame from FUN_8005a5b0, gated on CtxRoundRequest bits 0x100/0x180
+    // (both of which ARE proven and portable -- the gate itself is reproduced at the call site
+    // below), with the flag bits cleared unconditionally right after the call returns. NOT PORTABLE
+    // on this slice's own reconnaissance: it depends on FUN_80027340 (816 bytes, unported), which
+    // itself sits on a chain of four more missing functions. param_1 is kept so the call site needs
+    // no change when this closes.
+    private static void FUN_80026d98(int param_1)
     {
         _ = param_1;
     }
 
     // =====================================================================================
     // THREE OF FUN_8005a5b0's OWN CALLEES — per-slot HUD/portrait helpers, called from inside its
-    // still-BLOCKED per-slot loop (0x8005B9F8..0x8005BA1C, twelve iterations, `puVar13` advancing
-    // 0xE0 per slot). None of these three is FUN_8005a5b0 itself and none guesses at what that
-    // loop's own base offset from ctx is — that is still unknown, and BLOCKED above with it.
+    // per-slot sub-loop at 0x8005BA88..0x8005BAD8, twelve iterations, `puVar13` walking
+    // BattleState.CtxSlotSubRecords at BattleState.CtxSlotSubRecordStride per slot (the base FUN_8005a5b0
+    // itself now closes). None of these three is FUN_8005a5b0 itself.
     // =====================================================================================
 
     // GHIDRA: DAT_80083e4c @ 0x80083E4C (VS.EXE) — the first of FUN_80057a7c's two per-character
