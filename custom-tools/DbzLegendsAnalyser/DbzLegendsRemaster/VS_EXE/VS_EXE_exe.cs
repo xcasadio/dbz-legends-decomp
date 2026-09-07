@@ -768,18 +768,34 @@ internal sealed class VS_EXE_exe
     // GHIDRA: DAT_80110000 @ 0x80110000 (VS.EXE)
     // Its PSX address, which CdRead below is handed directly.
     //
-    // PARTIAL on the extent: closed only for what FUN_80062684 itself demonstrably touches --
-    // CdRead(0xb, ..., 0x80) delivers 11 sectors, 0xb * 0x800 = 0x5800 bytes on this port's own
-    // 2048-byte-per-sector model (LibDs.ReadDataSectors). find-cross-references shows this same
-    // PSX address also reached from FUN_8005d25c, FUN_80026ac0 and the FUN_80029xxx family
-    // elsewhere in the overlay -- none of them transliterated in this slice, so this array may need
-    // enlarging (never shrinking; RamRegion updates the same row rather than adding a second one)
-    // when one of those is. Not TITLE_EXE_exe.DAT_80110000's 0x25000: that size comes from TITLE.B
-    // being read whole into the same address in a different, separately-linked program, and would
-    // be a borrowed number here, not a measured one.
+    // ENLARGED FROM 0x5800 TO 0x28000, exactly as this comment's earlier version predicted would be
+    // needed. It was sized for what FUN_80062684 alone touches -- CdRead(0xb, ...) is 11 sectors,
+    // 0xb * 0x800 = 0x5800 on this port's 2048-byte-per-sector model -- and warned that
+    // FUN_8005d25c, FUN_80026ac0 and the FUN_80029xxx family reach the same address and would
+    // force an enlargement when transliterated. FUN_80026ac0 landed, and the prediction held: it
+    // reads a whole character archive here, and the region's own size is what stopped it.
+    //
+    // HOW IT FAILED IS WORTH RECORDING, because the symptom pointed at the CD layer and the cause
+    // was here. LibDs.ReadDataSectors writes sector by sector and BREAKS OUT of its loop the first
+    // time PsxRam.WriteBytes refuses -- which is what a write past the end of a region does. With
+    // 0x5800 backing an 0x11000 read, it delivered 11 sectors of 34, CdRead returned 0 instead of
+    // 1, and FileIo.ReadCDData threw "CdRead delivered fewer than 34 sector(s)". The message named
+    // the read, the position and the destination, and every one of those was correct; the region
+    // behind the destination was not.
+    //
+    // THE NEW SIZE IS MEASURED, not chosen. FUN_80026d08 opens one of the character archives in
+    // data/AT1 and data/AT2 and FUN_80026ac0 reads it whole into this address. The largest of those
+    // thirty-six files is AT1/BU.B at 163840 bytes = 80 sectors = 0x28000, so that is the size.
+    // 0x80110000 + 0x28000 = 0x80138000, far below the next region this port declares
+    // (DAT_801C1000), so nothing is overlapped.
+    //
+    // STILL PARTIAL, and the same rule applies to the next reader as applied to this one: enlarge,
+    // never shrink -- RamRegion updates the row rather than adding a second one -- and size it on
+    // what that reader demonstrably reads. FUN_8005d25c and the FUN_80029xxx family are still
+    // untransliterated and still reach this address.
     private const int Dat80110000Address = unchecked((int)0x80110000);
 
-    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0x5800);
+    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0x28000);
 
     // GHIDRA: DAT_800c3cb8 @ 0x800C3CB8 (VS.EXE)
     // Two POLY_FT4 packets, contiguous (0x800C3CB8 and 0x800C3CB8 + 0x28 = 0x800C3CE0), CLOSED the
