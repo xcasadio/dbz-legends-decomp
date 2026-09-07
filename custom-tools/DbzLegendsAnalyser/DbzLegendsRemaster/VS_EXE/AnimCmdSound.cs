@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -116,8 +116,8 @@ internal static class AnimCmdSound
     // GHIDRA: DAT_801fac40 @ 0x801FAC40 (VS.EXE)
     // Signed slope of the running channel-volume ramp; 0 means no ramp is active. Written by
     // chse_vol as a 5-bit sign-extended field, cleared by chse_call and atse_call, and stepped by
-    // FUN_8003ecfc @ 0x8003ECFC, which ExecuteAnimStreamBatch calls once per frame at 0x80036970.
-    // FUN_8003ecfc reads it signed (`if (iVar2 < 0)`), hence sbyte.
+    // StepVolumeRamp @ 0x8003ECFC, which ExecuteAnimStreamBatch calls once per frame at 0x80036970.
+    // StepVolumeRamp reads it signed (`if (iVar2 < 0)`), hence sbyte.
     internal static sbyte DAT_801fac40;
 
     // GHIDRA: DAT_801fac41 @ 0x801FAC41 (VS.EXE)
@@ -126,11 +126,11 @@ internal static class AnimCmdSound
     internal static byte DAT_801fac41;
 
     // GHIDRA: DAT_801fac42 @ 0x801FAC42 (VS.EXE)
-    // The ramp's current volume. FUN_8003ecfc adds the slope to it every frame.
+    // The ramp's current volume. StepVolumeRamp adds the slope to it every frame.
     internal static byte DAT_801fac42;
 
     // GHIDRA: DAT_801fac43 @ 0x801FAC43 (VS.EXE)
-    // The ramp's target volume. FUN_8003ecfc stops the ramp when the current value passes it.
+    // The ramp's target volume. StepVolumeRamp stops the ramp when the current value passes it.
     internal static byte DAT_801fac43;
 
     // GHIDRA: DAT_8008d384 @ 0x8008D384 (VS.EXE)
@@ -196,7 +196,7 @@ internal static class AnimCmdSound
     // Opcode 46, which the image's name table calls `chse_vol` (0x800826A0). Ghidra has not
     // promoted this address either; the only reference is the DATA reference from slot 0x800823AC.
     //
-    // Arms the volume ramp FUN_8003ecfc steps once per frame. h0's top 5 bits are the slope, sign
+    // Arms the volume ramp StepVolumeRamp steps once per frame. h0's top 5 bits are the slope, sign
     // extended by the `^ 0xffe0` below; h0's high byte masked to 3 bits is the channel; h1's low
     // byte is the starting volume and h1's high byte the target, each optionally indirected through
     // g_animSharedVarTable. A slope of 0 means "no ramp", and only then does it push the volume
@@ -497,6 +497,48 @@ internal static class AnimCmdSound
         return 0;
     }
 
+    // ==== WHAT ACTUALLY BLOCKS THIS MODULE, decoded rather than described ======================
+    //
+    // Four of the five stubs below are blocked by the SAME THREE functions, and this note names
+    // them so the blocker is actionable instead of "the whole module". All three were read out of
+    // the image; none is game logic.
+    //
+    //   FUN_8006bdd8 @ 0x8006BDD8, 156 bytes, (ushort voice, short volL, short volR) -> int
+    //       if (voice < 0x18) { (&DAT_800994a6)[voice*8] = volR * 0x81;
+    //                           (&DAT_800994a4)[voice*8] = volL * 0x81;
+    //                           (&DAT_80099624)[voice] |= 3; return 0; }
+    //       else return -1;
+    //       A per-voice volume shadow write plus a two-bit dirty flag. The * 0x81 scales a 0..0x7F
+    //       argument onto 0..0x3FFF, which is what the call sites pass (0x38, 0x40, 0x7FFF only
+    //       from a sibling). 16 callers.
+    //
+    //   FUN_8006b88c @ 0x8006B88C, 280 bytes, (ushort voice) -> int
+    //       Builds the key bit for `voice` (low 16 voices in one mask word, 0x10.. in the other),
+    //       zeroes three shadow fields at strides 0x30/0x18/0x18, clears the bit from the live key
+    //       registers DAT_800A0514 / DAT_800A0518 and ORs it into the pending masks DAT_800C3DCC /
+    //       DAT_800C3DD0. A key-OFF. 8 callers.
+    //
+    //   FUN_8006b4a0 @ 0x8006B4A0, the key-ON counterpart, 8 arguments.
+    //
+    // THE CONCLUSION, AND IT IS A SCOPE CALL: these are SDK-LAYER functions, not runtime. They
+    // touch only voice shadow tables and hardware-mirror registers, carry no game state, are bound
+    // by 0x18 -- the PSX SPU's 24 voices -- and are reached from every sound-adjacent module rather
+    // than from one family. Rule 13 of the mandate is explicit that PSX SDK functions must not be
+    // transliterated as if they belonged to the game runtime, so they do NOT belong in this file or
+    // in any VS_EXE file. They belong in PsxSdkMonogame, beside LibSpu.SpuSetVoiceVolume and
+    // LibSpu.SpuKeyOffVoices, which are already declared there as no-op stubs.
+    //
+    // WHAT IS NOT CLAIMED: which SDK library they come from. The shadow layout uses several
+    // different strides (8, 0x18, 0x30) at several bases, and the deferred key masks are a libsnd
+    // idiom rather than a libspu one -- but PSY-Q's own SpuSetVoiceVolume takes volumes directly
+    // instead of scaling by 0x81, so this is not that function under another name. Naming them
+    // would be a guess, so they keep their FUN_ names.
+    //
+    // SO THE REMAINING WORK IS SDK WORK, NOT TRANSLITERATION. Writing these three into
+    // PsxSdkMonogame would unblock FUN_8005fb9c, FUN_8005fcec and FUN_8005fd9c mechanically; but
+    // LibSpu's whole voice model is `return default` today, so they would write to tables nothing
+    // reads and still produce no audio. That is why the stubs below stay stubs.
+
     // GHIDRA: FUN_8005fb9c @ 0x8005FB9C (VS.EXE)
     // BLOCKED: 336 bytes of the sound driver module, not of the animation VM. It walks the six-slot
     // voice bank at DAT_8008d214 (0x11..0x16), keys off through FUN_8006b88c when the sound index
@@ -513,7 +555,7 @@ internal static class AnimCmdSound
     // GHIDRA: FUN_8005fcec @ 0x8005FCEC (VS.EXE)
     // BLOCKED: 176 bytes of the same module. Sets the volume of one voice through FUN_8006bdd8, or
     // of all six of 0x11..0x16 when the channel is 0. Four call sites, only one of which is in this
-    // file; ExecuteAnimStreamBatch and FUN_8003ecfc are two of the others. Its result is discarded
+    // file; ExecuteAnimStreamBatch and StepVolumeRamp are two of the others. Its result is discarded
     // at every one of them.
     // Le type de retour est `void`, et ce fichier le declarait `int`. Les octets tranchent par les
     // appelants: les QUATRE sites (0x80035120, 0x800369F8, 0x8003ECDC, 0x8003ED6C) ignorent $v0, ce

@@ -42,9 +42,9 @@ namespace DbzLegendsRemaster.VS_EXE;
 // word3 into three operand slots, resolves them through FUN_8003f228 (0x801F2080 table),
 // FUN_8003f2b0 (0x801F2000 table) and a direct index into the 0x801F2100 table, finds the first of
 // sixty-four AnimVm.g_renderMetadataBuffer entries whose byte at +2 matches the command's low nibble, and
-// hands the whole lot to FUN_8003f6c0 @ 0x8003F6C0.
+// hands the whole lot to TransformMeshPrimitives @ 0x8003F6C0.
 //
-// FUN_8003f6c0 IS A GTE TRANSFORM, and it is called from exactly one site — this handler. Its body:
+// TransformMeshPrimitives IS A GTE TRANSFORM, and it is called from exactly one site — this handler. Its body:
 // PushMatrix, ReadRotMatrix(&DAT_1f800000), RotMatrix(param_3, ...), a translation loaded from
 // param_4[0..2], ScaleMatrix with param_5[0..2], CompMatrix, SetRotMatrix, SetTransMatrix, then per
 // primitive RotAverage4 or RotAverage3 (chosen on the vertex quad's `pad` field), storing the
@@ -123,7 +123,7 @@ internal static class AnimCmdMesh
     private const int DAT_801f5180 = unchecked((int)0x801F5180);
 
     // GHIDRA: DAT_801fa580 @ 0x801FA580 (VS.EXE)
-    // Ghidra types it undefined. The per-primitive ordering-table Z, one short each: FUN_8003f6c0
+    // Ghidra types it undefined. The per-primitive ordering-table Z, one short each: TransformMeshPrimitives
     // writes it from RotAverage3/4 and AnimCmd_CulSet then biases a run of it by word2.
     private const int DAT_801fa580 = unchecked((int)0x801FA580);
 
@@ -147,6 +147,38 @@ internal static class AnimCmdMesh
 
     // GHIDRA: DAT_801faa8c @ 0x801FAA8C (VS.EXE)
     private const int DAT_801faa8c = unchecked((int)0x801FAA8C);
+
+    // GHIDRA: DAT_8008d244 @ 0x8008D244 (VS.EXE) / DAT_8008d248 @ 0x8008D248 (VS.EXE)
+    // Both Ghidra `undefined2`. ComputeYawPitchToTarget stages a delta vector here before rotating it through
+    // the GTE: 8008d244 is the SVECTOR's vx (a wrapped X delta), 8008d248 -- four bytes further, so
+    // the SVECTOR's vz, skipping vy at +2 -- is the wrapped Z delta. vy and pad are read (as the
+    // rest of the SVECTOR) but never written by that function; see its own header note.
+    private const int DAT_8008d244 = unchecked((int)0x8008D244);
+    private const int DAT_8008d248 = unchecked((int)0x8008D248);
+
+    // GHIDRA: DAT_80084ca4 @ 0x80084CA4 (VS.EXE), and its four neighbours DAT_80084ca8/cac/cb0/cb4
+    // Ghidra types each `undefined4` -- confirmed on the raw disassembly as `sw`, not `sh`, so each
+    // covers TWO adjacent shorts of the MATRIX at this address. ComputeYawPitchToTarget (the only writer in
+    // this file) uses exactly these five words to set the WHOLE 9-short m[] array plus its trailing
+    // pad short (0x80084CA4..0x80084CB7); see that function's header for the full field mapping.
+    // This is genuine engine-wide GTE scratch, not private to that function: a cross-reference
+    // census shows 0x80084CA4 also passed by address from not-yet-ported code at 0x80054198 and
+    // 0x80054698. Declared here only because this file is the first to need it.
+    private const int DAT_80084ca4 = unchecked((int)0x80084CA4);
+    private const int DAT_80084ca8 = unchecked((int)0x80084CA8);
+    private const int DAT_80084cac = unchecked((int)0x80084CAC);
+    private const int DAT_80084cb0 = unchecked((int)0x80084CB0);
+    private const int DAT_80084cb4 = unchecked((int)0x80084CB4);
+
+    // GHIDRA: DAT_800b30e8 @ 0x800B30E8 (VS.EXE) / DAT_800b30f0 @ 0x800B30F0 (VS.EXE) /
+    // DAT_800b30f4 @ 0x800B30F4 (VS.EXE)
+    // One VECTOR (Ghidra: `undefined4` x3 plus an unlabelled +0xC pad), used by ComputeYawPitchToTarget as
+    // RotTrans's OUTPUT: 800b30e8 is vx, 800b30f0 (+8) is vz -- named separately because the
+    // function reads it back directly as a distance term -- and 800b30f4 (+0xC, the VECTOR's own
+    // pad field) doubles as RotTrans's FLAG output slot. vy at +4 has no separate Ghidra label.
+    private const int DAT_800b30e8 = unchecked((int)0x800B30E8);
+    private const int DAT_800b30f0 = unchecked((int)0x800B30F0);
+    private const int DAT_800b30f4 = unchecked((int)0x800B30F4);
 
     // GHIDRA: g_cdFileBufferTable @ 0x801D2000 (VS.EXE)
     // Ghidra types it undefined4, so `(&g_cdFileBufferTable)[i]` is the word at +i*4. Slots 2..5 of
@@ -557,7 +589,7 @@ internal static class AnimCmdMesh
     // THE NAME IN THE `GHIDRA:` LINE ABOVE IS THE ONE THE PROJECT DATABASE HOLDS, AND THE EVIDENCE
     // REFUTES IT. The C# name comes from the image. The full argument is in the file header; in one
     // line: this handler resolves a rotation slot, a translation slot and a scale slot, then calls
-    // FUN_8003f6c0, which is a PushMatrix / RotMatrix / ScaleMatrix / CompMatrix / RotAverage
+    // TransformMeshPrimitives, which is a PushMatrix / RotMatrix / ScaleMatrix / CompMatrix / RotAverage
     // geometry pass writing per-primitive OTZ. No CLUT, no palette, no colour table is touched
     // anywhere in either body.
     //
@@ -672,7 +704,7 @@ internal static class AnimCmdMesh
                     // &AnimVm.DAT_801f2180 is undefined2*, so `+ uVar7 * 0x10` is +uVar7*0x20 bytes — the
                     // 0x20-byte vertex quad AnimCmd_RenderEntryGroup writes per primitive.
                     iVar18 = AnimVm.DAT_801f2180 + (int)uVar7 * 0x10 * 2;
-                    FUN_8003f6c0(
+                    TransformMeshPrimitives(
                         AnimVm.DAT_801f7180 + (int)uVar7 * 0x34,
                         iVar18,
                         unaff_s3,
@@ -940,7 +972,7 @@ internal static class AnimCmdMesh
     // for the name.
     //
     // Opcode 30, which the image's opcode-name table calls `dist_set`. Two operand slots resolved
-    // through FUN_8003f228 and one through FUN_8003f2b0; the three go to FUN_80045f34, and the
+    // through FUN_8003f228 and one through FUN_8003f2b0; the three go to ComputeYawPitchToTarget, and the
     // result's halfword at +2 is then biased by word2 and wrapped into twelve bits — the same
     // 0xfff angle wrap the shared-variable indices use elsewhere in the VM. Three halfwords
     // consumed.
@@ -969,7 +1001,7 @@ internal static class AnimCmdMesh
             iVar4 = AnimCmdTransform.FUN_8003f228((uint)(uVar1 & 0xff), uVar6);
             if (iVar3 != 0 && iVar4 != 0 && (iVar5 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar1 >> 8), uVar6)) != 0)
             {
-                FUN_80045f34(iVar3, iVar4, iVar5);
+                ComputeYawPitchToTarget(iVar3, iVar4, iVar5);
                 PsxRam.WriteU16(iVar5 + 2, (ushort)(((short)PsxRam.ReadU16(iVar5 + 2) + uVar2) & 0xfff));
             }
         }
@@ -1214,7 +1246,7 @@ internal static class AnimCmdMesh
         pad = (short)PsxRam.ReadU16(psxAddress + 6),
     };
 
-    // GHIDRA: FUN_8003f6c0 @ 0x8003F6C0 (VS.EXE)
+    // GHIDRA: TransformMeshPrimitives @ 0x8003F6C0 (VS.EXE)
     // 724 bytes, exactly one caller: AnimCmd_CulSet at 0x80038998.
     //
     // THIS WAS BLOCKED, AND THE BLOCKER HAS LAPSED. The note here used to say it could not be
@@ -1238,7 +1270,7 @@ internal static class AnimCmdMesh
     //
     // param_9 / param_10 / param_11 are the three further argument words AnimCmd_CulSet stores; the
     // body never reads them. They are kept on the signature so the call site stays literal.
-    private static void FUN_8003f6c0(int param_1, int param_2, int param_3, int param_4, int param_5,
+    private static void TransformMeshPrimitives(int param_1, int param_2, int param_3, int param_4, int param_5,
         int param_6, ushort param_7, short param_8, ushort param_9, ushort param_10, ushort param_11)
     {
         LibGte.PushMatrix();
@@ -1349,11 +1381,134 @@ internal static class AnimCmdMesh
         LibGte.PopMatrix();
     }
 
-    // GHIDRA: FUN_80045f34 @ 0x80045F34 (VS.EXE)
-    // BLOCKED: 712 bytes, called by AnimCmd_DistSet with two translation slots and one rotation
-    // slot. Semantics not closed.
-    private static void FUN_80045f34(int param_1, int param_2, int param_3)
+    // GHIDRA: ComputeYawPitchToTarget @ 0x80045F34 (VS.EXE)
+    // 712 bytes, full decompilation AND disassembly reviewed (every load/store width below was
+    // checked on the raw instructions, not assumed from the decompiler's typing). Called by
+    // AnimCmd_DistSet with two position slots (param_1, param_2 -- each `short*` to an X/Y/Z triple)
+    // and one result slot (param_3, `undefined2*`, three ushorts).
+    //
+    // CERTAIN, WHAT IT COMPUTES: two 12-bit angles from the delta between the two positions.
+    //   1. local_18 = param_2.x - param_1.x (index 0), local_10 = param_2.z - param_1.z (index 2);
+    //      index 1 (Y) is skipped here and picked up later, in step 5. Each delta is folded back by
+    //      the same "shorter way around a 16-bit domain" correction: if the raw difference's
+    //      magnitude exceeds 0x7fff, replace it with 0xffff-magnitude, sign opposite to the raw
+    //      difference. Rule 12: reproduced exactly.
+    //   2. yaw = ratan2(local_18, local_10) & 0xfff, written to param_3[1] (the ushort at +2).
+    //   3. param_3[0] is forced to 0.
+    //   4. A MATRIX is built and rotated about Y by (0x1000 - yaw), loaded into the GTE
+    //      (PushMatrix / ... / SetRotMatrix / SetTransMatrix), and RotTrans applies it to the
+    //      SVECTOR (local_18, <unset>, local_10) staged at DAT_8008d244, producing an output VECTOR
+    //      at DAT_800b30e8 and a flag word at DAT_800b30f4. PopMatrix restores the prior GTE state.
+    //   5. pitch = ratan2(param_2.y - param_1.y, outVec.z) & 0xfff, written to param_3[2].
+    //   This is the ordinary direction-vector-to-yaw/pitch construction, done through one real GTE
+    //   rotate instead of a sqrt+atan2 pair: read literally here, not renamed or reinterpreted.
+    //
+    // THE FIVE MATRIX STORES ARE 32-BIT (`sw`), NOT FOUR INDEPENDENT 16-BIT FIELDS -- this was
+    // checked on the disassembly specifically because getting it wrong would have looked plausible:
+    // `DAT_80084ca4 = 0x1000;` compiles to one `sw`, and a 32-bit store of the constant 0x1000 sets
+    // the LOW short (0x1000) AND the HIGH short (0x0000) at once. Because the five stores
+    // (cb4,cac,ca4,cb0,ca8) between them cover 0x80084CA4..0x80084CB7 -- exactly m[9] plus its
+    // trailing pad short -- the matrix this function builds is a COMPLETE IDENTITY, not five
+    // scalars over an otherwise-stale array: m[0]=m[4]=m[8]=0x1000, every other m[i]=0. There is no
+    // stale row-0/row-2 carry-in for RotMatrixY to read here (contrast the note below on t[]).
+    //
+    // PARTIAL, and left exactly as the original leaves it -- state this function reads but never
+    // itself initialises:
+    //   * matrix.t[0..2] at DAT_80084ca4+0x14: SetTransMatrix loads the GTE translation register
+    //     straight from it, and neither this function nor (per the address-only PARAM references
+    //     found at 0x80054198/0x80054698) any known caller of THIS function writes it first. What
+    //     the GTE adds as translation here is whatever the shared scratch matrix already held.
+    //   * the SVECTOR's vy and pad at DAT_8008d244+2/+6 -- only vx and vz (DAT_8008d244/48) are
+    //     written before RotTrans reads the vector.
+    // Both are round-tripped through PsxRam exactly where the original touches memory, so a field
+    // nothing here writes reads back as whatever PsxRam already holds for that address (currently
+    // zero, per this file's own WIRING GAP note) rather than being invented.
+    //
+    // The GTE FLAG this function threads through to DAT_800b30f4 is LibGte.RotTrans's own
+    // already-documented limitation (its FLAG register is not modelled and is always written as 0
+    // in this port) -- inherited here, not re-analysed.
+    private static void ComputeYawPitchToTarget(int param_1, int param_2, int param_3)
     {
+        int local_18 = (short)PsxRam.ReadU16(param_2) - (short)PsxRam.ReadU16(param_1);
+        int local_14 = local_18 < 0 ? -local_18 : local_18;
+        if (0x7fff < local_14)
+        {
+            local_14 = 0xffff - local_14;
+            if (0 < local_18)
+            {
+                local_14 = -local_14;
+            }
+
+            local_18 = local_14;
+        }
+
+        int local_10 = (short)PsxRam.ReadU16(param_2 + 2 * 2) - (short)PsxRam.ReadU16(param_1 + 2 * 2);
+        int local_c = local_10 < 0 ? -local_10 : local_10;
+        if (0x7fff < local_c)
+        {
+            local_c = 0xffff - local_c;
+            if (0 < local_10)
+            {
+                local_c = -local_c;
+            }
+
+            local_10 = local_c;
+        }
+
+        PsxRam.WriteU16(DAT_8008d244, (ushort)(short)local_18);
+        PsxRam.WriteU16(DAT_8008d248, (ushort)(short)local_10);
+        int lVar1 = LibGte.ratan2((short)local_18, (short)local_10);
+        PsxRam.WriteU16(param_3 + 1 * 2, (ushort)(lVar1 & 0xfff));
+
+        LibGte.PushMatrix();
+
+        // Five 32-bit stores that together cover the whole m[9]+pad span -- see the header note.
+        PsxRam.WriteI32(DAT_80084cb4, 0x1000); // m[2][2] | pad
+        PsxRam.WriteI32(DAT_80084cac, 0x1000); // m[1][1] | m[1][2]
+        PsxRam.WriteI32(DAT_80084ca4, 0x1000); // m[0][0] | m[0][1]
+        PsxRam.WriteU16(param_3, 0);
+        PsxRam.WriteI32(DAT_80084cb0, 0);      // m[2][0] | m[2][1]
+        PsxRam.WriteI32(DAT_80084ca8, 0);      // m[0][2] | m[1][0]
+
+        // JUSTIFICATION: C# language bridge only -- bridge to the SDK's MATRIX-object shape only
+        // where a call needs one. m[] is exactly the identity just written to memory above; t[] is
+        // never written by this function and is read back from the same shared scratch address, per
+        // the PARTIAL note above.
+        var matrix = new LibGte.MATRIX();
+        matrix.m[0] = 0x1000;
+        matrix.m[4] = 0x1000;
+        matrix.m[8] = 0x1000;
+        matrix.t[0] = PsxRam.ReadI32(DAT_80084ca4 + 0x14);
+        matrix.t[1] = PsxRam.ReadI32(DAT_80084ca4 + 0x18);
+        matrix.t[2] = PsxRam.ReadI32(DAT_80084ca4 + 0x1c);
+
+        LibGte.RotMatrixY((uint)(0x1000 - (short)PsxRam.ReadU16(param_3 + 1 * 2)), matrix);
+        LibGte.SetRotMatrix(matrix);
+        LibGte.SetTransMatrix(matrix);
+
+        // Persist the rotated matrix back to the same PSX address RotMatrixY targets in the
+        // original, so a later reader of DAT_80084ca4 -- this function's own next call, or the
+        // other, not-yet-ported call sites -- sees the post-rotation values rather than the
+        // identity this call started from.
+        for (int i = 0; i < 9; i++)
+        {
+            PsxRam.WriteU16(DAT_80084ca4 + i * 2, (ushort)matrix.m[i]);
+        }
+
+        var outVec = new LibGte.VECTOR();
+        var flag = new int[1];
+        LibGte.RotTrans(ReadSvector(DAT_8008d244), outVec, flag);
+        PsxRam.WriteI32(DAT_800b30e8, outVec.vx);
+        PsxRam.WriteI32(DAT_800b30e8 + 4, outVec.vy);
+        PsxRam.WriteI32(DAT_800b30f0, outVec.vz);
+        PsxRam.WriteI32(DAT_800b30f4, flag[0]);
+
+        LibGte.PopMatrix();
+
+        lVar1 = LibGte.ratan2(
+            (short)PsxRam.ReadU16(param_2 + 1 * 2) - (short)PsxRam.ReadU16(param_1 + 1 * 2),
+            outVec.vz);
+        PsxRam.WriteU16(param_3 + 2 * 2, (ushort)(lVar1 & 0xfff));
     }
     // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
     // BLOCKED: 312 bytes, called by AnimCmd_MovexpSet avec le creneau de rotation resolu, l'ADRESSE

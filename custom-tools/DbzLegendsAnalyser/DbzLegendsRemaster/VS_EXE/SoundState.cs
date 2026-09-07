@@ -49,10 +49,28 @@ internal static class SoundState
     internal static int DAT_8008d280;
 
     // GHIDRA: DAT_8008d338 @ 0x8008D338 (VS.EXE) — gp+0x23C
-    // PARTIAL: an SpuStEnv-shaped structure the init writes at +0x000/+0x17C/+0x180. It is NOT
-    // part of the workspace and must not be confused with it; the recon flagged that trap
-    // explicitly. Held as its PSX address because the init hands the address around.
-    internal const int Dat8008d338Address = unchecked((int)0x8008D338);
+    //
+    // A POINTER VARIABLE, and the first reading of it here was wrong. It was declared as a `const`
+    // ADDRESS under the belief that it was an SpuStEnv-shaped structure the init writes at +0x000 /
+    // +0x17C / +0x180, so callers could index off 0x8008D338 directly. The cross-reference table
+    // settles it: seventeen references, of which exactly ONE is a WRITE (0x8005D3C0, inside the
+    // init FUN_8005d25c) and sixteen are READS. One writer and sixteen readers is the shape of a
+    // pointer cell, not of a structure.
+    //
+    // The instructions say the same thing without ambiguity. FUN_800600b0 begins
+    //     0x800600B0  8F83023C   lw v1,0x23c(gp)     ; v1 = the WORD STORED AT 0x8008D338
+    //     0x800600B4  34020002   li v0,2
+    //     0x800600B8  A0620174   sb v0,0x174(v1)     ; write through the loaded pointer
+    // so the target is *(0x8008D338) + 0x174, never 0x8008D338 + 0x174. Ghidra prints
+    // `*(undefined1 *)(DAT_8008d338 + 0x174) = 2;` where bare DAT_8008d338 already MEANS the value
+    // held in that cell -- exactly the convention DAT_8008d284 above follows, and reading it as an
+    // address instead put two call sites 0x8008D338 bytes off target.
+    //
+    // PARTIAL: nothing in the port writes it yet. The one writer is the sound init FUN_8005d25c,
+    // which is not transliterated, so this stays 0 and the dependent writes land on an unmapped
+    // address and are dropped. That is faithful -- the original would write through whatever
+    // pointer is there -- and it is a consequence of the init being unported, not of its readers.
+    internal static int DAT_8008d338;
 
     // GHIDRA: DAT_8008d210 @ 0x8008D210 (VS.EXE)
     internal const int Dat8008d210Address = unchecked((int)0x8008D210);
@@ -72,7 +90,7 @@ internal static class SoundState
     internal const int AtbBankSlot = 0x090;   // "\SOUND\ATB.B;1"  @ 0x8002094C
     internal const int AbtlBankSlot = 0x0C0;  // "\SOUND\ABTL.B;1" @ 0x8002092C
     internal const int ChseBankSlot = 0x0F0;  // "\SOUND\CHSE.B;1" @ 0x8002095C
-    // and it is a CdlFILE, not just a name slot: FUN_8005f704 hands its address straight to
+    // and it is a CdlFILE, not just a name slot: SoundCdLoadStep hands its address straight to
     // CdPosToInt, which reads the CdlLOC a CdlFILE begins with.
 
     // Only BGM and ABTL are streamed from CD by the init itself, into fixed RAM at
@@ -94,7 +112,7 @@ internal static class SoundState
     internal const int CompletedRequestId = 0x15A;  // state 7 stores the request id here on success
 
     // ---- Two arrays whose length the evidence DISAGREES on, recorded rather than smoothed over.
-    // FUN_8005f704's state 1 loops i = 0..5 inclusive -- `slti v0,6` at 0x8005F7E0 -- so it touches
+    // SoundCdLoadStep's state 1 loops i = 0..5 inclusive -- `slti v0,6` at 0x8005F7E0 -- so it touches
     // SIX halfwords in each. The init's zero-fill covers only five. Six is what the loop proves and
     // six is what is declared; the init writing one fewer is a fact about the init, not about the
     // array, and whoever ports the init should re-read it rather than trust this note.

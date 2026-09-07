@@ -130,16 +130,24 @@ internal static class BattleScene
 
     // GHIDRA: DAT_8008d340 @ 0x8008D340 (VS.EXE)
     // Ghidra types it undefined4. PARTIAL: bit 6 (0x40) is set by phase 1 as a latch and cleared by
-    // phase 4 on its way out, and bits 2|3 (0xC) gate phase 0's early call to FUN_8005f704. What
+    // phase 4 on its way out, and bits 2|3 (0xC) gate phase 0's early call to SoundCdLoadStep. What
     // sets those two is outside this slice.
+    //
+    // FOUR MORE WRITERS, closed by this slice, all still inside this file. FUN_8005ec4c sets the
+    // WHOLE WORD to 0x10 the first time it is called with the word still zero (`if (DAT_8008d340 ==
+    // 0)`, not a bit test) and never touches it again after that. FUN_8005ec8c ORs in bit 4 (0x10)
+    // once, guarded by its own latch at DAT_8008d284+0x110 and by AnimCmdSound.DAT_8008d384 == 0.
+    // FUN_800600b0 and FUN_800602dc — camera-mode readiness queries, phase 4 sub-step 0 — both clear
+    // bit 5 (0x20) on the same two AnimCmdSound.DAT_8008d384 values (9 and 0x10) that make them
+    // report ready. None of the four ever touch bit 6 (0x40) or bits 2|3 (0xC).
     //
     // OWNERSHIP CAVEAT, and this one is NOT resolved. VS_EXE/BattleManager.cs holds
     // `private static int DAT_8008d340` at its line 1658 and reads it twice in its state 2 — once
     // masked with 0xC and once whole — each hit blocking the hand-back for another frame. This file
-    // holds the only WRITERS in the port: phase 1 raises bit 6 and phase 4 lowers it. So the manager
-    // is waiting on a latch it cannot see. It is declared `internal` here so the manager's slice can
-    // point at it, and reported upward; it cannot be fixed from this side, because BattleManager.cs
-    // is not this file's to edit.
+    // holds the only WRITERS in the port: phase 1 raises bit 6, phase 4 lowers it, and the four
+    // camera-mode helpers above touch bits 4 and 5. So the manager is waiting on a latch it cannot
+    // see. It is declared `internal` here so the manager's slice can point at it, and reported
+    // upward; it cannot be fixed from this side, because BattleManager.cs is not this file's to edit.
     internal static uint DAT_8008d340;
 
     // GHIDRA: DAT_8008d53c @ 0x8008D53C (VS.EXE)
@@ -176,7 +184,7 @@ internal static class BattleScene
     // GHIDRA: DAT_800990c0 @ 0x800990C0 (VS.EXE)
     // TWO TWELVE-BYTE RECORDS, at 0x800990C0 and 0x800990CC, and they are shared with the animation
     // VM: RenderBattleScene3D initialises all fourteen fields and AnimVmInterpreter's RunBatchTail
-    // then feeds both to FUN_80061f1c every batch, decrementing +0x08 of the first and, on its low
+    // then feeds both to RollAndUploadClutRange every batch, decrementing +0x08 of the first and, on its low
     // bit, incrementing +0x08 of the second. The shape, from the fourteen stores below and Ghidra's
     // own types (undefined4 at +0, undefined2 at +4 and +6, undefined1 at +8..+11):
     //
@@ -207,7 +215,7 @@ internal static class BattleScene
     // The two blocks the records above point at: sixteen halfwords each, read straight out of the
     // image — 0000 FFFF 873A 9B5A AF7B C39C D7BD EBDE FFFF EE9E D15D B41D 61BE 6E9E 735E 7FFF for
     // the first. Sixteen 16-bit entries is the shape of a 4-bit CLUT. PARTIAL: the consumer,
-    // FUN_80061f1c @ 0x80061F1C, is outside this slice, so only the addresses are transliterated.
+    // RollAndUploadClutRange @ 0x80061F1C, is outside this slice, so only the addresses are transliterated.
     private const int DAT_800826e0 = unchecked((int)0x800826E0);
 
     private const int DAT_80082700 = unchecked((int)0x80082700);
@@ -425,7 +433,7 @@ internal static class BattleScene
 
         if ((DAT_8008d340 & 0xc) != 0)
         {
-            uVar2 = SoundDriver.FUN_8005f704((short)PsxRam.ReadI32(piVar15 + 0x74), 0);
+            uVar2 = SoundDriver.SoundCdLoadStep((short)PsxRam.ReadI32(piVar15 + 0x74), 0);
             PsxRam.WriteU16(piVar15 + 0x78, uVar2);
         }
 
@@ -755,7 +763,7 @@ internal static class BattleScene
     // A three-step machine on the sub-step at +0x78, guarded by bit 6 of DAT_8008d340, which this
     // function raises on entry and phase 4 lowers on its way out.
     //
-    //   below 8   run FUN_8005f704 until it returns 8 or more; a scene id of 0x40 or more skips
+    //   below 8   run SoundCdLoadStep until it returns 8 or more; a scene id of 0x40 or more skips
     //             straight to 8
     //   == 8      start the read of "\CH_BIN1\CH_xx.BIN;1", falling back to CH_NO.BIN on -1, and
     //             step to 9 on success
@@ -787,7 +795,7 @@ internal static class BattleScene
                         PsxRam.WriteU16(iVar4 + 0x78, 8);
                     }
 
-                    sVar1 = (short)SoundDriver.FUN_8005f704((short)PsxRam.ReadU16(iVar4 + 0x74),
+                    sVar1 = (short)SoundDriver.SoundCdLoadStep((short)PsxRam.ReadU16(iVar4 + 0x74),
                         (short)PsxRam.ReadU16(iVar4 + 0x78));
                     PsxRam.WriteU16(iVar4 + 0x78, (ushort)sVar1);
                     if (sVar1 < 8)
@@ -1940,48 +1948,215 @@ internal static class BattleScene
     }
 
     // GHIDRA: FUN_800600b0 @ 0x800600B0 (VS.EXE)
-    // BLOCKED: the sound subsystem's stop/query on channel 2. Phase 0 calls it for effect, phase 4
-    // sub-step 0 reads its result and returns early on 1, so the value is live.
+    // CLOSED. 112 bytes, 0x800600B0..0x8006011F. Two callers in this file — phase 0's sound-driver
+    // check and phase 4 sub-step 0's readiness wait — plus one outside it, BattleManager's
+    // FUN_800578e0 (`BattleScene.FUN_800600b0(2)`), which is why this stays `internal`.
+    //
+    // GHIDRA REPORTS PARAMETERCOUNT 0. Every call site in the image passes the literal 2, but the
+    // decompiled body never reads it — it forces SoundState's SpuStEnv-shaped struct
+    // (*DAT_8008d338) field +0x174 to the constant 2 itself, unconditionally, on every call.
+    // The parameter is kept only because BattleManager.cs already calls `FUN_800600b0(2)` and this
+    // file does too; `param_1` is dead on the console and dead here.
+    //
+    // THE COMMA TRICK. Ghidra's `else if (DAT_8008d384 == 9 || (uVar1 = 1, DAT_8008d384 == 0x10))`
+    // sets uVar1 = 1 as a side effect of evaluating the OR's second half, which only runs when
+    // DAT_8008d384 != 9 — and the branch body always overwrites uVar1 with 0 regardless of which
+    // half matched. C# has no comma operator, so this is reproduced as the equivalent nested branch
+    // below: identical stores, identical return value, for every DAT_8008d384 value. Worked through:
+    // state 0, masked-0x3f 0xb, or bit 0x80 set -> return 0; state 9 or 0x10 -> clear the driver
+    // state and DAT_8008d340 bit 5 (0x20), return 0; anything else -> return 1, the only path that
+    // reaches the tail without an explicit store. Phase 4 sub-step 0 blocks on exactly that 1.
     internal static int FUN_800600b0(int param_1)
     {
         _ = param_1;
-        return 0;
+        int uVar1;
+
+        // `lw v1,0x23c(gp)` then `sb v0,0x174(v1)` at 0x800600B0: the byte goes through the
+        // POINTER held at 0x8008D338, not to that address plus 0x174. See SoundState.DAT_8008d338.
+        PsxRam.WriteU8(SoundState.DAT_8008d338 + 0x174, 2);
+
+        if (AnimCmdSound.DAT_8008d384 == 0
+            || (AnimCmdSound.DAT_8008d384 & 0x3f) == 0xb
+            || (AnimCmdSound.DAT_8008d384 & 0x80) != 0)
+        {
+            uVar1 = 0;
+        }
+        else if (AnimCmdSound.DAT_8008d384 == 9)
+        {
+            DAT_8008d340 = DAT_8008d340 & 0xffffffdf;
+            AnimCmdSound.DAT_8008d384 = 0;
+            uVar1 = 0;
+        }
+        else
+        {
+            uVar1 = 1;
+            if (AnimCmdSound.DAT_8008d384 == 0x10)
+            {
+                DAT_8008d340 = DAT_8008d340 & 0xffffffdf;
+                AnimCmdSound.DAT_8008d384 = 0;
+                uVar1 = 0;
+            }
+        }
+
+        return uVar1;
     }
 
-
     // GHIDRA: FUN_8005ed28 @ 0x8005ED28 (VS.EXE)
-    // BLOCKED: camera mode only. Called by phase 1 once the loader reaches 8, and by phase 4.
+    // CLOSED. 36 bytes, 0x8005ED28..0x8005ED4B. Two callers, both camera mode only: phase 1 once the
+    // loader reaches sub-step 8, and phase 4 sub-step 0's tail. A one-shot latch: arms
+    // SoundState.DAT_8008d284+0x110 to 0x14 only while that halfword still reads zero.
     private static void FUN_8005ed28()
     {
+        if ((short)PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x110) == 0)
+        {
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x110, 0x14);
+        }
     }
 
     // GHIDRA: FUN_8005ec4c @ 0x8005EC4C (VS.EXE)
-    // BLOCKED: camera mode only, fed one byte of the table at 0x8008222C picked by the scene id.
+    // CLOSED. 32 bytes, 0x8005EC4C..0x8005EC6B. One caller: RenderBattleScene3D's camera arm, fed
+    // one byte of the table at DAT_8008222c picked by the scene id at workspace+0x74. Publishes that
+    // byte into SoundState.DAT_8008d284+0x118, and — the FIFTH DAT_8008d340 writer this slice closes
+    // — initialises the whole word to 0x10 the first time it is called while it is still exactly
+    // zero. Not a bit set: `if (DAT_8008d340 == 0)` tests and replaces the entire word.
     private static void FUN_8005ec4c(int param_1)
     {
-        _ = param_1;
+        if (DAT_8008d340 == 0)
+        {
+            DAT_8008d340 = 0x10;
+        }
+
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x118, (ushort)param_1);
     }
 
     // GHIDRA: FUN_8005ec8c @ 0x8005EC8C (VS.EXE)
-    // BLOCKED: camera mode only, phase 4 sub-step 1.
+    // CLOSED. 104 bytes, 0x8005EC8C..0x8005ECF3. One caller: phase 4 sub-step 1's camera arm.
+    // Republishes SoundState.DAT_8008d284+0x116 into +0x118 unconditionally, then — only when that
+    // value has actually changed since the last publish (+0x112), the +0x110 latch is clear, and the
+    // sound driver (AnimCmdSound.DAT_8008d384) is idle — records the new value at +0x112, arms the
+    // +0x110 latch to 0x10, and ORs bit 4 (0x10) into DAT_8008d340.
     private static void FUN_8005ec8c()
     {
+        int iVar2 = SoundState.DAT_8008d284;
+
+        PsxRam.WriteU16(iVar2 + 0x118, PsxRam.ReadU16(iVar2 + 0x116));
+
+        if ((short)PsxRam.ReadU16(iVar2 + 0x116) != (short)PsxRam.ReadU16(iVar2 + 0x112)
+            && (short)PsxRam.ReadU16(iVar2 + 0x110) == 0
+            && AnimCmdSound.DAT_8008d384 == 0)
+        {
+            PsxRam.WriteU16(iVar2 + 0x112, PsxRam.ReadU16(iVar2 + 0x116));
+            PsxRam.WriteU16(iVar2 + 0x110, 0x10);
+            DAT_8008d340 = DAT_8008d340 | 0x10;
+        }
     }
 
     // GHIDRA: FUN_8005ed70 @ 0x8005ED70 (VS.EXE)
-    // BLOCKED: always called as (-1, -1) from this file — twice by phase 4 and once by
-    // RenderBattleScene3D's camera arm.
+    // CLOSED. 236 bytes, 0x8005ED70..0x8005EE5B. Always called as (-1, -1) from this file — once by
+    // RenderBattleScene3D's camera arm and twice by phase 4 — which is why the header comment above
+    // this slice's stubs could not close it further: every call site erases the distinction between
+    // param_1 and a real pan value, but the body underneath needs both.
+    //
+    // (ushort)param_1 == 0xFFFF selects the "reset to defaults" arm. Inside it, when the battle
+    // context's +0x10 bit 0x2000 is clear, it first stamps the PsyQ-macro-shaped fields (+0x143,
+    // +0x11a, +0x11c, +0x142 — Ghidra's own pre-comment reads "Possible PsyQ macro: setLineF2()") to
+    // 0x40/0x52/0x52/0x40, then — UNLESS the context is in camera mode with its "already placed" bit
+    // 2 set (`(flags & 8) == 0 || (flags & 2) != 0`) — falls through to a second stamp, the same four
+    // fields to 0x10/0x36/0x36/0x10, which also runs directly when bit 0x2000 was already set. The
+    // non-reset arm just masks the caller's two ushorts to 7 bits and stores them at +0x11a/+0x11c.
+    // Both arms rejoin at LAB_8005ee24, which re-reads +0x11a/+0x11c into the pan pair at
+    // +0x122/+0x124, zeroes +0x126/+0x128, and arms the +0x110 latch to 0x13 if it was still zero —
+    // the same latch FUN_8005ec8c and FUN_8005ed28 also touch.
     private static void FUN_8005ed70(int param_1, int param_2)
     {
-        _ = param_1;
-        _ = param_2;
+        short sVar1;
+        ushort uVar2;
+        ushort uVar3;
+        int iVar4;
+        int iVar5;
+
+        iVar4 = SoundState.DAT_8008d284;
+        if ((ushort)param_1 == 0xffff)
+        {
+            if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 0x2000) == 0)
+            {
+                // Possible PsyQ macro: setLineF2()
+                PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x143, 0x40);
+                iVar5 = SoundState.DAT_8008d284;
+                PsxRam.WriteU16(iVar4 + 0x11a, 0x52);
+                PsxRam.WriteU16(iVar4 + 0x11c, 0x52);
+                PsxRam.WriteU8(iVar5 + 0x142, 0x40);
+                if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 8) == 0
+                    || ((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 2) != 0)
+                {
+                    goto LAB_8005ee24;
+                }
+            }
+
+            iVar4 = SoundState.DAT_8008d284;
+            PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x143, 0x10);
+            iVar5 = SoundState.DAT_8008d284;
+            PsxRam.WriteU16(iVar4 + 0x11a, 0x36);
+            PsxRam.WriteU16(iVar4 + 0x11c, 0x36);
+            PsxRam.WriteU8(iVar5 + 0x142, 0x10);
+        }
+        else
+        {
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x11a, (ushort)((ushort)param_1 & 0x7f));
+            PsxRam.WriteU16(iVar4 + 0x11c, (ushort)((ushort)param_2 & 0x7f));
+        }
+
+    LAB_8005ee24:
+        iVar4 = SoundState.DAT_8008d284;
+        uVar2 = PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x11a);
+        uVar3 = PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x11c);
+        sVar1 = (short)PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x110);
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x128, 0);
+        PsxRam.WriteU16(iVar4 + 0x126, 0);
+        PsxRam.WriteU16(iVar4 + 0x122, uVar2);
+        PsxRam.WriteU16(iVar4 + 0x124, uVar3);
+        if (sVar1 == 0)
+        {
+            PsxRam.WriteU16(iVar4 + 0x110, 0x13);
+        }
     }
 
     // GHIDRA: FUN_800602dc @ 0x800602DC (VS.EXE)
-    // BLOCKED: a readiness query phase 4 sub-step 0 waits on. Zero means not ready.
+    // CLOSED. 136 bytes, 0x800602DC..0x80060363. One caller: phase 4 sub-step 0. Clears the sound
+    // workspace's +0x15C, forces the same SpuStEnv +0x174 field FUN_800600b0 forces (SoundState's
+    // *DAT_8008d338) to 2, then reads AnimCmdSound.DAT_8008d384. No comma trick this time, but
+    // the final `return uVar2 ^ 1;` inverts the branch that sets uVar2, so read it inverted: state
+    // 0, masked-0x3f 0xb, or bit 0x80 set sets uVar2 = 0 and returns uVar2^1 = 1 (READY). States 9
+    // and 0x10 clear the driver state and DAT_8008d340 bit 5 (0x20) and `return 1;` directly — ready
+    // too. Every OTHER state is the one that sets uVar2 = 1 and returns uVar2^1 = 0, which is
+    // the only NOT-ready path and the one this function's header comment's "zero means not ready"
+    // describes; sub-step 0 blocks on exactly that path.
     private static int FUN_800602dc()
     {
-        return 0;
+        int iVar1 = SoundState.DAT_8008d338;
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x15c, 0);
+        PsxRam.WriteU8(iVar1 + 0x174, 2);
+
+        int uVar2;
+        if (AnimCmdSound.DAT_8008d384 == 0
+            || (AnimCmdSound.DAT_8008d384 & 0x3f) == 0xb
+            || (AnimCmdSound.DAT_8008d384 & 0x80) != 0)
+        {
+            uVar2 = 0;
+        }
+        else
+        {
+            if (AnimCmdSound.DAT_8008d384 == 9 || AnimCmdSound.DAT_8008d384 == 0x10)
+            {
+                DAT_8008d340 = DAT_8008d340 & 0xffffffdf;
+                AnimCmdSound.DAT_8008d384 = 0;
+                return 1;
+            }
+
+            uVar2 = 1;
+        }
+
+        return uVar2 ^ 1;
     }
 
     // GHIDRA: FUN_8005f530 @ 0x8005F530 (VS.EXE)

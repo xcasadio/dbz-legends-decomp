@@ -5,7 +5,7 @@ using PsxSdkMonogame;
 namespace DbzLegendsRemaster.Validation;
 
 // JUSTIFICATION: backend MonoGame only
-// RELATION: pins the eight-state transition table of SoundDriver.FUN_8005f704 @ 0x8005F704, the
+// RELATION: pins the eight-state transition table of SoundDriver.SoundCdLoadStep @ 0x8005F704, the
 // CD-load step machine the battle scene polls until it returns 8 or more.
 //
 // WHY IT NEEDS A BENCH AT ALL. That function was transliterated from raw disassembly, not from a
@@ -130,7 +130,7 @@ internal static class SoundLoaderValidation
         return s_failures == 0 ? 0 : 1;
     }
 
-    private static int FUN(int id, int state) => SoundDriver.FUN_8005f704(id, state);
+    private static int FUN(int id, int state) => SoundDriver.SoundCdLoadStep(id, state);
 
     private static void Check(bool condition, string label)
     {

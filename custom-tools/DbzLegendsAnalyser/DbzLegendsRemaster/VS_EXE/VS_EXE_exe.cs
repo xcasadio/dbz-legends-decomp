@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using PsxSdkMonogame;
 using static PsxSdkMonogame.LibApi;
 using static PsxSdkMonogame.LibCd;
@@ -456,16 +457,272 @@ internal sealed class VS_EXE_exe
     // and the twelve-slot fighter array at +0x1520.
     private const int Lab80055e3cAddress = unchecked((int)0x80055E3C);
 
+    // GHIDRA: DAT_800b2f74 @ 0x800B2F74 (VS.EXE)
+    // Five POLY_FT4 packets, 0xC8 bytes (5 * 0x28) run in .bss. CLOSED as POLY_FT4 by FUN_80062a1c
+    // below, which calls SetPolyFT4/SetSemiTrans/SetShadeTex on every one of the five and then
+    // stamps all twenty fields (r0/g0/b0/x0-3/y0-3/u0-3/v0-3/clut/tpage) by hand — the same shape
+    // TITLE_EXE/LoadingScreen.cs's two-packet POLY_FT4_800b9dd4 array already carries in this
+    // project, ported the same way for the same reason.
+    //
+    // OWNERSHIP CAVEAT, in the shape VS_EXE/FighterSetup.cs already uses for DAT_8008da48. Also
+    // read and resubmitted every frame by FUN_80062b5c below (both functions live in this file, so
+    // there is exactly one declaration to keep straight).
+    private const int PolyFt4800b2f74Address = unchecked((int)0x800B2F74);
+
+    private static readonly POLY_FT4Ref POLY_FT4_800b2f74 =
+        new(RamRegion(PolyFt4800b2f74Address, POLY_FT4Ref.Size * 5), 0);
+
     // GHIDRA: FUN_80062a1c @ 0x80062A1C (VS.EXE)
-    // BLOCKED: part of graphics bring-up, called once between SetupGeometry and the CLUT upload.
+    // CLOSED. Builds the five POLY_FT4_800b2f74 packets FUN_80062b5c (below) submits every frame
+    // when AnimVm.DAT_800b305a's bit 2 is up — that function's own comment records what closes the
+    // reading of that flag. `AnimVm.DAT_800b305a` is the one declaration for that global; it is
+    // NOT redeclared here.
+    //
+    // Two cursors walk the same five packets in lockstep, exactly as in TITLE_EXE/LoadingScreen.cs:
+    // `p`, a POLY_FT4 *, and a raw byte offset (`puVar1` in the original) that the disassembly
+    // resolves against `p`'s own base (&DAT_800b2f74 + 0x1D, i.e. offset 29 = v2) rather than
+    // walking a second pointer — every `puVar1 + n` in the decompilation lands on a named POLY_FT4
+    // field once that base is applied, checked field by field below. Ported directly onto the
+    // named fields, as this project's POLY_FT4Ref idiom is built for.
+    //
+    // The three values that stay CONSTANT across all five packets (y0/y1 = 0x6c, y2/y3 = 0x84,
+    // v0/v1 = 0x68, v2/v3 = 0x80) are the original's own — every packet gets the identical vertical
+    // strip, only the horizontal placement (x0-3) and the horizontal texel window (u0-3) step by
+    // 0x10 per packet, which is what draws five ADJACENT tiles rather than five copies of one.
     private static void FUN_80062a1c()
     {
+        POLY_FT4Ref p = POLY_FT4_800b2f74;
+        int iVar6 = 0;
+        byte cVar5 = 0x38;
+        byte cVar4 = 0x28;
+        short sVar3 = 0x88;
+        short sVar2 = 0x78;
+        AnimVm.DAT_800b305a = 0;
+        do
+        {
+            SetPolyFT4(p);
+            SetShadeTex(p, 0);
+            SetSemiTrans(p, 0);
+
+            // `*(undefined2 *)(puVar1 + -0xf) = 0x7986` and `*(undefined2 *)(puVar1 + -7) = 0x19`,
+            // with puVar1 at base offset 0x1D (v2): 0x1D - 0xF = 0x0E (clut), 0x1D - 7 = 0x16
+            // (tpage).
+            p.WriteHalf(0x0e, 0x7986);
+            p.WriteHalf(0x16, 0x19);
+            p.x2 = sVar2;
+            p.x0 = sVar2;
+            p.x3 = sVar3;
+            p.x1 = sVar3;
+            p.y1 = 0x6c;
+            p.y0 = 0x6c;
+            p.y3 = 0x84;
+            p.y2 = 0x84;
+            p.u2 = cVar4;
+            p.u0 = cVar4;
+            p.u3 = cVar5;
+            p.u1 = cVar5;
+            p.r0 = 0x80;
+            p.g0 = 0x80;
+            p.b0 = 0x80;
+            p.v1 = 0x68;
+            p.v0 = 0x68;
+            p.v3 = 0x80;
+            p.v2 = 0x80;
+
+            p = p[1];
+            cVar5 = (byte)(cVar5 + 0x10);
+            cVar4 = (byte)(cVar4 + 0x10);
+            sVar3 = (short)(sVar3 + 0x10);
+            iVar6 = iVar6 + 1;
+            sVar2 = (short)(sVar2 + 0x10);
+        } while (iVar6 < 5);
     }
 
+    // GHIDRA: DAT_80110000 @ 0x80110000 (VS.EXE)
+    // Its PSX address, which CdRead below is handed directly.
+    //
+    // PARTIAL on the extent: closed only for what FUN_80062684 itself demonstrably touches --
+    // CdRead(0xb, ..., 0x80) delivers 11 sectors, 0xb * 0x800 = 0x5800 bytes on this port's own
+    // 2048-byte-per-sector model (LibDs.ReadDataSectors). find-cross-references shows this same
+    // PSX address also reached from FUN_8005d25c, FUN_80026ac0 and the FUN_80029xxx family
+    // elsewhere in the overlay -- none of them transliterated in this slice, so this array may need
+    // enlarging (never shrinking; RamRegion updates the same row rather than adding a second one)
+    // when one of those is. Not TITLE_EXE_exe.DAT_80110000's 0x25000: that size comes from TITLE.B
+    // being read whole into the same address in a different, separately-linked program, and would
+    // be a borrowed number here, not a measured one.
+    private const int Dat80110000Address = unchecked((int)0x80110000);
+
+    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0x5800);
+
+    // GHIDRA: DAT_800c3cb8 @ 0x800C3CB8 (VS.EXE)
+    // Two POLY_FT4 packets, contiguous (0x800C3CB8 and 0x800C3CB8 + 0x28 = 0x800C3CE0), CLOSED the
+    // same way as POLY_FT4_800b2f74 above -- SetPolyFT4/SetSemiTrans/SetShadeTex on each, then every
+    // field stamped by hand. Same two-band-of-the-loading-picture shape as
+    // TITLE_EXE/LoadingScreen.cs's POLY_FT4_800b9dd4 / POLY_FT4_800b9dfc pair, which this function
+    // is the relinked twin of.
+    private const int PolyFt4800c3cb8Address = unchecked((int)0x800C3CB8);
+
+    private static readonly POLY_FT4Ref POLY_FT4_800c3cb8 =
+        new(RamRegion(PolyFt4800c3cb8Address, POLY_FT4Ref.Size * 2), 0);
+
+    private static readonly POLY_FT4Ref POLY_FT4_800c3ce0 =
+        new(POLY_FT4_800c3cb8.Buf, POLY_FT4Ref.Size);
+
+    // GHIDRA: DAT_800b1f28 @ 0x800B1F28 (VS.EXE)
+    // NOT a second ordering table -- bucket 0x400 of OT_800b0f28, exactly as TITLE.EXE's own
+    // DAT_800a7830 is bucket 0x400 of OT_800a6830 in TITLE_EXE/LoadingScreen.cs (the file this
+    // function is the relinked twin of): 0x800B1F28 - 0x800B0F28 = 0x1000 = 0x400 * 4, and this
+    // function both clears and draws OT_800b0f28 itself around the two AddPrim calls that use this
+    // address.
+    private const int Dat800b1f28Address = unchecked((int)0x800B1F28);
+
     // GHIDRA: FUN_80062684 @ 0x80062684 (VS.EXE)
-    // BLOCKED: the loading screen. It sorts into OT[0x400] at 0x800B1F28.
+    // THE LOADING SCREEN. Byte-for-byte the same source as TITLE.EXE's ShowLoadingScreen
+    // @ 0x800583FC, recompiled at VS.EXE's own addresses -- TITLE_EXE/LoadingScreen.cs already
+    // carries that file's own reasoning in full; this comment records only where the two diverge.
+    //
+    // DIFFERENCES FROM THE TITLE.EXE TWIN, closed by this function's own decompilation:
+    //   * CStack_38.size is 0xb (11 sectors) here, not TITLE.EXE's 0xa (10) -- VS.EXE's own LOAD.B
+    //     is one sector bigger.
+    //   * The seek offset is CdPosToInt(pos) + 0x50 flat. TITLE.EXE's own copy instead picks one of
+    //     three loading pictures through SHORT_ARRAY_801ff000[0x87] * 10 -- VS.EXE has one.
+    //   * The two packets live at 0x800C3CB8, not 0x800B9DD4; the bucket is this overlay's own
+    //     0x800B1F28 (bucket 0x400 of OT_800b0f28); the draw/display environments are this file's
+    //     DRAWENV_800b0eb8 / DISPENV_800b0f14; the CLUT upload is VS_EXE's own
+    //     LoadImage_ReturnTPageOrClutId rather than TitleImages' DisplayMachine wrapper.
+    //
+    // DEVIATIONS FROM THE ORIGINAL'S OWN CONTROL FLOW, all inherited from the TITLE.EXE twin's own
+    // recorded reasoning (TITLE_EXE/LoadingScreen.cs and FileIo.WaitSearchFile / FileIo.ReadCDData
+    // carry the evidence in full):
+    //   * `do { p = CdSearchFile(...); } while (p == NULL)` becomes one search plus a thrown
+    //     FileNotFoundException -- the desktop CdSearchFile answers from a File.Exists probe a
+    //     second call cannot answer differently, so the retry either exits immediately or freezes
+    //     the host.
+    //   * The nested `while (CdSync(...) == 0)` / `while (status == 5)` spin cannot iterate --
+    //     CdSync is the constant CdlComplete (2) on this port (LibCd.cs) -- so it is one call.
+    //   * `while (CdReadSync(...) != 0)` cannot iterate either -- CdReadSync is the constant 0.
+    //   * CdRead's own return is NOT guarded here, matching the original: unlike ReadCDData (which
+    //     retries a failed CdRead), this call site discards the result, and that is reproduced.
     private static void FUN_80062684()
     {
+        // JUSTIFICATION: PSX hardware adaptation only
+        // RELATION: main does not register OT_800b0f28 with RamRegion until DeclareOrderingTableAddress,
+        // called near the very end of main just before its own frame loop -- and this function runs
+        // earlier, from the boot sequence, so the two AddPrim calls below would resolve nothing
+        // without this. Re-registering the same array updates its base rather than adding a second
+        // row (see DeclareOrderingTableAddress's own comment), so calling it again here is safe.
+        // TITLE_EXE/LoadingScreen.cs takes the identical precaution for the identical reason.
+        RamRegion(Ot800b0f28Address, OT_800b0f28);
+
+        CdlFILE CStack_38 = new();
+        byte[] local_20 = new byte[8];
+
+        local_20[0] = 0x80;
+        CdControlB(0x0e, local_20, null);
+
+        if (CdSearchFile(CStack_38, "\\CHR_DATA\\LOAD.B;1".ToCharArray()) == null)
+        {
+            throw new FileNotFoundException(
+                "CdSearchFile could not resolve \\CHR_DATA\\LOAD.B;1 -- no file at " +
+                LibDs.DescribeDiscPath("\\CHR_DATA\\LOAD.B;1"),
+                "\\CHR_DATA\\LOAD.B;1");
+        }
+
+        CStack_38.size = 0xb;
+        int iVar2 = CdPosToInt(CStack_38.pos);
+        CdIntToPos(iVar2 + 0x50, CStack_38.pos);
+        CdControl(2, CStack_38.pos, local_20);
+
+        CdSync(1, local_20);
+
+        CdRead(CStack_38.size, Dat80110000Address, 0x80);
+
+        CdReadSync(1, local_20);
+
+        FileIo.DecompressLZSS(DAT_80110000, 0x200, FileIo.g_cdFileBufferTable, 0);
+        FileIo.LoadImage_ReturnTPageOrClutId(FileIo.g_cdFileBufferTableAddress, 0x140, 0, 0xa0, 0xf0, 0);
+        FileIo.LoadImage_ReturnTPageOrClutId(Dat80110000Address, 0, 0x1e0, 0x100, 1, 1);
+        SetDispMask(1);
+        SetDefDrawEnv(DRAWENV_800b0eb8, 0, 0, 0x140, 0xf0);
+        SetDefDispEnv(DISPENV_800b0f14, 0, 0, 0x140, 0xf0);
+
+        // DAT_800b0ecc: DRAWENV + 0x14, i.e. DRAWENV.tpage. Written before the table is cleared,
+        // exactly where the store sits in the image.
+        DRAWENV_800b0eb8.tpage = 0x85;
+        ClearOTag(OT_800b0f28, 0, 0x800);
+
+        int iVar4 = 0;
+        short sVar3 = 0x85;
+        POLY_FT4Ref p = POLY_FT4_800c3cb8;
+        iVar2 = 0;
+        do
+        {
+            SetPolyFT4(p);
+            SetSemiTrans(p, 0);
+            SetShadeTex(p, 1);
+
+            // Same two-cursor shape as FUN_80062a1c above and as TITLE_EXE/LoadingScreen.cs's own
+            // loop: `p` walks whole packets, `iVar2` a byte offset off the fixed base that lands on
+            // tpage (+0x16) and clut (+0x0e).
+            POLY_FT4_800c3cb8.WriteHalf(0x16 + iVar2, sVar3);
+            sVar3 = (short)(sVar3 + 2);
+            POLY_FT4_800c3cb8.WriteHalf(0x0e + iVar2, 0x7800);
+            p.r0 = 0x80;
+            p.g0 = 0x80;
+            p.b0 = 0x80;
+            p = p[1];
+            iVar4 = iVar4 + 1;
+            iVar2 = iVar2 + 0x28;
+        } while (iVar4 < 2);
+
+        // The remaining stores are absolute in the original, one field of one of the two packets
+        // each, in the machine's own order -- not a regrouping. See TITLE_EXE/LoadingScreen.cs's
+        // identical block for the field-by-field derivation this one repeats with VS.EXE's own
+        // addresses.
+        POLY_FT4_800c3cb8.x2 = 0;
+        POLY_FT4_800c3cb8.x0 = 0;
+        POLY_FT4_800c3cb8.x3 = 0x100;
+        POLY_FT4_800c3cb8.x1 = 0x100;
+        POLY_FT4_800c3ce0.x2 = 0x100;
+        POLY_FT4_800c3ce0.x0 = 0x100;
+        POLY_FT4_800c3ce0.x3 = 0x140;
+        POLY_FT4_800c3ce0.x1 = 0x140;
+        POLY_FT4_800c3cb8.y3 = 0xf0;
+        POLY_FT4_800c3cb8.y2 = 0xf0;
+        POLY_FT4_800c3ce0.y3 = 0xf0;
+        POLY_FT4_800c3ce0.y2 = 0xf0;
+        POLY_FT4_800c3cb8.u3 = 0xff;
+        POLY_FT4_800c3cb8.u1 = 0xff;
+        POLY_FT4_800c3cb8.y1 = 0;
+        POLY_FT4_800c3cb8.y0 = 0;
+        POLY_FT4_800c3ce0.y1 = 0;
+        POLY_FT4_800c3ce0.y0 = 0;
+        POLY_FT4_800c3cb8.u2 = 0;
+        POLY_FT4_800c3cb8.u0 = 0;
+        POLY_FT4_800c3cb8.v1 = 0;
+        POLY_FT4_800c3cb8.v0 = 0;
+        POLY_FT4_800c3cb8.v3 = 0xef;
+        POLY_FT4_800c3cb8.v2 = 0xef;
+        POLY_FT4_800c3ce0.u2 = 0;
+        POLY_FT4_800c3ce0.u0 = 0;
+        POLY_FT4_800c3ce0.u3 = 0x41;
+        POLY_FT4_800c3ce0.u1 = 0x41;
+        POLY_FT4_800c3ce0.v1 = 0;
+        POLY_FT4_800c3ce0.v0 = 0;
+        POLY_FT4_800c3ce0.v3 = 0xef;
+        POLY_FT4_800c3ce0.v2 = 0xef;
+        AddPrim(Dat800b1f28Address, POLY_FT4_800c3cb8);
+        AddPrim(Dat800b1f28Address, POLY_FT4_800c3ce0);
+
+        DRAWENV_800b0eb8.dtd = 0;
+        DRAWENV_800b0eb8.isbg = 1;
+        DRAWENV_800b0eb8.r0 = 0;
+        DRAWENV_800b0eb8.g0 = 0;
+        DRAWENV_800b0eb8.b0 = 0;
+        PutDispEnv(DISPENV_800b0f14);
+        PutDrawEnv(DRAWENV_800b0eb8);
+        DrawOTag(Ot800b0f28Address);
+        DrawSync(0);
     }
 
     // GHIDRA: FUN_800414ec @ 0x800414EC (VS.EXE)
@@ -475,10 +732,27 @@ internal sealed class VS_EXE_exe
         _ = param_1;
     }
 
+    // GHIDRA: DAT_80081828 @ 0x80081828, PTR_DAT_80081910 @ 0x80081910 (VS.EXE)
+    // Two .data addresses FUN_80034d98 hands over as raw PSX pointers -- `&DAT_80081828` and, cast
+    // through a pointer variable, `&PTR_DAT_80081910`. Ghidra types the second as a pointer
+    // (currently holding 0x80000000, itself image data) because SOMETHING in the overlay reads it
+    // that way elsewhere; this call site does not dereference it, it hands over the pointer
+    // VARIABLE'S OWN address, exactly as `&DAT_80081828` hands over the byte's. Neither symbol is
+    // interpreted further here. FileIo.DecompressAndLoadImage's own comment already anticipated the
+    // first of the two: "FUN_80034d98 @ 0x80034D98 once (&DAT_80081828, 0x10 x 0x40)".
+    private const int Dat80081828Address = unchecked((int)0x80081828);
+
+    private const int Dat80081910Address = unchecked((int)0x80081910);
+
     // GHIDRA: FUN_80034d98 @ 0x80034D98 (VS.EXE)
-    // BLOCKED.
+    // CLOSED. memset(&DAT_8008da48, 0, 0xb610) then two uploads. The memset target is
+    // FighterSetup.DAT_8008da48 -- that file's own OWNERSHIP CAVEAT asked this exact function to
+    // reuse it rather than declare a second array over the same address, and this does.
     private static void FUN_80034d98()
     {
+        memset(FighterSetup.DAT_8008da48, 0, 0, 0xb610);
+        FileIo.DecompressAndLoadImage(Dat80081828Address, 0x380, 0x180, 0x10, 0x40, 0);
+        FileIo.LoadImage_ReturnTPageOrClutId(Dat80081910Address, 0, 0x1ea, 0xa0, 1, 0);
     }
 
     // FUN_800511a8 @ 0x800511A8 stood here as a BLOCKED stub. It is transliterated in
@@ -491,17 +765,132 @@ internal sealed class VS_EXE_exe
     // spotted it and reported it rather than editing this file, which is what the ownership rule
     // asks for.
 
+    // GHIDRA: DAT_8008d610 @ 0x8008D610 (VS.EXE)
+    // 0x438 bytes, memset here. OWNERSHIP CAVEAT, in the shape VS_EXE/FighterSetup.cs already uses
+    // for DAT_8008da48: this file is the first VS.EXE code to reach the block, so it is declared
+    // here rather than left implicit, and any later slice that transliterates LAB_80026888 (the
+    // block's one reader -- see that task entry's own const below) must use THIS array rather than
+    // declare a second one over the same address.
+    //
+    // The extent is closed by two facts, not one: FUN_80026a68 memsets exactly this span, and
+    // 0x8008D610 + 0x438 = 0x8008DA48 -- FighterSetup.DAT_8008da48's own address, exactly. That
+    // matches TITLE.EXE's identical pair (FUN_80027354's 0x438 at DAT_800836D4, immediately
+    // followed by FUN_80035700's 0xB610 at DAT_80083B0C, see TITLE_EXE/SecondScreenSetup.cs), which
+    // is the same relationship at different addresses, not a coincidence of size.
+    //
+    // PARTIAL: what the thirty 0x24-byte records it implies (0x438 / 0x24 = 0x1e -- TITLE.EXE's own
+    // comment says thirty, which is 0x1e; the count is not re-derived here) hold is not established
+    // by this function, which only clears them.
+    private const int Dat8008d610Address = unchecked((int)0x8008D610);
+
+    private static readonly byte[] DAT_8008d610 = RamRegion(Dat8008d610Address, 0x438);
+
+    // GHIDRA: LAB_80026888 @ 0x80026888 (VS.EXE)
+    // BLOCKED: a task entry point Ghidra never promoted to a function -- the fifth of this
+    // overlay's boot tasks, task id 0, list 0xb, no per-node workspace (contextSize 0), inserted at
+    // g_TaskListTail[0xb]. Not registered with TaskSystem for the same reason the other raw task
+    // addresses in this file are not.
+    private const int Lab80026888Address = unchecked((int)0x80026888);
+
     // GHIDRA: FUN_80026a68 @ 0x80026A68 (VS.EXE)
-    // BLOCKED.
+    // CLOSED. A memset then a CreateTask; FUN_80053330 is TaskSystem.CreateTask (see
+    // TaskSystem.cs's own header comment), and this call's six arguments match that signature's
+    // shape exactly: callback, id 0, list 0xb, contextSize 0, param_5 1, insertPoint
+    // g_TaskListTail[0xb].
     private static void FUN_80026a68()
     {
+        memset(DAT_8008d610, 0, 0, 0x438);
+        TaskSystem.CreateTask(Lab80026888Address, 0, 0xb, 0, 1, TaskSystem.g_TaskListTail[0xb]);
     }
 
+    // GHIDRA: DAT_800b2f24 @ 0x800B2F24 (VS.EXE)
+    // NOT a third ordering table -- bucket 0x7FF of OT_800b0f28, the very LAST bucket: 0x800B2F24 -
+    // 0x800B0F28 = 0x1FFC = 0x7FF * 4. AddPrim below never has to register it separately because
+    // OT_800b0f28 itself is already registered by the time this runs every frame -- main's own
+    // DeclareOrderingTableAddress, called once before the frame loop starts.
+    private const int Dat800b2f24Address = unchecked((int)0x800B2F24);
+
     // GHIDRA: FUN_80062b5c @ 0x80062B5C (VS.EXE)
-    // BLOCKED: run every frame between the last task list and the submit. It sorts into OT[0x7FF]
-    // at 0x800B2F24 — the very back of the table, so whatever it draws is behind everything.
+    // Run every frame between the last task list and the submit; whatever it draws lands in
+    // OT_800b0f28's very last bucket, so it is behind everything else in the frame.
+    //
+    // PARTIAL: AnimCmdEffects.cs's own reading of this function, carried over into
+    // AnimVm.DAT_800b305a's comment, is the closest thing to an interpretation this port has --
+    // "toggles bit 2 off a pad test, sets bit 0 from it, latches bit 1, forces the word to 0 when
+    // DAT_8008d4f0 != 1, and — when bit 2 is up — submits five primitives from 0x800B2F74 through
+    // AddPrim, which reads as the freeze the pause overlay drives." That reading is reproduced
+    // here; "pause" stays a reading, not a closed symbol, and nothing below decides it further.
+    //
+    // The control flow is NOT restructured into if/else: LAB_80062bd0 is a label Ghidra places
+    // INSIDE the first branch's body that the second branch also jumps INTO (`goto LAB_80062bd0`
+    // from inside the else-arm, re-entering the first arm's own code with the just-updated flag
+    // word). C# will not let a goto jump into the middle of an `if` block from outside it, so the
+    // shape below is flattened to the same labels at the same nesting Ghidra itself would reach if
+    // asked for raw control flow rather than its structured approximation -- every branch, both
+    // gotos and the fallthrough after each, is kept; only the block nesting changes to something
+    // the language accepts.
     private static void FUN_80062b5c()
     {
+        ushort uVar1;
+
+        if (((PadInput.g_PadNewlyPressed[0] & 0x800) == 0) &&
+            ((SharedHighRam.SHORT_ARRAY_801ff000[0x80] != 0) ||
+             ((PadInput.g_PadNewlyPressed[1] & 0x800) == 0)))
+        {
+            goto LAB_80062bd0;
+        }
+
+        AnimVm.DAT_800b305a = (ushort)(AnimVm.DAT_800b305a ^ 4);
+        if ((AnimVm.DAT_800b305a & 4) == 0)
+        {
+            AnimVm.DAT_800b305a = (ushort)(AnimVm.DAT_800b305a & 0xfffc);
+            goto LAB_80062bd0;
+        }
+
+        goto AfterGate;
+
+    LAB_80062bd0:
+        uVar1 = AnimVm.DAT_800b305a;
+        if ((AnimVm.DAT_800b305a & 4) == 0)
+        {
+            goto LAB_80062c1c;
+        }
+
+    AfterGate:
+        uVar1 = (ushort)(AnimVm.DAT_800b305a | 1);
+        if ((AnimVm.DAT_800b305a & 2) != 0)
+        {
+            uVar1 = (ushort)(AnimVm.DAT_800b305a ^ 1);
+            if ((uVar1 & 1) != 0)
+            {
+                uVar1 = (ushort)(uVar1 & 0xfffd);
+            }
+        }
+
+    LAB_80062c1c:
+        AnimVm.DAT_800b305a = uVar1;
+
+        if (DAT_8008d4f0 != 1)
+        {
+            AnimVm.DAT_800b305a = 0;
+        }
+
+        if (((uint)PsxRam.ReadI32(BattleManager.DAT_8008d320 + 0x10) & 0x88000008) != 0)
+        {
+            AnimVm.DAT_800b305a = 0;
+        }
+
+        if ((AnimVm.DAT_800b305a & 4) != 0)
+        {
+            int iVar2 = 0;
+            POLY_FT4Ref p = POLY_FT4_800b2f74;
+            do
+            {
+                AddPrim(Dat800b2f24Address, p);
+                iVar2 = iVar2 + 1;
+                p = p[1];
+            } while (iVar2 < 5);
+        }
     }
 
     // JUSTIFICATION: C# language bridge only

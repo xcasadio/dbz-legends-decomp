@@ -43,7 +43,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // is not mine to transliterate, but it was read, and it resolves a rotation vector
 // (FUN_8003f2b0), a translation vector (FUN_8003f228) or a scale vector (0x801F2100 + n*8)
 // according to a two-bit selector, then hands all three, together with `0x801F2180 + slot * 0x20`
-// — the very table base_culX/Y/Z/P fill — to FUN_8003f6c0. There is no CLUT, no texture page and
+// — the very table base_culX/Y/Z/P fill — to TransformMeshPrimitives. There is no CLUT, no texture page and
 // no palette index anywhere in it; opcode 13 is `tpclut_set` and is a different handler. THE
 // EVIDENCE SUPPORTS THE IMAGE'S `cul_set` AND DOES NOT SUPPORT AnimCmd_SetMeshPaletteRange. The
 // Ghidra name reads like one carried across from GAME.EXE by table position rather than by body.

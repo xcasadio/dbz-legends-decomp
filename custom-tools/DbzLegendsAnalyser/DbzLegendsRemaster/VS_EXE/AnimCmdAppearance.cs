@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 using static PsxSdkMonogame.Kernel;
 using static PsxSdkMonogame.LibGpu;
 
@@ -72,7 +72,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // AnimCmd_AsyncLoadTexture, with no comment behind the name. THE IMAGE NAME IS THE ONE THE
 // EVIDENCE SUPPORTS, and the refutation is complete. The handler performs no CD access of any
 // kind: it fills a 12-byte record in a four-slot table at DAT_80099090 and, on its other form,
-// calls FUN_80061f1c @ 0x80061F1C on that record. FUN_80061f1c memmoves 0x20 bytes — sixteen
+// calls RollAndUploadClutRange @ 0x80061F1C on that record. RollAndUploadClutRange memmoves 0x20 bytes — sixteen
 // halfwords, one 4-bit CLUT — out of the record's pointer, rotates the entries between the record's
 // byte at +9 and its byte at +10 by the phase in its byte at +8, optionally forces or clears the
 // STP bit per the flags at +11, and LoadImages the result back to VRAM as a 0x10 x 1 rectangle at
@@ -140,7 +140,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //    encoding, not an error path.
 //  * FUN_8003f310 IS EXCLUSIVELY THIS FAMILY'S. Its only three callers, 0x8003A484, 0x8003A554 and
 //    0x8003A64C, are all inside AnimCmd_Rgb2Set. It belongs here and nowhere else.
-//  * FUN_80061f1c IS NOT TRANSLITERATED HERE. See AnimCmd_ColrolSet's PARTIAL note.
+//  * RollAndUploadClutRange IS NOT TRANSLITERATED HERE. See AnimCmd_ColrolSet's PARTIAL note.
 //  * THE WIRING GAP IS REAL AND IS NOT THIS FILE'S TO CLOSE. PsxSdkBridges installs
 //    PsxRam.AddressResolver per overlay and has no VS.EXE row, and VS_EXE_exe has no
 //    ResolveAddress, so AnimCmdMesh's workspace region is not yet reachable through PsxRam and
@@ -302,7 +302,7 @@ internal static class AnimCmdAppearance
                 return puVar5;
             }
 
-            // PARTIAL: FUN_80061f1c @ 0x80061F1C — the roll-and-upload step itself — is NOT called
+            // PARTIAL: RollAndUploadClutRange @ 0x80061F1C — the roll-and-upload step itself — is NOT called
             // here, and this is the one place in the file where an original side effect is missing.
             // It is not this family's function: two of its three call sites are in
             // ExecuteAnimStreamBatch @ 0x80036768 (0x80036980 and 0x800369A0, rolling records 4 and
@@ -312,7 +312,7 @@ internal static class AnimCmdAppearance
             // account in ADJUDICATION 2, which was derived from its body — so whoever owns
             // 0x80061F1C can port it once and wire this call site to it. Everything else in this
             // handler, including every store to the descriptor, is transliterated.
-            //   original: FUN_80061f1c(&DAT_80099090 + iVar3);
+            //   original: RollAndUploadClutRange(&DAT_80099090 + iVar3);
 
             if ((uVar1 & 0x7000) == 0)
             {

@@ -199,7 +199,7 @@ internal static class AnimVmInterpreter
         {
             PsxRam.WriteU16(Local30Address, 0x8000);
             AnimCmdEffects.AnimCmd_SetCharRenderState(Local30Address);
-            FUN_8003ecfc();
+            StepVolumeRamp();
         }
 
         // JUSTIFICATION: C# language bridge only
@@ -211,9 +211,9 @@ internal static class AnimVmInterpreter
         // 8 and 0x14, and the form matches AnimCmdMesh's `p - AnimVm.DAT_801f2000` idiom.
         byte[] rec = BattleScene.RAM_800990c0;
 
-        FUN_80061f1c(DAT_800990c0);
+        RollAndUploadClutRange(DAT_800990c0);
         rec[DAT_800990c8 - DAT_800990c0] = (byte)(rec[DAT_800990c8 - DAT_800990c0] - 1);
-        FUN_80061f1c(DAT_800990cc);
+        RollAndUploadClutRange(DAT_800990cc);
         if ((rec[DAT_800990c8 - DAT_800990c0] & 1) != 0)
         {
             rec[DAT_800990d4 - DAT_800990c0] = (byte)(rec[DAT_800990d4 - DAT_800990c0] + 1);
@@ -235,9 +235,11 @@ internal static class AnimVmInterpreter
     // =====================================================================================
     // NOT IN THIS TRANCHE
     // =====================================================================================
-    // The tail's five remaining callees belong to the battle and scene subsystems — tranche 2 — and
-    // are declared here with their addresses rather than omitted, so the tail's shape is the shape
-    // the original has.
+    // The tail also reaches into the battle and scene subsystems — tranche 2 — through
+    // AnimCmdSound.FUN_8005fcec and BattleManager.FUN_8005ee5c / BattleManager.DAT_8008d320, each
+    // BLOCKED in its own file rather than duplicated here. StepVolumeRamp and RollAndUploadClutRange below are
+    // this tranche's own functions and are now closed; DAT_800990c0/cc/c8/d4 just below are plain
+    // addresses into BattleScene's already-modelled RAM_800990c0 region, not stubs.
 
     // GHIDRA: DAT_800990c0 @ 0x800990C0, DAT_800990cc @ 0x800990CC (VS.EXE)
     private const int DAT_800990c0 = unchecked((int)0x800990C0);
@@ -262,16 +264,160 @@ internal static class AnimVmInterpreter
 
     private const int DAT_800990d4 = unchecked((int)0x800990D4);
 
-    // GHIDRA: FUN_8003ecfc @ 0x8003ECFC (VS.EXE)
-    // BLOCKED: called only when the render-state reset above runs.
-    private static void FUN_8003ecfc()
+    // GHIDRA: StepVolumeRamp @ 0x8003ECFC (VS.EXE)
+    // CLOSED. Steps the channel-volume ramp AnimCmdSound.AnimCmd_ChseVol (opcode 46) arms, once per
+    // frame — RunBatchTail is its one call site, exactly the comment on AnimCmdSound.DAT_801fac40
+    // already says. DAT_801fac40 is the signed slope (0 == no ramp running, and the function is a
+    // no-op); otherwise the slope is added to the current volume (DAT_801fac42) to get a candidate,
+    // the candidate is compared against the target (DAT_801fac43) — signed, both directions, per the
+    // disassembly at 0x8003ed30..0x8003ed40 (`bgez`/`slt` on opposite operand orders for the
+    // slope<0 and slope>=0 cases) — and on overshoot the slope is cleared and the candidate clamped
+    // to the target. The (possibly clamped) volume is written back to DAT_801fac42 and pushed to the
+    // driver through AnimCmdSound.FUN_8005fcec on channel DAT_801fac41, unconditionally, every call
+    // where the ramp is active. FUN_8005fcec is itself BLOCKED (sound-driver module, see
+    // AnimCmdSound.cs); its argument here is exact regardless.
+    private static void StepVolumeRamp()
     {
+        int iVar2 = AnimCmdSound.DAT_801fac40;
+        if (iVar2 != 0)
+        {
+            uint uVar4 = AnimCmdSound.DAT_801fac43;
+            uint uVar3 = (uint)(AnimCmdSound.DAT_801fac42 + iVar2);
+            bool bVar1;
+            if (iVar2 < 0)
+            {
+                bVar1 = (int)uVar4 < (int)uVar3;
+            }
+            else
+            {
+                bVar1 = (int)uVar3 < (int)uVar4;
+            }
+
+            if (!bVar1)
+            {
+                AnimCmdSound.DAT_801fac40 = 0;
+                uVar3 = uVar4;
+            }
+
+            AnimCmdSound.DAT_801fac42 = (byte)uVar3;
+            AnimCmdSound.FUN_8005fcec(AnimCmdSound.DAT_801fac41, (short)uVar3);
+        }
     }
 
-    // GHIDRA: FUN_80061f1c @ 0x80061F1C (VS.EXE)
-    // BLOCKED: given two different .bss addresses in succession.
-    private static void FUN_80061f1c(int param_1)
+    // GHIDRA: RollAndUploadClutRange @ 0x80061F1C (VS.EXE)
+    // CLOSED. param_1 is the PSX address of a 12-byte struct; this file's two call sites pass
+    // BattleScene.RAM_800990c0's two instances, 0xC apart (DAT_800990c0 and DAT_800990cc above).
+    // Ghidra's own decompilation never hoists a name for any field past the first two, reading every
+    // one of them inline as `*(byte *)((int)param_1 + N)`, so the offsets below are read straight off
+    // the disassembly (0x80061f44..0x80062024) rather than off decompiled variable names:
+    //   +0x0 int    srcPtr   PSX address of a 16-entry (32-byte) CLUT              (lw)
+    //   +0x4 ushort          destination VRAM x for the CLUT upload                (lhu)
+    //   +0x6 ushort          destination VRAM y                                    (lhu)
+    //   +0x8 byte   bVar1    rotation phase — RunBatchTail decrements this same byte once per frame
+    //                        (DAT_800990c8 / DAT_800990d4 are +0x8 of the two instances)  (lbu)
+    //   +0x9 byte   loIndex  first CLUT entry the rotation touches                 (lbu)
+    //   +0xa byte   hiIndex  last CLUT entry the rotation touches                  (lbu)
+    //   +0xb byte   flags    bit7 forces the semi-transparency bit on, bit0 forces it off (lbu)
+    //
+    // memmove snapshots the whole 16-entry CLUT into a local 32-byte buffer (`u_long auStack_30[8]`,
+    // ported as a plain byte[] — see the JUSTIFICATION below, it is nothing like Local30Address).
+    // The loop then OVERWRITES ONLY [loIndex, hiIndex] of that snapshot with a value read back from
+    // THE SOURCE table at a cyclically rotated index (loIndex + ((bVar1 % count) + i) % count) —
+    // re-read through srcPtr every iteration (0x80061fe8 `lw v1,0x0(s1)`), never from the snapshot —
+    // the palette-cycle effect PSX games use for water/fire animation. Entries outside the sub-range
+    // pass through untouched. Up to three stores land on each touched entry, in this order — plain
+    // color, then OR 0x8000 if flags bit7, then AND 0x7fff on whatever is currently stored if flags
+    // bit0 — and are kept as three separate writes below rather than folded into one expression, to
+    // keep the store count and order exactly what 0x80061ffc/0x80062014/0x80062038 do. Finally the
+    // (partially rotated) snapshot is DMA'd to VRAM as a 16-halfword-wide, 1-row LoadImage — width
+    // 0x10 and height 1 are the literal constants at 0x80062068/0x80062074, not read from the struct.
+    //
+    // The original divides twice (`div`) and both are followed by the PSYQ compiler's standard
+    // safe-division trap pair — zero divisor traps `break 0x1c00`, MIN_VALUE/-1 traps `break 0x1800`
+    // — both hardware halts, not game logic. Per the same rule AnimCmdTransform.cs's opcode-7 case
+    // already applies: C#'s DivideByZeroException reaches the zero-divisor halt one instruction
+    // earlier, and the MIN/-1 halt is unreachable because every operand feeding both divisions
+    // (bVar1, loIndex, hiIndex) is a byte. Rule 12: the original's abort is not softened into a guard.
+    //
+    // AND WHERE THE FIRST DIVIDE SITS IS LOAD-BEARING, which a first version of this port got wrong
+    // by nesting it inside the loop guard. The instruction order at 0x80061F5C is:
+    //     92220008   lbu v0,0x8(s1)        ; bVar1
+    //     24630001   addiu v1,v1,1         ; iVar4 = hiIndex - loIndex + 1
+    //     0043001A   div v0,v1             ; UNCONDITIONAL
+    //     1460.. 0007000D  bnez/break 0x1c00     ; zero-divisor trap
+    //     .. 0006000D      break 0x1800          ; MIN/-1 trap
+    //     00002010   mfhi v0               ; the remainder
+    //     18600031   blez v1,...           ; only NOW the loop-skip test
+    // So iVar4 == 0 halts the console whether or not the loop would have run. Putting the modulo
+    // inside `if (0 < iVar4)` silently skipped the rotation instead of halting -- softening an
+    // abort into a guard, which is precisely what rule 12 forbids. It is hoisted back out below.
+    // Hoisting also restores the divide COUNT: the original evaluates bVar1 % iVar4 once, not once
+    // per iteration.
+    private static void RollAndUploadClutRange(int param_1)
     {
-        _ = param_1;
+        int srcPtr = PsxRam.ReadI32(param_1);
+        ushort dstX = PsxRam.ReadU16(param_1 + 4);
+        ushort dstY = PsxRam.ReadU16(param_1 + 6);
+        byte bVar1 = PsxRam.ReadU8(param_1 + 8);
+        byte loIndex = PsxRam.ReadU8(param_1 + 9);
+        byte hiIndex = PsxRam.ReadU8(param_1 + 10);
+        byte flags = PsxRam.ReadU8(param_1 + 11);
+
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: `u_long auStack_30[8]` at 0x80061f28 (sp+0x10). Unlike Local30Address above,
+        // this local is never handed to another handler by PSX address — it is built here from
+        // srcPtr and consumed by LoadImage below and nowhere else — so it needs no PsxRam-backed
+        // region, only a plain byte[]. Sized to the snapshot's own 16 entries: the original's stack
+        // frame has more bytes past it, so an out-of-range loIndex/hiIndex from bad data would
+        // silently corrupt an adjacent local on the console; here it throws instead, the same
+        // trade the div-by-zero note above already makes.
+        byte[] local = new byte[0x20];
+        for (int i = 0; i < 0x10; i++)
+        {
+            ushort word = PsxRam.ReadU16(srcPtr + i * 2);
+            local[(i * 2) + 0] = (byte)word;
+            local[(i * 2) + 1] = (byte)(word >> 8);
+        }
+
+        int iVar4 = (hiIndex - loIndex) + 1;
+
+        // Unconditional, before the loop-skip test, exactly as `div v0,v1` at 0x80061F64 is. When
+        // iVar4 is 0 this throws where the console executes `break 0x1c00`.
+        int phase = bVar1 % iVar4;
+
+        int iVar6 = 0;
+        if (0 < iVar4)
+        {
+            do
+            {
+                int iVar3 = phase + iVar6;
+                int srcIndex = loIndex + (iVar3 % iVar4);
+                ushort uVar2 = PsxRam.ReadU16(srcPtr + srcIndex * 2);
+
+                int destIndex = loIndex + iVar6;
+                ushort stored = uVar2;
+                local[(destIndex * 2) + 0] = (byte)stored;
+                local[(destIndex * 2) + 1] = (byte)(stored >> 8);
+                if ((flags & 0x80) != 0)
+                {
+                    stored = (ushort)(uVar2 | 0x8000);
+                    local[(destIndex * 2) + 0] = (byte)stored;
+                    local[(destIndex * 2) + 1] = (byte)(stored >> 8);
+                }
+
+                if ((flags & 1) != 0)
+                {
+                    stored = (ushort)(stored & 0x7fff);
+                    local[(destIndex * 2) + 0] = (byte)stored;
+                    local[(destIndex * 2) + 1] = (byte)(stored >> 8);
+                }
+
+                iVar6 = iVar6 + 1;
+            }
+            while (iVar6 < iVar4);
+        }
+
+        LibGpu.RECT rect = new LibGpu.RECT { x = (short)dstX, y = (short)dstY, w = 0x10, h = 1 };
+        LibGpu.LoadImage(rect, local, 0);
     }
 }

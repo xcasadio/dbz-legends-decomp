@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -118,7 +118,7 @@ internal static class AnimVm
     // GHIDRA: DAT_801f2180 @ 0x801F2180 (VS.EXE)
     // Ghidra types it undefined2. TWO READINGS OF THE SAME BYTES, kept both:
     //   * Four SVECTOR-shaped vertices per primitive, 0x20 bytes: x,y,z at +0,+2,+4 and the
-    //     primitive-kind byte in the first vertex's pad at +6, which is what FUN_8003f6c0 reads as
+    //     primitive-kind byte in the first vertex's pad at +6, which is what TransformMeshPrimitives reads as
     //     `v3[-3].pad` to pick RotAverage4 or RotAverage3 (AnimCmdMesh's reading).
     //   * The transform record table base_culX/Y/Z/P edit, indexed as `&DAT_801f2180 + n * 0x10`
     //     through a short pointer — n * 0x20 bytes, i.e. the same 32-byte stride — one 32-byte
@@ -128,10 +128,10 @@ internal static class AnimVm
     //     written by base_culX/Y/Z @ 0x8003B184-0x8003BA98, AnimCmd_ChEffSet @ 0x8003DCBC and
     //     RenderBattleScene3D @ 0x800358B8.
     // Both readings describe the same 32-byte-stride record; they were not reconciled further than
-    // that because the sub-record consumer, FUN_8003f6c0, is outside every one of these slices.
+    // that because the sub-record consumer, TransformMeshPrimitives, is outside every one of these slices.
     //
     // PARTIAL: the extent is not closed. 256 records is what parts_link (AnimCmdControl) and
-    // FUN_8003f6c0's caller (AnimCmdMesh) both imply from their own index bounds, but no symbol
+    // TransformMeshPrimitives's caller (AnimCmdMesh) both imply from their own index bounds, but no symbol
     // beyond it in Ghidra confirms the count.
     internal const int DAT_801f2180 = unchecked((int)0x801F2180);
 

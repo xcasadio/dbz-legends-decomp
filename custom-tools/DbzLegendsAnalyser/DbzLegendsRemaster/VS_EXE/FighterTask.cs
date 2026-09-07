@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -416,25 +416,140 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_8004fa8c @ 0x8004FA8C (VS.EXE)
-    // BLOCKED: 368 bytes. Step 9.1. It returns a TASK NODE, not a workspace — the caller stores it
-    // in +0xAC and then dereferences +0x08 on it — and returning 0 means "no other node", at which
-    // point the caller substitutes the running task. Its own slice owns whatever picks that node.
+    // CERTAIN, full decompilation, 368 bytes, 0x8004FA8C..0x8004FBFB. Step 9.1. It returns a TASK
+    // NODE, not a workspace — the caller stores it in +0xAC and then dereferences +0x08 on it —
+    // and returning 0 means "no other node", at which point the caller substitutes the running
+    // task.
     //
-    // The stub returns 0, which is the original's own no-result value and therefore leaves the
-    // fallback path taking iVar2 == iVar3, the same workspace FUN_800512cc wired at creation.
+    // Verified instruction-by-instruction against mcp__pcsx-redux__pcsx_analyze_function @
+    // 0x8004fa8c, because Ghidra's own decompilation groups assembly fragments onto the wrong
+    // source lines here (a rendering quirk of this MCP session, not a fact about the binary):
+    //   * +0x22a's guard compare ("0 < *(short*)...") is `lh` (a genuine signed 16-bit load, no
+    //     extra truncation needed — unlike the byte case FUN_80050a14 below, a halfword sign-load
+    //     is already the full signed value);
+    //   * +0x22a's reload for the decrement is `lhu`, but since the result is stored straight
+    //     back with `sh` the signedness of that particular load cannot change the outcome;
+    //   * +0x173 (FighterSlotIndex) is `lbu`, unsigned, matching every other read of it in this
+    //     file;
+    //   * the intermediate index at ctx+slotIndex*0x14+0x15C0 is `lh`, SIGNED — it is used as a
+    //     scaled array index into ctx+0x1520, so its sign matters for the resulting address;
+    //   * the final fetched value is `lw`, a plain 32-bit read.
+    //
+    // +0xF0/+0x173/+0xAC are BattleState's FighterBattleContext/FighterSlotIndex/FighterTaskNode.
+    // The two tables this reads inside the battle context — the per-slot array at ctx+0x15C0 and
+    // the array of values at ctx+0x1520 the first array indexes into — are not named by
+    // BattleState or anywhere else in this port; they are left as raw offsets and reported
+    // upward rather than guessed at.
     private static int FUN_8004fa8c(int param_1)
     {
-        _ = param_1;
-        return 0;
+        int iVar1;
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x30000000) == 0)
+        {
+            if (0 < (short)PsxRam.ReadU16(param_1 + 0x22a))
+            {
+                PsxRam.WriteU16(param_1 + 0x22a,
+                    (ushort)((short)PsxRam.ReadU16(param_1 + 0x22a) - 1));
+                return PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode);
+            }
+        }
+        else
+        {
+            PsxRam.WriteU16(param_1 + 0x22a, 0);
+        }
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x27fff) == 0)
+        {
+            iVar1 = PsxRam.ReadI32(
+                (short)PsxRam.ReadU16(
+                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    + PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) * 0x14
+                    + 0x15c0) * 4
+                + PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext) + 0x1520);
+
+            if (iVar1 != PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode))
+            {
+                PsxRam.WriteU16(param_1 + 0x22a, 0x3c);
+            }
+        }
+        else
+        {
+            iVar1 = PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode);
+        }
+
+        return iVar1;
     }
 
     // GHIDRA: FUN_8004fbfc @ 0x8004FBFC (VS.EXE)
-    // BLOCKED: 296 bytes. Step 9.2, run unconditionally between the node resolution and the command
-    // word. It sits immediately after FUN_8004fa8c in the address space and immediately before
-    // FUN_8004fd24, the three of them one compilation unit.
+    // 296 bytes, 0x8004FBFC..0x8004FD23. Step 9.2, run unconditionally between the node resolution
+    // and the command word. It sits immediately after FUN_8004fa8c in the address space and
+    // immediately before FUN_8004fd24, the three of them one compilation unit.
+    //
+    // CERTAIN which bytes move, from two independent readings (Ghidra's decompilation and
+    // mcp__pcsx-redux__pcsx_analyze_function @ 0x8004fbfc, which agree): Ghidra renders the first
+    // half as a wall of shifts and masks —
+    //   auStack_40._0_4_ = (*(int *)((param_1+0x117U)-uVar2) << (3-uVar2)*8 | ...) & ... | ...
+    // — but the raw instructions underneath are a plain `lwl`/`lwr` pair loading from param_1+0x114
+    // followed by `swl`/`swr` storing into a local buffer, twice over (0x8004FC1C..0x8004FC38 for
+    // param_1, 0x8004FC58..0x8004FC74 for the second workspace below). `lwl`/`lwr` are MIPS's
+    // unaligned-load idiom: by construction they reconstruct the exact 4 source bytes regardless
+    // of alignment, so this — and its `swl`/`swr` counterpart on the write side — is PROVABLY an
+    // 8-byte byte-for-byte copy, not an approximation of one. What is copied is the fighter's own
+    // position triple at +0x114 (the same vx/vy/vz phase 2 clamps and the caller's own +0x18
+    // already use) into an SVECTOR-shaped scratch buffer, and the OTHER workspace's +0x114 into a
+    // second one. That other workspace is FighterTaskNode re-dereferenced independently of the
+    // caller's own copy of the same value: `PsxRam[PsxRam[param_1+0xAC]+8]`, exactly step 9.1's
+    // own iVar2 computation repeated rather than passed in.
+    //
+    // Both SVECTORs are then rotated through RotTrans — real GHIDRA name at VS.EXE's own
+    // 0x80077D7C, confirmed by decompiling THAT address and matching it instruction-for-instruction
+    // (gte_ldv0/copFunction 0x480012/gte_stlvnl/gte_stFLAG) against the RotTrans already in
+    // PsxSdkMonogame/LibGte.cs, which was closed against a different EXE's copy at a different
+    // address — same 40-byte routine, reused here rather than re-derived. RotTrans's SVECTOR.pad is
+    // never read by gte_ldv0 (see LibGte.LdV0), so it is left unset, matching every other call site
+    // in this port that builds an SVECTOR from raw fields (e.g. TITLE_EXE/SpriteRenderer.cs).
+    //
+    // The two rotated VECTORs' vx are compared — "the other" minus "this" — to set or clear bit 30
+    // of +0x138. The matrix RotTrans rotates through is whatever the GTE currently holds; this
+    // function neither loads one nor is told which, so the result depends on an earlier call this
+    // slice does not own.
+    //
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: RotTrans's third argument is `long *flag`, the original's `&local_a8.pad`-style
+    // output sink that TITLE_EXE/SpriteRenderer.cs already documents for this same callee — C#
+    // cannot take the address of a field, so each call here gets its own throwaway one-element
+    // array. Nothing reads either array afterward, matching the original: neither call site's
+    // `alStack_10` is read again once both RotTrans calls return.
     private static void FUN_8004fbfc(int param_1)
     {
-        _ = param_1;
+        LibGte.SVECTOR svec1 = new();
+        svec1.vx = (short)PsxRam.ReadU16(param_1 + 0x114);
+        svec1.vy = (short)PsxRam.ReadU16(param_1 + 0x116);
+        svec1.vz = (short)PsxRam.ReadU16(param_1 + 0x118);
+
+        int iVar3 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8);
+
+        LibGte.SVECTOR svec2 = new();
+        svec2.vx = (short)PsxRam.ReadU16(iVar3 + 0x114);
+        svec2.vy = (short)PsxRam.ReadU16(iVar3 + 0x116);
+        svec2.vz = (short)PsxRam.ReadU16(iVar3 + 0x118);
+
+        LibGte.VECTOR local_30 = new();
+        int[] flag1 = new int[1];
+        LibGte.RotTrans(svec1, local_30, flag1);
+
+        LibGte.VECTOR local_20 = new();
+        int[] flag2 = new int[1];
+        LibGte.RotTrans(svec2, local_20, flag2);
+
+        if (local_20.vx - local_30.vx < 0)
+        {
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xbfffffff));
+        }
+        else
+        {
+            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) | 0x40000000));
+        }
     }
 
     // GHIDRA: FUN_80049f54 @ 0x80049F54 (VS.EXE)
@@ -496,10 +611,28 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_80047740 @ 0x80047740 (VS.EXE)
-    // BLOCKED: 172 bytes. Step 9.8, first of the five behind the +0x138 bit-27 gate.
+    // CERTAIN, full decompilation, 172 bytes. Step 9.8, first of the five behind the +0x138
+    // bit-27 gate. Sets three consecutive bytes at +0x150/+0x151/+0x152 to one of two fixed
+    // values, gated on +0x134 bit 26 and, inside that, +0x138 bit 18. No callee, no loop, no
+    // open question — the three fields themselves are not named anywhere else in this port, so
+    // they are left as raw offsets.
     private static void FUN_80047740(int param_1)
     {
-        _ = param_1;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x4000000) == 0)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x40000) == 0)
+            {
+                PsxRam.WriteU8(param_1 + 0x152, 0x80);
+                PsxRam.WriteU8(param_1 + 0x151, 0x80);
+                PsxRam.WriteU8(param_1 + 0x150, 0x80);
+            }
+            else
+            {
+                PsxRam.WriteU8(param_1 + 0x150, 0xff);
+                PsxRam.WriteU8(param_1 + 0x152, 0xff);
+                PsxRam.WriteU8(param_1 + 0x151, 0xff);
+            }
+        }
     }
 
     // GHIDRA: FUN_800477ec @ 0x800477EC (VS.EXE)
@@ -519,13 +652,51 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_80047b10 @ 0x80047B10 (VS.EXE)
-    // BLOCKED: 340 bytes. Step 9.8. VS_EXE/FileIo.cs already names this address in a comment as one
-    // of DecompressAndLoadImage's five call sites — it passes a pointer field and a width already
-    // shifted right by 2 — so this one puts an image into VRAM. FileIo carries no transliteration of
-    // it, only the note, so this stub shadows nothing.
+    // CERTAIN, full decompilation, 340 bytes, 0x80047B10..0x80047C63. Step 9.8. VS_EXE/FileIo.cs
+    // already named this address in a comment as one of FileIo.DecompressAndLoadImage's five call
+    // sites — "a pointer field and a width already shifted right by 2" — and that call is what
+    // this function makes; FileIo carried no transliteration of the caller itself before this.
+    //
+    // Reloads a texture only when +0x94's pointer has changed since the last reload cached at
+    // +0x14c AND +0x13c is positive (signed, `blez`-gated in the disassembly). The width/height
+    // pair comes from a small record at +0x98: a packed field at the record's +0xa (read `lhu`,
+    // shifted right 9 then masked to bits 3..6) is used directly when non-zero; when it IS zero,
+    // the record's own +0xc/+0xe halfwords are used instead (also `lhu`, both unsigned). Either
+    // way the width component is halved twice more (>>2) before the call — this is the "width
+    // already shifted right by 2" FileIo's own comment already flagged.
+    //
+    // Ghidra prints the x/y loads at +0x156/+0x158 as `ushort *` but the actual instructions are
+    // `lh` (signed); the sign extension is invisible here because the value only ever feeds
+    // DecompressAndLoadImage's `ushort` parameter, so it is ported the same unsigned way every
+    // other +0x156/+0x158 access in this port already reads them.
     private static void FUN_80047b10(int param_1)
     {
-        _ = param_1;
+        if (PsxRam.ReadI32(param_1 + 0x94) != PsxRam.ReadI32(param_1 + 0x14c)
+            && 0 < PsxRam.ReadI32(param_1 + 0x13c))
+        {
+            int iVar2 = PsxRam.ReadI32(param_1 + 0x98);
+            ushort uVar1 = (ushort)(PsxRam.ReadU16(iVar2 + 0xa) >> 9);
+            ushort local_a = (ushort)(uVar1 & 0x78);
+            ushort local_c = local_a;
+
+            if ((uVar1 & 0x78) == 0)
+            {
+                local_a = PsxRam.ReadU16(iVar2 + 0xe);
+                local_c = PsxRam.ReadU16(iVar2 + 0xc);
+            }
+
+            local_c = (ushort)(local_c >> 2);
+
+            FileIo.DecompressAndLoadImage(
+                PsxRam.ReadI32(param_1 + 0x94),
+                PsxRam.ReadU16(param_1 + 0x156),
+                PsxRam.ReadU16(param_1 + 0x158),
+                (short)local_c,
+                (short)local_a,
+                0);
+
+            PsxRam.WriteI32(param_1 + 0x14c, PsxRam.ReadI32(param_1 + 0x94));
+        }
     }
 
     // GHIDRA: FUN_8004fd24 @ 0x8004FD24 (VS.EXE)
@@ -538,10 +709,47 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_80050a14 @ 0x80050A14 (VS.EXE)
-    // BLOCKED: 208 bytes. Phase 10, the tail — and it ends at 0x80050AE3, one byte below this
-    // callback's own entry point, so the two are adjacent in the same compilation unit.
+    // CERTAIN, full decompilation, 208 bytes. Phase 10, the tail — and it ends at 0x80050AE3, one
+    // byte below this callback's own entry point, so the two are adjacent in the same compilation
+    // unit.
+    //
+    // A frame counter at +0x229, reset to 0x14 (20) whenever bit 6 of +0x138 is set; otherwise
+    // decremented once per call. Verified against mcp__pcsx-redux__pcsx_analyze_function @
+    // 0x80050a14 because Ghidra's own decompilation types the compare as `char cVar1 = ... + -1;
+    // if (cVar1 < '\0')`, which reads like "only fires when the byte was 0" if the surrounding
+    // `lbu` reload is taken at face value — the raw instructions show otherwise: after the `lbu`
+    // reload and `addiu -1`, the result is put through `sll 0x18` then `sra 0x18`, i.e. the low
+    // BYTE of the decremented value is re-sign-extended before the `bgez` branch. That is a real
+    // truncate-to-signed-byte step, not a 32-bit compare, so the write below fires whenever the
+    // stored byte, reread unsigned next call, decrements to something in 0x80..0xFF as well as on
+    // the frame it reaches 0 — a decrement through 0 leaves 0xFF stored (0-1 truncated), and
+    // 0xFF down through 0x80 all re-trigger -- 0x80 INCLUDED, since (sbyte)0x80 is -128 and the
+    // test is `< 0`. That
+    // double-humped firing pattern is the original's, reproduced verbatim rather than "corrected"
+    // to a single fire at zero, per rule 12.
+    //
+    // The write clears one halfword in the battle context's table at
+    // ctx+slotIndex*0x14+0x15BA — FighterBattleContext (+0xF0) and FighterSlotIndex (+0x173) are
+    // BattleState's; the table itself and its +0x15BA row are not named anywhere in this port and
+    // are left as a raw offset, reported upward rather than guessed at.
     private static void FUN_80050a14(int param_1)
     {
-        _ = param_1;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x40) == 0)
+        {
+            sbyte cVar1 = (sbyte)(PsxRam.ReadU8(param_1 + 0x229) - 1);
+            PsxRam.WriteU8(param_1 + 0x229, unchecked((byte)cVar1));
+
+            if (cVar1 < 0)
+            {
+                PsxRam.WriteU16(
+                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                        + PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) * 0x14 + 0x15ba,
+                    0);
+            }
+        }
+        else
+        {
+            PsxRam.WriteU8(param_1 + 0x229, 0x14);
+        }
     }
 }

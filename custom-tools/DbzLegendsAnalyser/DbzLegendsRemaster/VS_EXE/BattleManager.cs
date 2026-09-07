@@ -153,7 +153,7 @@ internal static class BattleManager
         PsxRam.WriteI32(puVar1 + 0x2d60, 0);
         PsxRam.WriteI32(puVar1 + 0x10, (int)((uint)PsxRam.ReadI32(puVar1 + 0x10) | 0x4000));
         FUN_800594b4(puVar1);
-        FUN_80059e94(puVar1);
+        InitCentralGaugeBar(puVar1);
         FUN_8005a104(puVar1);
         PsxRam.WriteU16(puVar1 + 8, 0);
         PsxRam.WriteU16(puVar1 + 2, 0);
@@ -180,7 +180,7 @@ internal static class BattleManager
     //
     // THE MAP — the phases in evaluation order, with the address each opens at.
     //
-    //   0x80055FBC  the VM suspend gate: set -> FUN_8005a5b0 + FUN_8005c6e4 and NOTHING else
+    //   0x80055FBC  the VM suspend gate: set -> FUN_8005a5b0 + UpdateCentralGaugeBar and NOTHING else
     //   0x80055FE4  the central gauge: count both teams, scale, accumulate  (skipped when pegged)
     //   0x8005625C  the +/-30000 clamps, high then low
     //   0x80056290  the pegged-gauge arm: raise 0x80000, and 8 as well when no slot is still live
@@ -196,7 +196,7 @@ internal static class BattleManager
     //   0x80056F78  the per-slot command echo: fighter +0x138 -> record flags + an 8-frame timer
     //   0x80057064  the targeting block, pad-driven or automatic on DAT_801FF100
     //   0x8005769C  the legality sweep that drags a dead target back onto the opposing cursor
-    //   0x80057794  FUN_8005a5b0 + FUN_8005c6e4, the two that run on EVERY path
+    //   0x80057794  FUN_8005a5b0 + UpdateCentralGaugeBar, the two that run on EVERY path
     //   0x800577C4  the 0x8000000 acknowledgement, and the two 0xFFFC globals it writes
     //   0x80057888  zero all twelve gauge contributions
     //
@@ -237,7 +237,7 @@ internal static class BattleManager
         if ((AnimVm.DAT_800b305a & 1) != 0)
         {
             FUN_8005a5b0(iVar15);
-            FUN_8005c6e4(iVar15);
+            UpdateCentralGaugeBar(iVar15);
             return;
         }
 
@@ -1384,7 +1384,7 @@ internal static class BattleManager
 
         // 0x80057794 — the two that run on every path, the suspended one included.
         FUN_8005a5b0(iVar15);
-        FUN_8005c6e4(iVar15);
+        UpdateCentralGaugeBar(iVar15);
 
         iVar6 = 0;
         if (((uint)PsxRam.ReadI32(iVar15 + 0x10) & 4) == 0)
@@ -1474,7 +1474,7 @@ internal static class BattleManager
         puVar4 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
         iVar3 = 0;
         FUN_8005a5b0(puVar4);
-        FUN_8005c6e4(puVar4);
+        UpdateCentralGaugeBar(puVar4);
         iVar2 = AnimCmdSound.FUN_80060120();
         if (iVar2 != 0)
         {
@@ -1487,7 +1487,7 @@ internal static class BattleManager
 
         if ((BattleScene.DAT_8008d340 & 0xc) != 0)
         {
-            SoundDriver.FUN_8005f704(0, 0);
+            SoundDriver.SoundCdLoadStep(0, 0);
             iVar3 = iVar3 + 1;
         }
 
@@ -1504,7 +1504,7 @@ internal static class BattleManager
 
         if ((AnimVm.DAT_800b305a & 1) == 0 && iVar3 == 0)
         {
-            FUN_80060a4c();
+            DisableReverb();
             if ((PsxRam.ReadU16(puVar4 + 8) & 0x4000) == 0)
             {
                 VS_EXE_exe.DAT_8008d4f0 = 3;
@@ -1548,7 +1548,7 @@ internal static class BattleManager
 
         uVar1 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
         FUN_8005a5b0(uVar1);
-        FUN_8005c6e4(uVar1);
+        UpdateCentralGaugeBar(uVar1);
     }
 
     // GHIDRA: FUN_8005cf78 @ 0x8005CF78 (VS.EXE)
@@ -1663,6 +1663,10 @@ internal static class BattleManager
     // Ghidra types it undefined4. Zeroed in the wind-down, alongside the central gauge itself.
     private static int DAT_8008d3a8;
 
+    // GHIDRA: DAT_8008d3f8 @ 0x8008D3F8 (VS.EXE)
+    // `sh zero,0x2fc(gp)`. Zeroed once, at the tail of FUN_8005a104, alongside DAT_8008d458.
+    private static short DAT_8008d3f8;
+
     // GHIDRA: DAT_8008d15c @ 0x8008D15C (VS.EXE)
     // Ghidra types it undefined2 and the image holds 0x0000. It and DAT_8008d15e are ADJACENT
     // halfwords, written the same value 0xFFFC on the two arms of one test, so they are a two-entry
@@ -1724,11 +1728,11 @@ internal static class BattleManager
         _ = param_1;
     }
 
-    // GHIDRA: FUN_8005c6e4 @ 0x8005C6E4 (VS.EXE)
+    // GHIDRA: UpdateCentralGaugeBar @ 0x8005C6E4 (VS.EXE)
     // BLOCKED: 1276 bytes. Always called immediately after FUN_8005a5b0, on all four states, and it
     // ends at 0x8005CBDF — one byte below FUN_8005cbe0, the roster consumer main calls just after
     // creating this task. The three are one compilation unit.
-    private static void FUN_8005c6e4(int param_1)
+    private static void UpdateCentralGaugeBar(int param_1)
     {
         _ = param_1;
     }
@@ -1742,31 +1746,248 @@ internal static class BattleManager
         _ = param_1;
     }
 
-    // GHIDRA: FUN_80059e94 @ 0x80059E94 (VS.EXE)
-    // BLOCKED: 624 bytes. Second sub-initialiser; it sits between the other two in the address
-    // space, so the three are consecutive.
-    private static void FUN_80059e94(int param_1)
+    // GHIDRA: InitCentralGaugeBar @ 0x80059E94 (VS.EXE)
+    // Second sub-initialiser state 0 runs; it sits between FUN_800594b4 and FUN_8005a104 in the
+    // address space, so the three are consecutive. 624 bytes, in three parts: two closed, one
+    // BLOCKED.
+    //
+    // PART ONE, closed: four POLY_FT4 packets at ctx+0x2F84, stride 0x28 — the ONLY primitive pool
+    // this function's own POLY_FT4 pointer walks, so this is the central-gauge bar's own geometry,
+    // built once at arming time. `p` is `(POLY_FT4 *)(param_1 + 0x2f84)`; the decompiler also
+    // tracks a SECOND, `undefined2 *` cursor `puVar6` at `param_1 + 0x2f9e`, i.e. `p + 0x1a`
+    // (26 bytes), advancing in lock-step with `p` every iteration (both step one record, 0x28
+    // bytes, per turn) — so every `puVar6[k]` / `*(undefined1 *)(puVar6+k)` below is just another
+    // named POLY_FT4 field reached through a second pointer, and is ported as that field. Two of
+    // the literals looked, at first read, like the SetShadeTex/SetSemiTrans calls' own return
+    // values leaking into the next store (`puVar6[-2] = 0x9e`, `uVar1 = 0xe2` / `= 0xd7`) — they
+    // are not: the raw bytes at 0x80059f04 are a plain `ori v0,zero,0x9e`, between the `jal` and
+    // the store, that overwrites v0 first. Checked because the decompiler's own line-to-instruction
+    // pairing is imprecise across this stretch and the first read looked like the call's own
+    // result.
+    //
+    // The first two of the four iterations (iVar7 < 2) and the last two tag the quad differently —
+    // clut 0x7B00 vs 0x7B40, a different u/v rectangle — so the pool is two pairs of segments,
+    // plausibly the two teams' halves of the tug-of-war bar this file's header already closes
+    // (ctx+0x302C). Nothing downstream of arming is in THIS slice to confirm that reading, so it
+    // stays a plausibility, not a closed fact.
+    //
+    // PART TWO, BLOCKED. The original copies two 64-halfword tables — `&DAT_800842b8` and
+    // `&DAT_800843b8`, both raw PSX `.data` addresses, undeclared anywhere in this port — into a
+    // 256-byte STACK buffer (`local_128` then `local_a8`, contiguous by construction: two
+    // half-copies of one region) and hands that stack address to
+    // `LoadImage_ReturnTPageOrClutId(local_128, 0, 0x1ed, 0x80, 1, '\0')` — a CLUT upload, isClut
+    // truthy per FileIo's own signature for that call. PsxRam has no operation that hands out a
+    // fresh, PSX-addressable scratch region for a C# local: every other caller of
+    // LoadImage_ReturnTPageOrClutId in this port already owns an address that resolves through
+    // PsxRam.AddressResolver — a heap block, a global, a table entry — never a bare stack local.
+    // Inventing a scratch-stack allocator here would be new architecture, and this file has no
+    // business introducing one on its own, so the two copies and the upload are left undone. The
+    // call's return value is unused at this call site in the original, so nothing later in this
+    // function depends on what the upload would have produced.
+    //
+    // PART THREE, closed: six trailing stores, independent of the blocked upload. ctx+0x302C is
+    // BattleState.CtxCentralGauge — the same word FUN_80055f94 accumulates into and clamps
+    // elsewhere in this file — so this is the gauge's OWN zero, ahead of arming, distinct from the
+    // wind-down's later reset.
+    private static void InitCentralGaugeBar(int param_1)
     {
-        _ = param_1;
+        var resolved = PsxRam.AddressResolver?.Invoke(param_1);
+        if (resolved != null)
+        {
+            (byte[] buffer, int offset) = resolved.Value;
+            POLY_FT4Ref basePoly = new POLY_FT4Ref(buffer, offset + 0x2f84);
+
+            sbyte cVar9 = -0x60;
+            sbyte cVar10 = -0x51;
+            short sVar8 = 0xa0;
+            short sVar11 = 0x20;
+
+            for (int iVar7 = 0; iVar7 < 4; iVar7++)
+            {
+                POLY_FT4Ref p = basePoly[iVar7];
+                LibGpu.SetPolyFT4(p);
+                LibGpu.SetSemiTrans(p, 0);
+                LibGpu.SetShadeTex(p, 0);
+                p.tpage = 0x9e;
+                p.r0 = 0x80;
+                p.g0 = 0x80;
+                p.b0 = 0x80;
+
+                ushort uVar1;
+                if (iVar7 < 2)
+                {
+                    sbyte cVar4 = (sbyte)(iVar7 * 0x20);
+                    sbyte cVar5 = (sbyte)(cVar4 - 0x80);
+                    cVar4 = (sbyte)(cVar4 - 0x61);
+                    short sVar3 = (short)((1 - iVar7) * -0x50 + 0xa0);
+
+                    p.u2 = 0x30;
+                    p.clut = 0x7b00;
+                    p.x3 = sVar8;
+                    p.x1 = sVar8;
+                    p.y1 = 0xc2;
+                    p.y0 = 0xc2;
+                    uVar1 = 0xe2;
+                    p.u0 = 0x30;
+                    p.u3 = 0x80;
+                    p.u1 = 0x80;
+                    p.v1 = (byte)cVar5;
+                    p.v0 = (byte)cVar5;
+                    p.v3 = (byte)cVar4;
+                    p.v2 = (byte)cVar4;
+                    p.x2 = sVar3;
+                    p.x0 = sVar3;
+                }
+                else
+                {
+                    short sVar3 = (short)((3 - iVar7) * -0x40 + 0xa0);
+
+                    p.u2 = 0x30;
+                    p.clut = 0x7b40;
+                    p.u3 = 0x6f;
+                    p.u1 = 0x6f;
+                    p.v1 = (byte)cVar9;
+                    p.v0 = (byte)cVar9;
+                    p.v3 = (byte)cVar10;
+                    p.v2 = (byte)cVar10;
+                    p.x3 = sVar11;
+                    p.x1 = sVar11;
+                    p.y1 = 199;
+                    p.y0 = 199;
+                    uVar1 = 0xd7;
+                    p.u0 = 0x30;
+                    p.x2 = sVar3;
+                    p.x0 = sVar3;
+                }
+
+                p.y3 = (short)uVar1;
+                p.y2 = (short)uVar1;
+
+                sVar11 = (short)(sVar11 + 0x40);
+                cVar10 = (sbyte)(cVar10 + 0x10);
+                cVar9 = (sbyte)(cVar9 + 0x10);
+                sVar8 = (short)(sVar8 + 0x50);
+            }
+        }
+
+        // PART TWO is BLOCKED here — see the comment above the function. Nothing is written for
+        // the two 64-halfword table copies or the LoadImage_ReturnTPageOrClutId(local_128, 0,
+        // 0x1ed, 0x80, 1, 0) call.
+
+        PsxRam.WriteU16(param_1 + 0x3024, 0);
+        PsxRam.WriteU16(param_1 + 0x3026, 0);
+        PsxRam.WriteU16(param_1 + 0x3028, 1);
+        PsxRam.WriteU16(param_1 + 0x302a, 1);
+        DAT_8008d3a8 = 0;
+        PsxRam.WriteI32(param_1 + BattleState.CtxCentralGauge, 0);
+        PsxRam.WriteI32(param_1 + 0x3030, 0);
     }
 
     // GHIDRA: FUN_8005a104 @ 0x8005A104 (VS.EXE)
-    // BLOCKED: 1196 bytes. Third sub-initialiser, ending at 0x8005A5AF, one byte below FUN_8005a5b0.
+    // Third sub-initialiser, ending at 0x8005A5AF, one byte below FUN_8005a5b0. 1196 bytes, and
+    // ALMOST ALL of it is one primitive-setup block this slice cannot close.
+    //
+    // THE OUTER LOOP, closed: twelve iterations (sVar12 = 0..11), and on every one of them —
+    // whether or not the inner block below runs — a halfword is copied from
+    // Roster.PTR_DAT_800844b8+0x22 (the battle setup record VS_EXE/Roster.cs already owns and
+    // names; its own OWNERSHIP CAVEAT names this exact read) into ctx+0x2C14, this file's own
+    // "SECOND per-slot table" its header already documents. So THIS is where that table's bit 0x40
+    // — the one the inner block below tests — is first populated, once, at arming.
+    //
+    // THE INNER BLOCK (sVar12 < 6), BLOCKED. `p = (POLY_FT4 *)(param_1 + sVar12*0xf0 + 0x16d0)` is
+    // a group of (at least) six POLY_FT4 packets per slot — a per-fighter HUD element, given the
+    // loop only ever reaches six of the twelve slots. Ghidra types `p` as a REAL `POLY_FT4 *` here
+    // (unlike InitCentralGaugeBar), so every `p->field` / `p[n].field` below already names its own
+    // POLY_FT4Ref field one-for-one — including the two the decompiler prints as `p->_2` / `p->_3`,
+    // which get-structure-info resolves to `v0` (offset 0x0D) and `v1` (offset 0x15) of the
+    // `psyq330` POLY_FT4 layout, i.e. POLY_FT4Ref's own `v0`/`v1`. None of THAT is what blocks it.
+    //
+    // What blocks it is the ANCHOR every one of those six packets is positioned from:
+    //     sVar1 = *(short *)(&DAT_80084578 + DAT_800845d0 * 4);
+    //     sVar2 = *(short *)(&DAT_8008457a + DAT_800845d0 * 4);
+    // a stride-4 (x, y) pair table indexed by DAT_800845d0, plus a second table pair —
+    // `&DAT_80084184 + sVar12*6` / `&DAT_80084186 + sVar12*6`, a 12-byte-stride row per slot — that
+    // feeds the sixth packet's tpage/u/v. The second pair is VS_EXE/Roster.cs's own "portrait
+    // coordinate table" (its GHIDRA: DAT_80084184 comment names the same 12-byte stride and the
+    // same twelve rows), so it is not new; but DAT_80084578, DAT_8008457a and DAT_800845d0 are not
+    // declared ANYWHERE in this port. They sit 0x3F4 bytes past DAT_80084184 in the image — plausibly
+    // one more column of Roster's own table domain, an anchor per formation rather than per slot —
+    // but that is a guess this slice has no evidence to close, and every other function this port
+    // has ported treats a table like this as belonging to whichever file already owns its
+    // neighbours. Declaring it here, in a file that owns none of Roster's other tables, would risk
+    // exactly the two-spellings-of-one-field defect VS_EXE/BattleState.cs exists to prevent. So the
+    // whole `if (sVar12 < 6)` body is left unperformed; every packet it would have built keeps
+    // whatever the heap/image already holds there.
+    //
+    // THE TAIL, closed: two more of this file's own gp-relative globals, zeroed unconditionally
+    // after the loop.
     private static void FUN_8005a104(int param_1)
     {
-        _ = param_1;
+        for (short sVar12 = 0; sVar12 < 0xc; sVar12++)
+        {
+            PsxRam.WriteU16(param_1 + 0x2c14 + sVar12 * 2,
+                PsxRam.ReadU16(Roster.PTR_DAT_800844b8 + 0x22 + sVar12 * 2));
+
+            // BLOCKED for sVar12 < 6 — see the comment above the function: the six-packet
+            // POLY_FT4 group anchored on DAT_80084578/DAT_8008457a/DAT_800845d0 is not built.
+        }
+
+        DAT_8008d458 = 0;
+        DAT_8008d3f8 = 0;
     }
 
     // GHIDRA: FUN_8005ee5c @ 0x8005EE5C (VS.EXE)
-    // BLOCKED: called three times from FUN_80055f94 with (-1, -1, 0x10), (0, 0, 0x30) and
-    // (0, 0, 0x28). It reads DAT_8008d320 at 0x8005EEA8, so it is one of the fifty-two consumers of
-    // the pointer state 0 publishes. VS_EXE/AnimVmInterpreter.cs holds an identical private empty
-    // stub; see the note above.
+    // Called three times from FUN_80055f94 with (-1, -1, 0x10), (0, 0, 0x30) and (0, 0, 0x28), plus
+    // once from ExecuteAnimStreamBatch with (0, 0, 0x30). VS_EXE/AnimVmInterpreter.cs held an
+    // identical private empty stub for the same address; that duplicate is already gone (see the
+    // note above) and this is the one surviving copy.
+    //
+    // 196 bytes, closed in full: nothing but halfword/byte stores into fixed offsets of
+    // SoundState.DAT_8008d284 — the sound workspace VS_EXE/SoundState.cs and
+    // VS_EXE/SoundDriver.cs already name and own — one signed-halfword read that decides the last
+    // branch, and one word read of ctx+0x10, THIS file's own flag word, through
+    // BattleManager.DAT_8008d320. Every load/store width below is the instruction's own — `lhu`/`sh`
+    // for the halfwords, `sb` for the bytes, `lw` for the ctx+0x10 test.
+    //
+    // Ghidra types param_1/param_2 `ushort`, but the signature already established here (and shared
+    // with every call site in this file) is `int`, and one call site passes -1 for both. The
+    // ORIGINAL register holds 0xFFFFFFFF too, and the callee's own comparison is against the 16-bit
+    // constant 0xFFFF, so the comparison below truncates param_1 to 16 bits first — comparing the
+    // untruncated 32-bit -1 against 0xffff would never be true, and would silently take the wrong
+    // branch on every call this function actually receives -1 from.
     internal static void FUN_8005ee5c(int param_1, int param_2, int param_3)
     {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x11e, PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x11a));
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x120, PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x11c));
+
+        if ((ushort)param_1 == 0xffff)
+        {
+            PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x143, 0x40);
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x122, 0x52);
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x124, 0x52);
+            PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x142, 0x40);
+
+            if ((PsxRam.ReadI32(DAT_8008d320 + 0x10) & 0x2008) != 0)
+            {
+                PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x143, 0x10);
+                PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x122, 0x36);
+                PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x124, 0x36);
+                PsxRam.WriteU8(SoundState.DAT_8008d284 + 0x142, 0x10);
+            }
+        }
+        else
+        {
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x122, (ushort)(param_1 & 0x7f));
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x124, (ushort)(param_2 & 0x7f));
+        }
+
+        short sVar2 = (short)PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x110);
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x128, (ushort)param_3);
+        PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x126, 1);
+        if (sVar2 == 0)
+        {
+            PsxRam.WriteU16(SoundState.DAT_8008d284 + 0x110, 0x15);
+        }
     }
 
     // GHIDRA: FUN_8005ef20 @ 0x8005EF20 (VS.EXE)
@@ -1788,26 +2009,32 @@ internal static class BattleManager
     // copy moved.
 
     // GHIDRA: FUN_8005ecf4 @ 0x8005ECF4 (VS.EXE)
-    // BLOCKED: 52 bytes, one caller and it is FUN_800578e0. Its body is
-    //     sVar1 = *(short *)(DAT_8008d284 + 0x110);
-    //     if (0xf < *(short *)(DAT_8008d284 + 0x110)) sVar1 = 0;
-    //     return (int)sVar1;
-    // — closed, and still stubbed rather than ported because DAT_8008d284 is
-    // a shared pointer this file has no business being the first to declare. Recorded verbatim so
-    // whichever slice owns that global can land it in one move.
-    //
-    // The stub returns 0, which does not block the hand-back; the original's answer depends on that
-    // pointer.
+    // 52 bytes, one caller and it is FUN_800578e0. Formerly stubbed because DAT_8008d284 — the
+    // sound workspace — had no owner yet; VS_EXE/SoundState.cs now declares it, so this closes.
+    // `lh v0,0x110(v1)` is a SIGNED halfword load (not `lhu`), matching the `short` type and the
+    // signed comparison `slti v0,v0,0x10` that decides the clamp.
     private static int FUN_8005ecf4()
     {
-        return 0;
+        short sVar1 = (short)PsxRam.ReadU16(SoundState.DAT_8008d284 + 0x110);
+        if (0xf < sVar1)
+        {
+            sVar1 = 0;
+        }
+
+        return sVar1;
     }
 
-    // GHIDRA: FUN_80060a4c @ 0x80060A4C (VS.EXE)
-    // BLOCKED: 60 bytes. The first thing state 2 does once every one of its four conditions is
-    // clear, immediately before the DAT_801FF100 write.
-    private static void FUN_80060a4c()
+    // GHIDRA: DisableReverb @ 0x80060A4C (VS.EXE)
+    // 60 bytes. The first thing state 2 does once every one of its four conditions is clear,
+    // immediately before the DAT_801FF100 write. Four PSYQ sound-library calls, nothing else — all
+    // four already live in PsxSdkMonogame.LibSnd as documented do-nothing stubs (no reverb hardware
+    // is modelled), so the call is faithful even though it currently has no audible effect.
+    private static void DisableReverb()
     {
+        LibSnd.SsUtSetReverbDepth(0, 0);
+        LibSnd.SsUtSetReverbFeedback(0);
+        LibSnd.SsUtSetReverbDelay(0);
+        LibSnd.SsUtReverbOff();
     }
 
     // GHIDRA: FUN_800290d0 @ 0x800290D0 (VS.EXE)

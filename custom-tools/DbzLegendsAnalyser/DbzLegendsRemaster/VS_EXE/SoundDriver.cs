@@ -51,7 +51,7 @@ internal static class SoundDriver
     // `return default` stub in LibSnd, and 0 is exactly state 7's "not yet". The remaining blocker
     // is libsnd.
 
-    // GHIDRA: FUN_8005f704 @ 0x8005F704 (VS.EXE)
+    // GHIDRA: SoundCdLoadStep @ 0x8005F704 (VS.EXE)
     // CERTAIN as to control flow: the whole body was read instruction by instruction,
     // 0x8005F704..0x8005FB98, exactly 0x490 = 1168 bytes, and the eight-entry jump table at
     // 0x80020A84 was read as raw bytes and decodes to
@@ -70,7 +70,7 @@ internal static class SoundDriver
     // THE SIGNATURE IS KEPT AS IT WAS FOUND, `ushort` return, because three call sites already cast
     // it. The original returns v0 sign-extended from 16 bits (`sll`/`sra` at 0x8005FB74), which for
     // the 0..8 range these states occupy is the same value either way.
-    internal static ushort FUN_8005f704(int param_1, int param_2)
+    internal static ushort SoundCdLoadStep(int param_1, int param_2)
     {
         int s2 = param_1;
         int s0 = param_2;
