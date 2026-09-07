@@ -264,6 +264,74 @@ La structure est grande (au-dela de `0x2c14` shorts, soit plus de 22 Ko), donc
 `BattleState.cs` doit declarer **ce que cette fonction touche**, pas la structure
 entiere, et le dire.
 
+## OU EN EST VS.EXE, en chiffres et non en impression
+
+C'est le resultat le plus utile de cette session, et il change la maniere de
+poser la question. « Finir VS.EXE » n'est pas un compte de souches.
+
+**Le balayage complet.** 57 fonctions de `VS_EXE/` etaient encore des souches.
+Les dimensionner une par une contre Ghidra les a triees en **26 pretes**, 3 qui
+demandent un socle, 28 bloquees derriere des appelees non portees.
+
+**Les 26 pretes sont faites.** 22 translitterees, 2 partielles avec le global
+manquant nomme au site, et une qui n'avait besoin d'aucun corps: `FUN_8005d1f4`
+fait 8 octets dans l'image, un `jr ra` et son delay slot. La souche vide etait
+deja juste; seul son commentaire mentait. **Reste 33 souches.**
+
+**Mais 33 souches n'est pas la distance a l'arrivee.** La cartographie du graphe
+d'appel derriere elles donne le vrai chiffre:
+
+| | |
+|---|---|
+| souches restantes | 33 |
+| fonctions **jamais declarees** derriere elles | **47** |
+| octets non portes | **26 172 (25,6 Ko)** |
+| feuilles portables *aujourd'hui* | 9, soit 7,6 Ko |
+
+Les 47 sont pour l'essentiel **une seule famille**: le comportement des
+combattants (`FUN_8004Axxx`..`FUN_8004Exxx`), un sous-systeme entier jamais
+touche. La plus grosse fait 5 096 octets. Quinze des 33 souches restantes sont
+dans `FighterTask.cs` et attendent toutes cette famille.
+
+**Les 9 feuilles sont le prochain pas, et elles sont bien choisies:**
+
+| feuille | taille | ce qu'elle debloque |
+|---|---|---|
+| `0x80058338` | 2 440 o | `FUN_8005a5b0` |
+| `0x80057a7c` | 1 700 o | `FUN_8005a5b0` |
+| `0x80058120` | 536 o | `FUN_8005a5b0` |
+| `0x8005c6e4` | 1 276 o | `UpdateCentralGaugeBar`, appelee sur tous les chemins |
+| `0x800411b4` | 824 o | la chaine de boot de `VS_EXE_exe` |
+| `0x80061bd8` | 372 o | idem |
+| `0x80047550` | 312 o | **fait** — le dernier doublon |
+| `0x800290d0` | 76 o | |
+| `0x80040f30` | 72 o | |
+
+Trois des quatre appelees de `FUN_8005a5b0` sont dans cette liste. La quatrieme
+est `FUN_80026d98` (1 448 o). Autrement dit **le verrou de la scene de combat est
+a environ 6 Ko de translitteration**, pas a 25.
+
+## Le son n'est pas de la translitteration
+
+Quatre des cinq souches de `AnimCmdSound.cs` attendent les memes trois
+fonctions — `FUN_8006BDD8` (volume), `FUN_8006B88C` (key-off), `FUN_8006B4A0`
+(key-on). Elles ont ete decodees, et elles ne touchent **que** des tables
+fantomes de voix et des miroirs de registres, sans aucun etat de jeu, bornees a
+`0x18` — les 24 voix du SPU.
+
+Ce sont des fonctions **de la couche SDK**. La regle 13 du mandat interdit de les
+translitterer comme du runtime: elles appartiennent a `PsxSdkMonogame`, a cote de
+`LibSpu.SpuSetVoiceVolume` et `LibSpu.SpuKeyOffVoices`, qui y sont deja declarees
+en souches. De quelle bibliotheque exactement, libsnd ou libspu, n'est **pas**
+affirme: les strides du cache (8, 0x18, 0x30) et les masques de touches differes
+sont un idiome libsnd, mais le `SpuSetVoiceVolume` de PSY-Q prend des volumes
+directs au lieu de les mettre a l'echelle par 0x81. Les nommer serait une
+supposition, donc elles gardent leurs noms `FUN_`.
+
+**Le travail son restant est du travail SDK, pas de la translitteration.** Et
+meme ecrites, elles ecriraient dans des tables que personne ne lit: le modele de
+voix de `LibSpu` est `return default` de bout en bout.
+
 ## Ce qui attend toujours l'utilisateur
 
 - **Pousser** le sous-module `PsxSdkMonogame` puis le superprojet. Rien n'a ete
