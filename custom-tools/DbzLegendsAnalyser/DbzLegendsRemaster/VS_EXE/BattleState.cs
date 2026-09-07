@@ -42,7 +42,7 @@ internal static class BattleState
     // @ 0x80057A24 y ecrit 3.
     //
     // THE WRITER OF 2 HAS BEEN FOUND, and this note used to say there was none. It is
-    // FUN_8005a5b0, at `sh v1,0x0(s2)` @ 0x8005AE04, gated behind a FULL-TEAM WIPE -- every slot of
+    // RunBattleManagerFrame, at `sh v1,0x0(s2)` @ 0x8005AE04, gated behind a FULL-TEAM WIPE -- every slot of
     // one team dead -- which is why inspecting the four dispatcher bodies never turned it up. The
     // old wording, "AUCUN des quatre corps n'y ecrit 2", was a claim about the code that had been
     // READ, written as a claim about the game; this port has now made that mistake five times, and
@@ -70,7 +70,7 @@ internal static class BattleState
     // TWELVE PER-SLOT SUB-RECORDS OF 0x1C0 BYTES, and this one is closed by ARITHMETIC rather than
     // by reading a meaning into it.
     //
-    // FUN_8005a5b0 sets `puVar20 = ctx + 0x20` once, before its top gate (`addiu s5,s2,0x20`), and
+    // RunBattleManagerFrame sets `puVar20 = ctx + 0x20` once, before its top gate (`addiu s5,s2,0x20`), and
     // then walks it with a stride of 0xE0 HALFWORDS -- 0x1C0 bytes -- twelve times. The closure is
     // that 0x20 + 12 * 0x1C0 = 0x20 + 0x1500 = 0x1520, which lands exactly on CtxFighterSlots
     // below. The array fills the whole previously-unclaimed gap between the acting-slot cursors and
@@ -89,7 +89,7 @@ internal static class BattleState
     // Sub-record fields, only where the code PROVES the offset. Meanings are deliberately not
     // asserted -- these are positions, and the bits below are recorded as observations at their
     // sites rather than given names here.
-    //   +0x00  a flags halfword. FUN_8005a5b0 sets bit 0x08 on the acting slot and clears it on
+    //   +0x00  a flags halfword. RunBattleManagerFrame sets bit 0x08 on the acting slot and clears it on
     //          every other slot of the same team; bit 0x80 selects which slots get an ordinal at
     //          +0x14; bit 0x200 is cleared alongside CtxSlotRecords bit 0x1000.
     //   +0x14  a halfword written three ways in one call: the literal 5 for slots 0..5 and 9 for
@@ -141,7 +141,7 @@ internal static class BattleState
     // GHIDRA: battleContext + 0x2D60 (VS.EXE)
     // THE END-OF-ROUND REQUEST WORD, a full 32-bit field, filled by one function and drained by the
     // same call that reads it. BattleManager already documented this offset from the CALLER's side
-    // -- "zeroed when the match is armed, later OR'd with 3" -- and FUN_8005a5b0 shows the other
+    // -- "zeroed when the match is armed, later OR'd with 3" -- and RunBattleManagerFrame shows the other
     // half: bit 0 runs the team-A tally, bit 1 the team-B tally, bit 2 gates the win/loss compute
     // and is cleared unconditionally at its end, bits 0x8/0x10/0x20/0x40/0x80 carry that compute's
     // outcome, and bits 0x100/0x180 gate the call to FUN_80026d98 and are cleared right after it

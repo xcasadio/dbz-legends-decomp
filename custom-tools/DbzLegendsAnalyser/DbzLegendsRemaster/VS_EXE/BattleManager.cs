@@ -107,8 +107,38 @@ internal static class BattleManager
     //
     // `**(ushort **)(DAT_8008d16c + 8)` is two dereferences: the running task node's +0x08 is the
     // 0x3034-byte workspace, and the workspace's first halfword is the state.
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probe, read only by Validation/VsBootDiagnostic.cs. Nothing in the
+    // transliterated runtime touches these. They exist because the scene task was found never to
+    // run at all, and the question "does the manager run, and what state does it reach" cannot be
+    // answered from a screenshot.
+    internal static int DiagManagerCalls;
+
+    internal static int DiagLastCtxState = -1;
+
+    internal static int DiagLastCtxFlags;
+
+    internal static int DiagCtxFlagsEverSeen;
+
+    internal static int DiagSceneCreateAttempts;
+
+    internal static readonly int[] DiagCtxStateVisits = new int[8];
+
     internal static void UpdateBattleManager()
     {
+        DiagManagerCalls++;
+        {
+            int diagCtx = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
+            int diagState = PsxRam.ReadU16(diagCtx + BattleState.CtxState);
+            DiagLastCtxState = diagState;
+            DiagLastCtxFlags = PsxRam.ReadI32(diagCtx + BattleState.CtxFlags);
+            DiagCtxFlagsEverSeen |= DiagLastCtxFlags;
+            if (diagState >= 0 && diagState < DiagCtxStateVisits.Length)
+            {
+                DiagCtxStateVisits[diagState]++;
+            }
+        }
+
         ushort uVar1;
 
         uVar1 = PsxRam.ReadU16(PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
@@ -180,7 +210,7 @@ internal static class BattleManager
     //
     // THE MAP — the phases in evaluation order, with the address each opens at.
     //
-    //   0x80055FBC  the VM suspend gate: set -> FUN_8005a5b0 + UpdateCentralGaugeBar and NOTHING else
+    //   0x80055FBC  the VM suspend gate: set -> RunBattleManagerFrame + UpdateCentralGaugeBar and NOTHING else
     //   0x80055FE4  the central gauge: count both teams, scale, accumulate  (skipped when pegged)
     //   0x8005625C  the +/-30000 clamps, high then low
     //   0x80056290  the pegged-gauge arm: raise 0x80000, and 8 as well when no slot is still live
@@ -196,7 +226,7 @@ internal static class BattleManager
     //   0x80056F78  the per-slot command echo: fighter +0x138 -> record flags + an 8-frame timer
     //   0x80057064  the targeting block, pad-driven or automatic on DAT_801FF100
     //   0x8005769C  the legality sweep that drags a dead target back onto the opposing cursor
-    //   0x80057794  FUN_8005a5b0 + UpdateCentralGaugeBar, the two that run on EVERY path
+    //   0x80057794  RunBattleManagerFrame + UpdateCentralGaugeBar, the two that run on EVERY path
     //   0x800577C4  the 0x8000000 acknowledgement, and the two 0xFFFC globals it writes
     //   0x80057888  zero all twelve gauge contributions
     //
@@ -236,7 +266,7 @@ internal static class BattleManager
         // not. The symbol is AnimVm's; it is read here, not redeclared.
         if ((AnimVm.DAT_800b305a & 1) != 0)
         {
-            FUN_8005a5b0(iVar15);
+            RunBattleManagerFrame(iVar15);
             UpdateCentralGaugeBar(iVar15);
             return;
         }
@@ -684,6 +714,7 @@ internal static class BattleManager
             // walks a live node every frame and dispatches nothing. It is idempotent, and it sits
             // immediately before the CreateTask exactly as PrimitivePools.CreatePrimitivePools
             // places its own.
+            DiagSceneCreateAttempts++;
             BattleScene.RegisterBattleSceneTask();
             iVar6 = TaskSystem.CreateTask(BattleScene.BattleSceneEntry, 0x50, 0xc, 0x7c, 0,
                 TaskSystem.g_TaskListTail[12]);
@@ -1383,7 +1414,7 @@ internal static class BattleManager
         }
 
         // 0x80057794 — the two that run on every path, the suspended one included.
-        FUN_8005a5b0(iVar15);
+        RunBattleManagerFrame(iVar15);
         UpdateCentralGaugeBar(iVar15);
 
         iVar6 = 0;
@@ -1473,7 +1504,7 @@ internal static class BattleManager
 
         puVar4 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
         iVar3 = 0;
-        FUN_8005a5b0(puVar4);
+        RunBattleManagerFrame(puVar4);
         UpdateCentralGaugeBar(puVar4);
         iVar2 = AnimCmdSound.FUN_80060120();
         if (iVar2 != 0)
@@ -1547,7 +1578,7 @@ internal static class BattleManager
         int uVar1;
 
         uVar1 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
-        FUN_8005a5b0(uVar1);
+        RunBattleManagerFrame(uVar1);
         UpdateCentralGaugeBar(uVar1);
     }
 
@@ -1721,7 +1752,7 @@ internal static class BattleManager
     // deux de ses onze appelants lisent $v0) et FUN_8005ee5c vit ici, en `internal`.
     // =====================================================================================
 
-    // GHIDRA: FUN_8005a5b0 @ 0x8005A5B0 (VS.EXE)
+    // GHIDRA: RunBattleManagerFrame @ 0x8005A5B0 (VS.EXE)
     // THE BATTLE MANAGER'S PER-FRAME BODY. 8500 bytes, 1078 decompiled lines, by far the largest
     // thing this slice reaches, and it runs on EVERY path of every state including the suspended
     // one. param_1 is declared `short *`, so every Ghidra index below is a HALFWORD index; this
@@ -1778,7 +1809,7 @@ internal static class BattleManager
     // statement) and LAB_8005c6a0 (one call site reached both by fall-through and by an actual
     // forward `goto` out of the suspended-VM branch, which C# allows since it does not jump into a
     // block) are the two the port keeps as-is.
-    private static void FUN_8005a5b0(int param_1)
+    private static void RunBattleManagerFrame(int param_1)
     {
         byte uVar1;
         sbyte cVar2;
@@ -3328,7 +3359,7 @@ internal static class BattleManager
         }
     }
 
-    // GHIDRA: DAT_80083e1c @ 0x80083E1C (VS.EXE) -- FUN_8005a5b0's own per-ordinal reseed table,
+    // GHIDRA: DAT_80083e1c @ 0x80083E1C (VS.EXE) -- RunBattleManagerFrame's own per-ordinal reseed table,
     // twelve rows of two signed halfwords, 4-byte stride, indexed by SubRecordOrdinal (values 0, 1,
     // 2, 5, 6, 7, 8, 9 are the only ones the function ever stores there; the table itself runs the
     // full twelve rows, the same shape every other twelve-slot table in this file uses). Checked
@@ -3378,7 +3409,7 @@ internal static class BattleManager
     });
 
     // GHIDRA: FUN_80026d98 @ 0x80026D98 (VS.EXE)
-    // BLOCKED: called once per frame from FUN_8005a5b0, gated on CtxRoundRequest bits 0x100/0x180
+    // BLOCKED: called once per frame from RunBattleManagerFrame, gated on CtxRoundRequest bits 0x100/0x180
     // (both of which ARE proven and portable -- the gate itself is reproduced at the call site
     // below), with the flag bits cleared unconditionally right after the call returns. NOT PORTABLE
     // on this slice's own reconnaissance: it depends on FUN_80027340 (816 bytes, unported), which
@@ -3390,10 +3421,10 @@ internal static class BattleManager
     }
 
     // =====================================================================================
-    // THREE OF FUN_8005a5b0's OWN CALLEES — per-slot HUD/portrait helpers, called from inside its
+    // THREE OF RunBattleManagerFrame's OWN CALLEES — per-slot HUD/portrait helpers, called from inside its
     // per-slot sub-loop at 0x8005BA88..0x8005BAD8, twelve iterations, `puVar13` walking
-    // BattleState.CtxSlotSubRecords at BattleState.CtxSlotSubRecordStride per slot (the base FUN_8005a5b0
-    // itself now closes). None of these three is FUN_8005a5b0 itself.
+    // BattleState.CtxSlotSubRecords at BattleState.CtxSlotSubRecordStride per slot (the base RunBattleManagerFrame
+    // itself now closes). None of these three is RunBattleManagerFrame itself.
     // =====================================================================================
 
     // GHIDRA: DAT_80083e4c @ 0x80083E4C (VS.EXE) — the first of FUN_80057a7c's two per-character
@@ -3475,7 +3506,7 @@ internal static class BattleManager
     private const int Dat80084184Address = unchecked((int)0x80084184);
 
     // GHIDRA: FUN_80057a7c @ 0x80057A7C (VS.EXE)
-    // 1700 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005B9F8), which calls it once per
+    // 1700 bytes, one caller — RunBattleManagerFrame (BLOCKED above, at 0x8005B9F8), which calls it once per
     // slot inside its own still-BLOCKED per-slot loop. param_1 is NOT the battle context: Ghidra
     // types the caller's own cursor `short *`, and the caller advances it by 0xE0 (in the caller's
     // own halfword-pointer units) once per slot, so param_1 here is a per-slot PORTRAIT-BOX
@@ -3823,7 +3854,7 @@ internal static class BattleManager
     });
 
     // GHIDRA: FUN_80058120 @ 0x80058120 (VS.EXE)
-    // 536 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005BA04 and 0x8005BA10) — called
+    // 536 bytes, one caller — RunBattleManagerFrame (BLOCKED above, at 0x8005BA04 and 0x8005BA10) — called
     // TWICE per slot, back to back, with param_2 = 0 then 1. param_1 is the same per-slot
     // PORTRAIT-BOX record FUN_80057a7c above receives and partly fills in (+0x38, +0x3a, +0x40,
     // +0x48, +0x50, +0x52); see that function's header for what param_1 is and is not.
@@ -3915,7 +3946,7 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_80058338 @ 0x80058338 (VS.EXE)
-    // BLOCKED: 2440 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005BA1C) — called once
+    // BLOCKED: 2440 bytes, one caller — RunBattleManagerFrame (BLOCKED above, at 0x8005BA1C) — called once
     // per slot with the RAW battle context (not the per-slot record FUN_80057a7c/FUN_80058120
     // share): `param_1 = param_1 + param_2 * 0x1c0 + 0x20;` is the function's own first statement,
     // indexing straight off ctx at a 0x1C0-byte stride this slice has not seen named anywhere else.
@@ -4058,7 +4089,7 @@ internal static class BattleManager
     private static readonly byte[] RAM_gaugeStrip = LibGpu.RamRegion(GaugeStripBufferAddress, 0x100);
 
     // GHIDRA: UpdateCentralGaugeBar @ 0x8005C6E4 (VS.EXE)
-    // 1276 bytes. Always called immediately after FUN_8005a5b0, on all four states, and it ends at
+    // 1276 bytes. Always called immediately after RunBattleManagerFrame, on all four states, and it ends at
     // 0x8005CBDF — one byte below FUN_8005cbe0, the roster consumer main calls just after creating
     // this task. The three are one compilation unit. Ghidra already names the parameter `ctx`; kept
     // rather than reverted to `param_1`, since that rename is the database's own, not this port's.
@@ -4538,7 +4569,7 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_8005a104 @ 0x8005A104 (VS.EXE)
-    // Third sub-initialiser, ending at 0x8005A5AF, one byte below FUN_8005a5b0. 1196 bytes, and
+    // Third sub-initialiser, ending at 0x8005A5AF, one byte below RunBattleManagerFrame. 1196 bytes, and
     // ALMOST ALL of it is one primitive-setup block this slice cannot close.
     //
     // THE OUTER LOOP, closed: twelve iterations (sVar12 = 0..11), and on every one of them —

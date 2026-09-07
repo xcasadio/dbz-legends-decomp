@@ -312,6 +312,20 @@ internal static class BattleScene
     // takes its address at 0x800563F8. The C# name is this port's; the Ghidra symbol above is what
     // the database holds.
     //
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: probe storage for UpdateBattleScene below. Nothing in the transliterated runtime
+    // reads any of these; they exist so a headless run can report where the scene machine stops
+    // instead of the answer being inferred from a blue screen.
+    internal static readonly int[] DiagPhaseVisits = new int[8];
+
+    internal static int DiagDispatcherCalls;
+
+    internal static int DiagLastPhase = -1;
+
+    internal static int DiagLastSubStep = -1;
+
+    internal static int DiagLastSuspendFlag = -1;
+
     // A jump-table switch on the phase — `lhu v1,0x76(v0)` then `jr v0` at 0x80034EC4/0x80034EF0 —
     // with cases 0..4 and no default. A phase outside 0..4 falls straight through to the return and
     // the frame does nothing, which is the original's behaviour and is kept.
@@ -327,6 +341,24 @@ internal static class BattleScene
         int iVar2;
 
         DAT_8008d580 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
+
+        // JUSTIFICATION: backend MonoGame only
+        // RELATION: a diagnostic probe, not part of the original and read by nothing in the
+        // runtime. This dispatcher IS the scene task's whole body, so counting its visits per phase
+        // answers two questions from outside that are otherwise only guessable: whether the scene
+        // task runs at all -- every counter still zero means it was never created -- and, if it
+        // does, which phase the machine settles in. See Validation/VsBootDiagnostic.cs.
+        DiagDispatcherCalls++;
+        ushort diagPhase = PsxRam.ReadU16(DAT_8008d580 + 0x76);
+        if (diagPhase < DiagPhaseVisits.Length)
+        {
+            DiagPhaseVisits[diagPhase]++;
+        }
+
+        DiagLastPhase = diagPhase;
+        DiagLastSubStep = PsxRam.ReadU16(DAT_8008d580 + 0x78);
+        DiagLastSuspendFlag = AnimVm.DAT_800b305a;
+
         switch (PsxRam.ReadU16(DAT_8008d580 + 0x76))
         {
             case 0:
