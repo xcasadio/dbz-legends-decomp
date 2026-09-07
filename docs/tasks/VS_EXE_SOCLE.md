@@ -12,6 +12,8 @@ reste valable.
 | `RotAverage3` | ajoute a `LibGte`, marque `PARTIAL`, banc `--validate-gte-rotavg` |
 | Scratchpad GTE | dix-neuf mots partages dans `Scratchpad.cs` a la racine |
 | Doublons intra-VS | 0 stockage duplique, 0 type divergent (etait 12 et 2) |
+| `SoundState.cs` | le workspace son declare: taille 0x194 fermee deux fois, cinq bancs CD nommes par leurs litteraux |
+| `FUN_8005f704` | translittere depuis l'image, banc `--validate-sound-loader` avec temoin negatif |
 
 Acceptation a chaque etape: build propre, douze bancs verts, trois checkers de
 couture verts, `--diag-select 400` = **49396** pixels, inchange.
@@ -58,6 +60,25 @@ desassemble en exactement 68 octets avec son `beqz $v0` rebouclant sur
 
 **`gp = 0x8008D0FC`.** C'est la cle qui manquait: tout acces `0xNNN(gp)` se resout
 en symbole. `0x188(gp)` = `0x8008D284`, `0x244(gp)` = `0x8008D340`.
+
+## Ce que le portage de `FUN_8005f704` a etabli
+
+Elle est faite, et elle **ne suffit pas a faire dessiner la scene**. Ce n'est pas
+une deception, c'est un resultat: le blocage est ailleurs, et on sait ou.
+
+Ses appelees VAB — `SsVabOpenHeadSticky`, `SsVabTransBody`, `SsVabTransCompleted`,
+nommees par la forme de leurs arguments et non par un symbole lu, ce que l'en-tete
+du fichier dit — sont des stubs `return default` dans `LibSnd`. En suivant le
+trace: la machine atteint l'etat 7 et y reste, parce que le test « pas encore »
+de l'etat 7 est exactement `SsVabTransCompleted` rendant 0.
+
+**Le blocage restant est libsnd, pas cette fonction.** Le banc
+`--validate-sound-loader` epingle ce blocage comme un fait d'aujourd'hui: quand
+quelqu'un implementera libsnd, c'est cette assertion-la qui echouera, et c'est le
+signal qu'il faudra la mettre a jour.
+
+Reste aussi le second verrou, independant: `FUN_8005a5b0` (`BattleManager.cs`,
+8500 octets), sans lequel aucun combattant ne bouge et la jauge ne monte jamais.
 
 ## Le prochain pas, precisement
 
