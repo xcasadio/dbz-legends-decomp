@@ -1661,6 +1661,8 @@ internal static class BattleManager
 
     // GHIDRA: DAT_8008d3a8 @ 0x8008D3A8 (VS.EXE)
     // Ghidra types it undefined4. Zeroed in the wind-down, alongside the central gauge itself.
+    // UpdateCentralGaugeBar's own PART ONE closes its role: a capped-rate (0xEB/frame) follower of
+    // the live gauge at ctx+0x302C, driving that function's scroll-speed counters.
     private static int DAT_8008d3a8;
 
     // GHIDRA: DAT_8008d3f8 @ 0x8008D3F8 (VS.EXE)
@@ -1728,13 +1730,861 @@ internal static class BattleManager
         _ = param_1;
     }
 
-    // GHIDRA: UpdateCentralGaugeBar @ 0x8005C6E4 (VS.EXE)
-    // BLOCKED: 1276 bytes. Always called immediately after FUN_8005a5b0, on all four states, and it
-    // ends at 0x8005CBDF — one byte below FUN_8005cbe0, the roster consumer main calls just after
-    // creating this task. The three are one compilation unit.
-    private static void UpdateCentralGaugeBar(int param_1)
+    // =====================================================================================
+    // THREE OF FUN_8005a5b0's OWN CALLEES — per-slot HUD/portrait helpers, called from inside its
+    // still-BLOCKED per-slot loop (0x8005B9F8..0x8005BA1C, twelve iterations, `puVar13` advancing
+    // 0xE0 per slot). None of these three is FUN_8005a5b0 itself and none guesses at what that
+    // loop's own base offset from ctx is — that is still unknown, and BLOCKED above with it.
+    // =====================================================================================
+
+    // GHIDRA: DAT_80083e4c @ 0x80083E4C (VS.EXE) — the first of FUN_80057a7c's two per-character
+    // tables, nine rows of eight signed halfwords, stride 0x10. Checked with find-cross-references
+    // rather than assumed: PTR_DAT_80083edc and PTR_DAT_80083f90 below each have exactly ONE
+    // reference in the whole overlay, both from FUN_80057a7c, so the whole contiguous span
+    // 0x80083E4C..0x80083FB4 (824 bytes: two 9x16-byte tables and their two 9x4-byte pointer
+    // tables) belongs to that function alone — nothing else in the port can already own it, and
+    // nothing here redeclares a byte any other file already claims. The bytes are read straight out
+    // of the image with read-memory and declared explicitly, the same way VS_EXE/Roster.cs already
+    // declares its own coordinate table, rather than left to PsxExeImage's fallback resolution:
+    // explicit here, reviewable in the source, and correct even on a path that reaches this file
+    // before the image is armed.
+    private const int Dat80083e4cAddress = unchecked((int)0x80083E4C);
+
+    internal static readonly byte[] DAT_80083e4c = LibGpu.RamRegion(Dat80083e4cAddress, new byte[]
+    {
+        0x00, 0x00, 0xF6, 0xFF, 0x40, 0x00, 0xF6, 0xFF, 0x00, 0x00, 0x08, 0x00, 0x40, 0x00, 0x08, 0x00,
+        0x00, 0x00, 0xF9, 0xFF, 0x40, 0x00, 0xF9, 0xFF, 0x00, 0x00, 0x06, 0x00, 0x40, 0x00, 0x06, 0x00,
+        0x01, 0x00, 0xFB, 0xFF, 0x3F, 0x00, 0xFB, 0xFF, 0xFF, 0xFF, 0x04, 0x00, 0x41, 0x00, 0x04, 0x00,
+        0x01, 0x00, 0xFE, 0xFF, 0x3F, 0x00, 0xFE, 0xFF, 0xFF, 0xFF, 0x02, 0x00, 0x41, 0x00, 0x02, 0x00,
+        0x02, 0x00, 0x00, 0x00, 0x3E, 0x00, 0x00, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0xFE, 0xFF, 0x3F, 0x00, 0xFE, 0xFF, 0x01, 0x00, 0x02, 0x00, 0x3F, 0x00, 0x02, 0x00,
+        0xFF, 0xFF, 0xFB, 0xFF, 0x3F, 0x00, 0xFB, 0xFF, 0x01, 0x00, 0x04, 0x00, 0x3F, 0x00, 0x04, 0x00,
+        0x00, 0x00, 0xF9, 0xFF, 0x40, 0x00, 0xF9, 0xFF, 0x00, 0x00, 0x06, 0x00, 0x40, 0x00, 0x06, 0x00,
+        0x00, 0x00, 0xF6, 0xFF, 0x40, 0x00, 0xF6, 0xFF, 0x00, 0x00, 0x08, 0x00, 0x40, 0x00, 0x08, 0x00,
+    });
+
+    // GHIDRA: PTR_DAT_80083edc @ 0x80083EDC (VS.EXE) — the pointer table into the rows above, one
+    // entry per row, stride 4. The nine targets are exactly Dat80083e4cAddress + row * 0x10, and
+    // the double indirection is kept — read through this table rather than computed from the
+    // stride — so an out-of-range row index reads whatever byte actually follows here, matching the
+    // original instead of a formula that quietly assumes the index never leaves 0..8.
+    private const int Dat80083edcAddress = unchecked((int)0x80083EDC);
+
+    internal static readonly byte[] PTR_DAT_80083edc = LibGpu.RamRegion(Dat80083edcAddress, new byte[]
+    {
+        0x4C, 0x3E, 0x08, 0x80, 0x5C, 0x3E, 0x08, 0x80, 0x6C, 0x3E, 0x08, 0x80,
+        0x7C, 0x3E, 0x08, 0x80, 0x8C, 0x3E, 0x08, 0x80, 0x9C, 0x3E, 0x08, 0x80,
+        0xAC, 0x3E, 0x08, 0x80, 0xBC, 0x3E, 0x08, 0x80, 0xCC, 0x3E, 0x08, 0x80,
+    });
+
+    // GHIDRA: DAT_80083f00 @ 0x80083F00 (VS.EXE) — the second of the two tables, same shape as
+    // DAT_80083e4c above.
+    private const int Dat80083f00Address = unchecked((int)0x80083F00);
+
+    internal static readonly byte[] DAT_80083f00 = LibGpu.RamRegion(Dat80083f00Address, new byte[]
+    {
+        0x00, 0x00, 0xFE, 0xFF, 0x22, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x04, 0x00, 0x22, 0x00, 0x04, 0x00,
+        0x01, 0x00, 0xFE, 0xFF, 0x21, 0x00, 0xFE, 0xFF, 0xFF, 0xFF, 0x03, 0x00, 0x23, 0x00, 0x03, 0x00,
+        0x02, 0x00, 0xFF, 0xFF, 0x20, 0x00, 0xFF, 0xFF, 0xFE, 0xFF, 0x02, 0x00, 0x24, 0x00, 0x02, 0x00,
+        0x03, 0x00, 0xFF, 0xFF, 0x1F, 0x00, 0xFF, 0xFF, 0xFD, 0xFF, 0x01, 0x00, 0x25, 0x00, 0x01, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x1E, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00,
+        0xFD, 0xFF, 0xFF, 0xFF, 0x25, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x01, 0x00, 0x1F, 0x00, 0x01, 0x00,
+        0xFE, 0xFF, 0xFF, 0xFF, 0x24, 0x00, 0xFF, 0xFF, 0x02, 0x00, 0x02, 0x00, 0x20, 0x00, 0x02, 0x00,
+        0xFF, 0xFF, 0xFE, 0xFF, 0x23, 0x00, 0xFE, 0xFF, 0x01, 0x00, 0x03, 0x00, 0x21, 0x00, 0x03, 0x00,
+        0x00, 0x00, 0xFE, 0xFF, 0x22, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x04, 0x00, 0x22, 0x00, 0x04, 0x00,
+    });
+
+    // GHIDRA: PTR_DAT_80083f90 @ 0x80083F90 (VS.EXE) — same shape as PTR_DAT_80083edc, targets
+    // Dat80083f00Address + row * 0x10. Its own table ends at 0x80083FB4, exactly where
+    // FUN_80058338's own BLOCKED comment's PTR_DAT_80083fb4 begins — adjacent, unrelated tables,
+    // and the boundary is itself the check that this table's own extent is exactly nine rows.
+    private const int Dat80083f90Address = unchecked((int)0x80083F90);
+
+    internal static readonly byte[] PTR_DAT_80083f90 = LibGpu.RamRegion(Dat80083f90Address, new byte[]
+    {
+        0x00, 0x3F, 0x08, 0x80, 0x10, 0x3F, 0x08, 0x80, 0x20, 0x3F, 0x08, 0x80,
+        0x30, 0x3F, 0x08, 0x80, 0x40, 0x3F, 0x08, 0x80, 0x50, 0x3F, 0x08, 0x80,
+        0x60, 0x3F, 0x08, 0x80, 0x70, 0x3F, 0x08, 0x80, 0x80, 0x3F, 0x08, 0x80,
+    });
+
+    // GHIDRA: DAT_80084184 @ 0x80084184 (VS.EXE) — VS_EXE/Roster.cs's own portrait coordinate
+    // table. NOT declared a second time here: Roster.cs's own field is `private`, but the bytes it
+    // registers through LibGpu.RamRegion are keyed on this address in a resolver every reader
+    // shares, so the raw literal is the correct way to reach them from outside that file without a
+    // second declaration on the same span. See Roster.cs's own comment on DAT_80084184 for what the
+    // table holds and how its 12-byte, six-column stride was closed.
+    private const int Dat80084184Address = unchecked((int)0x80084184);
+
+    // GHIDRA: FUN_80057a7c @ 0x80057A7C (VS.EXE)
+    // 1700 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005B9F8), which calls it once per
+    // slot inside its own still-BLOCKED per-slot loop. param_1 is NOT the battle context: Ghidra
+    // types the caller's own cursor `short *`, and the caller advances it by 0xE0 (in the caller's
+    // own halfword-pointer units) once per slot, so param_1 here is a per-slot PORTRAIT-BOX
+    // sub-record the caller reaches from ctx by an offset this slice cannot see — the caller itself
+    // is still a stub. Every offset below is relative to THAT record, not to ctx, and none of it is
+    // in BattleState for that reason: BattleState models the battle context, and this record is
+    // reached from it through a base this slice does not have. Raw offsets throughout, exactly as
+    // the mandate asks for a struct nobody has named yet.
+    //
+    // param_2 is the slot index 0..11 the caller's own loop counter supplies
+    // (`FUN_80057a7c(puVar13,(int)(short)iVar5)` at the call site); the `param_2 < 6` test below is
+    // the same team split BattleManager's other functions use throughout this file.
+    //
+    // THE TWO PER-CHARACTER TABLES. `*(short *)(param_1 + 0x28)` selects a row out of the two
+    // parallel tables declared above. WHAT THE NINE ROWS SELECT is not closed — `param_1 + 0x28`
+    // was not traced to its writer — so no reading of the index is asserted as fact. The three
+    // scalars DAT_80083f00, DAT_80083f0c and DAT_80083f0e used below without going through the
+    // pointer table are simply row 0 of the second table at fixed offsets 0x00, 0x0C and 0x0E;
+    // DAT_80083e4c and DAT_80083e58 are row 0 of the first table at 0x00 and 0x0C, and DAT_80083e5a
+    // is that same row 0 at 0x0E. Same reason in both cases: the original reaches row 0 directly
+    // rather than through the pointer, and the port does too, by adding the fixed byte offset to
+    // the row-zero address instead of declaring five more named constants for bytes already
+    // embedded above.
+    //
+    // THE TAIL closes on ground this slice already owns: `DAT_8008d320 + param_2 * 0x14 + 0x15c0`
+    // is BattleManager.DAT_8008d320 (the ctx address) plus BattleState.CtxSlotRecordStride times
+    // the slot plus BattleState.CtxTargetIndex — this slot's own current TARGET — and the value it
+    // reads there indexes straight into VS_EXE/Roster.cs's own portrait coordinate table. So the
+    // tail is a portrait-icon lookup keyed on the CURRENT TARGET, plausibly the icon FUN_80058338
+    // or a sibling primitive later draws over this slot's HUD box; not asserted as closed fact.
+    //
+    // EVERY SHIFT BELOW IS KEPT IN ITS ORIGINAL FORM. `(int)(((uint)a - (uint)b) * 0x10000) >> 0x10`
+    // is this file's own established sign-extend-the-low-halfword idiom (see FUN_80055f94's
+    // header), and the multiply-by-N-then-`>> 2`-with-a-`+3`-fixup pairs are the compiler's
+    // rounding fix-up for a negative dividend, identical in shape to FUN_80055f94's own central-
+    // gauge handicap scaling. Neither is simplified to an equivalent expression, for the same
+    // reason UpdateCentralGaugeBar's own header gives elsewhere in this file: the two are only
+    // arithmetically identical, and the original never computes it the simpler way.
+    private static void FUN_80057a7c(int param_1, short param_2)
+    {
+        ushort uVar1;
+        ushort uVar2;
+        ushort uVar6;
+        bool bVar3;
+        sbyte cVar4;
+        sbyte cVar5;
+        sbyte cVar9;
+        int iVar7;
+        short sVar8;
+        int iVar10;
+        int iVar11;
+        short sVar12;
+        short sVar13;
+        short sVar14;
+        int psVar15Addr;
+        int psVar16Addr;
+        int rowIndex;
+
+        rowIndex = (short)PsxRam.ReadU16(param_1 + 0x28);
+        psVar16Addr = PsxRam.ReadI32(Dat80083edcAddress + rowIndex * 4);
+        psVar15Addr = PsxRam.ReadI32(Dat80083f90Address + rowIndex * 4);
+
+        iVar10 = (int)(((uint)PsxRam.ReadU16(param_1 + 0x20) - (uint)PsxRam.ReadU16(param_1 + 0x18)) * 0x10000) >> 0x10;
+        iVar10 = iVar10 * (short)PsxRam.ReadU16(param_1 + 0x16);
+        sVar14 = (short)PsxRam.ReadU16(param_1 + 0xe);
+        if (iVar10 < 0)
+        {
+            iVar10 = iVar10 + 7;
+        }
+
+        iVar7 = (int)(((uint)PsxRam.ReadU16(param_1 + 0x22) - (uint)PsxRam.ReadU16(param_1 + 0x1a)) * 0x10000) >> 0x10;
+        iVar7 = iVar7 * (short)PsxRam.ReadU16(param_1 + 0x16);
+        sVar12 = (short)(PsxRam.ReadU16(param_1 + 0x18) + (short)(iVar10 >> 3));
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 7;
+        }
+
+        iVar10 = (int)((uint)PsxRam.ReadU16(param_1 + 0x1a) + (uint)(iVar7 >> 3));
+        PsxRam.WriteU16(param_1 + 0x1c, (ushort)sVar12);
+        sVar8 = (short)iVar10;
+        PsxRam.WriteU16(param_1 + 0x1e, (ushort)sVar8);
+
+        if (param_2 < 6)
+        {
+            iVar11 = (int)sVar14;
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x38,
+                (ushort)(sVar12 + (short)PsxRam.ReadU16(psVar16Addr) + (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 4) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x40,
+                (ushort)(sVar12 + (short)PsxRam.ReadU16(psVar16Addr + 4) + (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 8) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x48,
+                (ushort)(sVar12 + (short)PsxRam.ReadU16(psVar16Addr + 8) + (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 0xc) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x50,
+                (ushort)(sVar12 + (short)PsxRam.ReadU16(psVar16Addr + 0xc) + (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(Dat80083f00Address) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            iVar11 = (short)PsxRam.ReadU16(Dat80083f00Address + 0xc) * iVar11;
+            sVar13 = (short)(sVar12 + (short)PsxRam.ReadU16(Dat80083e4cAddress) + (short)(iVar7 >> 2));
+            if (iVar11 < 0)
+            {
+                iVar11 = iVar11 + 3;
+            }
+
+            sVar12 = (short)(sVar12 + (short)PsxRam.ReadU16(Dat80083e4cAddress + 0xc) + (short)(iVar11 >> 2));
+        }
+        else
+        {
+            iVar11 = (int)sVar14;
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x38,
+                (ushort)((sVar12 - (short)PsxRam.ReadU16(psVar16Addr)) - (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 4) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x40,
+                (ushort)((sVar12 - (short)PsxRam.ReadU16(psVar16Addr + 4)) - (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 8) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x48,
+                (ushort)((sVar12 - (short)PsxRam.ReadU16(psVar16Addr + 8)) - (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 0xc) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            PsxRam.WriteU16(param_1 + 0x50,
+                (ushort)((sVar12 - (short)PsxRam.ReadU16(psVar16Addr + 0xc)) - (short)(iVar7 >> 2)));
+            iVar7 = (short)PsxRam.ReadU16(Dat80083f00Address) * iVar11;
+            if (iVar7 < 0)
+            {
+                iVar7 = iVar7 + 3;
+            }
+
+            iVar11 = (short)PsxRam.ReadU16(Dat80083f00Address + 0xc) * iVar11;
+            sVar13 = (short)((sVar12 - (short)PsxRam.ReadU16(Dat80083e4cAddress)) - (short)(iVar7 >> 2));
+            if (iVar11 < 0)
+            {
+                iVar11 = iVar11 + 3;
+            }
+
+            sVar12 = (short)((sVar12 - (short)PsxRam.ReadU16(Dat80083e4cAddress + 0xc)) - (short)(iVar11 >> 2));
+        }
+
+        iVar11 = (int)sVar14;
+        iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 2) * iVar11;
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 3;
+        }
+
+        PsxRam.WriteU16(param_1 + 0x3a,
+            (ushort)(sVar8 + (short)PsxRam.ReadU16(psVar16Addr + 2) + (short)(iVar7 >> 2)));
+        iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 6) * iVar11;
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 3;
+        }
+
+        PsxRam.WriteU16(param_1 + 0x42,
+            (ushort)(sVar8 + (short)PsxRam.ReadU16(psVar16Addr + 6) + (short)(iVar7 >> 2)));
+        iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 0xa) * iVar11;
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 3;
+        }
+
+        PsxRam.WriteU16(param_1 + 0x4a,
+            (ushort)(sVar8 + (short)PsxRam.ReadU16(psVar16Addr + 0xa) + (short)(iVar7 >> 2)));
+        iVar7 = (short)PsxRam.ReadU16(psVar15Addr + 0xe) * iVar11;
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 3;
+        }
+
+        iVar10 = iVar10 + PsxRam.ReadU16(psVar16Addr + 0xe) + (iVar7 >> 2);
+        PsxRam.WriteU16(param_1 + 0x52, (ushort)(short)iVar10);
+        iVar11 = (short)PsxRam.ReadU16(Dat80083f00Address + 0xe) * iVar11;
+        if (iVar11 < 0)
+        {
+            iVar11 = iVar11 + 3;
+        }
+
+        sVar14 = (short)(sVar8 + (short)PsxRam.ReadU16(Dat80083e4cAddress + 0xe) + (short)(iVar11 >> 2));
+
+        iVar7 = (int)sVar13 - (int)sVar12;
+        if (iVar7 < 0)
+        {
+            iVar7 = -iVar7;
+        }
+
+        sVar12 = (short)((((iVar7 << 0x10) >> 0x10) - ((iVar7 << 0x10) >> 0x1f) >> 1) + -1);
+        iVar10 = (int)(short)PsxRam.ReadU16(param_1 + 0x3a) - (iVar10 * 0x10000 >> 0x10);
+        if (iVar10 < 0)
+        {
+            iVar10 = -iVar10;
+        }
+
+        sVar8 = sVar12;
+        if ((short)PsxRam.ReadU16(param_1 + 0x50) < (short)PsxRam.ReadU16(param_1 + 0x38))
+        {
+            sVar8 = (short)(-sVar12);
+        }
+
+        PsxRam.WriteU16(param_1 + 0x70, (ushort)sVar13);
+        PsxRam.WriteU16(param_1 + 0x60, (ushort)sVar13);
+        PsxRam.WriteU16(param_1 + 0x78, (ushort)(sVar13 + sVar8));
+        PsxRam.WriteU16(param_1 + 0x68, (ushort)(sVar13 + sVar8));
+        sVar8 = (short)iVar7;
+        PsxRam.WriteU16(param_1 + 0x72, (ushort)sVar14);
+        PsxRam.WriteU16(param_1 + 0x7a, (ushort)sVar14);
+        PsxRam.WriteU16(param_1 + 0x62, (ushort)(sVar14 - sVar12));
+        PsxRam.WriteU16(param_1 + 0x6a, (ushort)(sVar14 - sVar12));
+
+        iVar10 = ((iVar10 << 0x10) >> 0xc) / 0x18;
+        sVar14 = (short)PsxRam.ReadU16(param_1 + 0x50);
+        sVar12 = (short)((sVar8 * 0x38) / 0x60);
+        if (sVar14 < (short)PsxRam.ReadU16(param_1 + 0x38))
+        {
+            PsxRam.WriteU16(param_1 + 0xe8, (ushort)sVar14);
+            PsxRam.WriteU16(param_1 + 0xd8, (ushort)sVar14);
+            sVar12 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) + sVar12);
+        }
+        else
+        {
+            sVar12 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) - sVar12);
+            PsxRam.WriteU16(param_1 + 0xe8, (ushort)sVar12);
+            PsxRam.WriteU16(param_1 + 0xd8, (ushort)sVar12);
+            sVar12 = (short)PsxRam.ReadU16(param_1 + 0x50);
+        }
+
+        PsxRam.WriteU16(param_1 + 0xf0, (ushort)sVar12);
+        PsxRam.WriteU16(param_1 + 0xe0, (ushort)sVar12);
+
+        iVar7 = iVar10 * 0x10000 >> 0x10;
+        if (iVar7 < 0)
+        {
+            iVar7 = iVar7 + 3;
+        }
+
+        sVar12 = (short)(sVar8 / 3);
+        int notLess = (sVar8 < 0x50) ? 0 : 1;
+        sVar14 = (short)((short)PsxRam.ReadU16(param_1 + 0x3a) + (short)(iVar7 >> 2) + notLess * -4);
+        PsxRam.WriteU16(param_1 + 0xda, (ushort)sVar14);
+        PsxRam.WriteU16(param_1 + 0xe2, (ushort)sVar14);
+        sVar14 = (short)((short)iVar10 + (short)PsxRam.ReadU16(param_1 + 0xda));
+        PsxRam.WriteU16(param_1 + 0xea, (ushort)sVar14);
+        PsxRam.WriteU16(param_1 + 0xf2, (ushort)sVar14);
+
+        sVar14 = (short)PsxRam.ReadU16(param_1 + 0x50);
+        bVar3 = (short)PsxRam.ReadU16(param_1 + 0x38) <= sVar14;
+        if (bVar3)
+        {
+            PsxRam.WriteU16(param_1 + 0x1b0, (ushort)(sVar14 + sVar12));
+            PsxRam.WriteU16(param_1 + 0x1a0, (ushort)(sVar14 + sVar12));
+            uVar6 = PsxRam.ReadU16(param_1 + 0x50);
+        }
+        else
+        {
+            PsxRam.WriteU16(param_1 + 0x1b0, (ushort)(sVar14 - sVar12));
+            PsxRam.WriteU16(param_1 + 0x1a0, (ushort)(sVar14 - sVar12));
+            uVar6 = PsxRam.ReadU16(param_1 + 0x50);
+        }
+
+        PsxRam.WriteU16(param_1 + 0x1b8, uVar6);
+        PsxRam.WriteU16(param_1 + 0x1a8, uVar6);
+        sVar12 = (short)((short)PsxRam.ReadU16(param_1 + 0x52) - sVar12);
+        PsxRam.WriteU16(param_1 + 0x1a2, (ushort)sVar12);
+        PsxRam.WriteU16(param_1 + 0x1aa, (ushort)sVar12);
+        PsxRam.WriteU16(param_1 + 0x1b2, PsxRam.ReadU16(param_1 + 0x52));
+        PsxRam.WriteU16(param_1 + 0x1ba, PsxRam.ReadU16(param_1 + 0x52));
+
+        // THE TAIL — see the header comment. sVar14 here is a THIRD, unrelated meaning: this slot's
+        // current target, read through BattleManager.DAT_8008d320 and BattleState's own stride and
+        // target-index constants, then looked up in VS_EXE/Roster.cs's portrait coordinate table.
+        sVar14 = (short)PsxRam.ReadU16(
+            DAT_8008d320 + param_2 * BattleState.CtxSlotRecordStride + BattleState.CtxTargetIndex);
+        uVar1 = PsxRam.ReadU16(Dat80084184Address + sVar14 * 12);
+        uVar2 = PsxRam.ReadU16(Dat80084184Address + 2 + sVar14 * 12);
+        PsxRam.WriteU16(param_1 + 0x1a6, (ushort)(sVar14 + 0x798a));
+        PsxRam.WriteU16(param_1 + 0x1ae, (ushort)((((short)uVar1 >> 6) + (uVar2 >> 4 & 0x10)) & 0x1f));
+        cVar4 = (sbyte)((uVar1 & 0x3f) << 2);
+        cVar5 = (sbyte)((cVar4 - ((bVar3 ? 1 : 0) + -0x30)) + -1);
+        cVar9 = (sbyte)uVar2;
+        PsxRam.WriteU8(param_1 + 0x1a5, (byte)cVar9);
+        PsxRam.WriteU8(param_1 + 0x1ad, (byte)cVar9);
+        PsxRam.WriteU8(param_1 + 0x1a4, (byte)cVar4);
+        PsxRam.WriteU8(param_1 + 0x1ac, (byte)cVar5);
+        PsxRam.WriteU8(param_1 + 0x1b4, (byte)cVar4);
+        PsxRam.WriteU8(param_1 + 0x1b5, (byte)(cVar9 + 0x2f));
+        PsxRam.WriteU8(param_1 + 0x1bc, (byte)cVar5);
+        PsxRam.WriteU8(param_1 + 0x1bd, (byte)(cVar9 + 0x2f));
+    }
+
+    // GHIDRA: DAT_80084214 / DAT_80084216 @ 0x80084214 (VS.EXE) — FUN_80058120's own small table,
+    // two rows, stride 4. Immediately past VS_EXE/Roster.cs's own DAT_80084184 table
+    // (0x80084184 + 0x90 = 0x80084214, that table's own closed extent) and has exactly one
+    // reference in the whole overlay — FUN_80058120, at 0x800581A0.
+    private const int Dat80084214Address = unchecked((int)0x80084214);
+    private const int Dat80084216Address = unchecked((int)0x80084216);
+
+    internal static readonly byte[] DAT_80084214 = LibGpu.RamRegion(Dat80084214Address, new byte[]
+    {
+        0x40, 0x06, 0x03, 0x00, 0x80, 0x3E, 0x0D, 0x00,
+    });
+
+    // GHIDRA: FUN_80058120 @ 0x80058120 (VS.EXE)
+    // 536 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005BA04 and 0x8005BA10) — called
+    // TWICE per slot, back to back, with param_2 = 0 then 1. param_1 is the same per-slot
+    // PORTRAIT-BOX record FUN_80057a7c above receives and partly fills in (+0x38, +0x3a, +0x40,
+    // +0x48, +0x50, +0x52); see that function's header for what param_1 is and is not.
+    //
+    // THE DIVISION is the same safe-division trap pair VS_EXE/AnimVmInterpreter.cs and
+    // VS_EXE/AnimCmdTransform.cs already port as a bare C# `/`: the original computes the quotient
+    // and only THEN checks for a zero divisor (`break 0x1c00`) and the MIN_VALUE/-1 pair
+    // (`break 0x1800`), both of which halt the console. C#'s own DivideByZeroException /
+    // OverflowException reach the same halt one instruction earlier. Rule 12: the original's abort
+    // is not softened into a guard, so no check is added here either.
+    private static void FUN_80058120(int param_1, short param_2)
+    {
+        short sVar1;
+        int iVar2;
+        short sVar3;
+        ushort uVar4;
+        short sVar5;
+        int iVar6;
+        short sVar7;
+        int iVar8;
+        int iVar9;
+        int iVar10;
+        int iVar11;
+        int iVar12;
+        int iVar13;
+
+        sVar5 = (short)PsxRam.ReadU16(param_1 + 0x38);
+        iVar13 = (int)sVar5;
+        iVar12 = (int)(short)PsxRam.ReadU16(param_1 + 0x50);
+        iVar9 = iVar13 - iVar12;
+        if (iVar9 < 0)
+        {
+            iVar9 = -iVar9;
+        }
+
+        iVar11 = (iVar9 << 0x10) >> 0x10;
+        iVar8 = (int)param_2;
+        iVar2 = (int)(short)PsxRam.ReadU16(param_1 + iVar8 * 2 + 2) * (((iVar11 * 0x28) / 0x60) * 0x10000 >> 0x10);
+        iVar6 = (int)(short)PsxRam.ReadU16(Dat80084214Address + iVar8 * 4);
+
+        // trap(0x1c00) / trap(0x1800) — the safe-division trap pair; see the comment above the
+        // function. `sVar3 = iVar2 / iVar6` below reaches the same halt through C#'s own
+        // DivideByZeroException instead of a guarded `break`.
+
+        sVar1 = (short)PsxRam.ReadU16(Dat80084216Address + iVar8 * 4);
+        iVar10 = (int)((uint)PsxRam.ReadU16(param_1 + 0x52) - (uint)PsxRam.ReadU16(param_1 + 0x3a));
+        iVar8 = param_1 + iVar8 * 0x28 + 0x80;
+        uVar4 = 0;
+        if (iVar12 - iVar13 < 0)
+        {
+            uVar4 = (ushort)(iVar11 < 0x50 ? 1 : 0);
+        }
+
+        sVar7 = (short)((iVar11 - ((iVar9 << 0x10) >> 0x1f)) >> 1);
+        sVar3 = (short)(iVar2 / iVar6);
+        if (iVar12 < iVar13)
+        {
+            PsxRam.WriteU16(iVar8 + 8, (ushort)((sVar5 - sVar7) + (uVar4 - 1)));
+            sVar5 = (short)(((short)PsxRam.ReadU16(param_1 + 0x48) - sVar7) + (uVar4 - 1));
+            PsxRam.WriteU16(iVar8 + 0x18, (ushort)sVar5);
+            PsxRam.WriteU16(iVar8 + 0x10, (ushort)((sVar5 - sVar3) + -1));
+            sVar7 = (short)(((short)PsxRam.ReadU16(iVar8 + 8) - sVar3) + -1);
+        }
+        else
+        {
+            PsxRam.WriteU16(iVar8 + 8, (ushort)(sVar7 + sVar5 + 1));
+            sVar5 = (short)(sVar7 + (short)PsxRam.ReadU16(param_1 + 0x48) + 1);
+            PsxRam.WriteU16(iVar8 + 0x18, (ushort)sVar5);
+            sVar7 = (short)(sVar3 + (short)PsxRam.ReadU16(iVar8 + 8) + 1);
+            PsxRam.WriteU16(iVar8 + 0x10, (ushort)(sVar3 + sVar5 + 1));
+        }
+
+        PsxRam.WriteU16(iVar8 + 0x20, (ushort)sVar7);
+        sVar5 = (short)((iVar11 < 0x50 ? 1 : 0)
+            + (short)(((int)sVar1 * ((iVar10 * 0x10000) >> 0x10)) / 0x18)
+            + (short)PsxRam.ReadU16(param_1 + 0x3a));
+        PsxRam.WriteU16(iVar8 + 0x12, (ushort)sVar5);
+        PsxRam.WriteU16(iVar8 + 10, (ushort)sVar5);
+
+        // The compiler's own magic-multiply implementation of a signed divide-by-3, kept in its
+        // literal shifted-64-bit form rather than rewritten to `/3` — same reason FUN_80057a7c's
+        // own header gives for keeping its shift idioms literal.
+        long magic = (long)((iVar10 * 0x10000) >> 0x10) * 0x55555556L;
+        short div3 = (short)((ulong)magic >> 0x20);
+        int signCorrection = (short)iVar10 >> 0xf;
+        sVar5 = (short)((int)sVar5 + (div3 - signCorrection) + -1);
+        PsxRam.WriteU16(iVar8 + 0x22, (ushort)sVar5);
+        PsxRam.WriteU16(iVar8 + 0x1a, (ushort)sVar5);
+    }
+
+    // GHIDRA: FUN_80058338 @ 0x80058338 (VS.EXE)
+    // BLOCKED: 2440 bytes, one caller — FUN_8005a5b0 (BLOCKED above, at 0x8005BA1C) — called once
+    // per slot with the RAW battle context (not the per-slot record FUN_80057a7c/FUN_80058120
+    // share): `param_1 = param_1 + param_2 * 0x1c0 + 0x20;` is the function's own first statement,
+    // indexing straight off ctx at a 0x1C0-byte stride this slice has not seen named anywhere else.
+    //
+    // WHAT IT DOES, on the evidence of the shape alone: it splits TWO fields of that per-slot
+    // sub-record (at +0x0A and +0x26) into tens and ones by dividing by 10, then for each digit
+    // looks up a glyph-position row through one of two pointer tables — PTR_DAT_80083fb4 when the
+    // tens digit is zero, PTR_DAT_80084124 otherwise — and lays out four short values from that row
+    // into the digit's own on-screen box (a leading-zero-suppressed two-digit numeric readout,
+    // plausibly a per-slot HP or KI number given the /10 split and the repeated `* '\x18'`, a 24-
+    // pixel glyph-cell width). That reading is not closed to fact; it is stated only to spare a
+    // later slice re-deriving the shape.
+    //
+    // WHY IT IS BLOCKED, unlike its two siblings above. FUN_80057a7c's two per-character tables sit
+    // in one contiguous, self-referential 824-byte span (0x80083E4C..0x80083FB4) with exactly one
+    // reference each — closed and embedded above. These two pointer tables do NOT: checked with
+    // find-cross-references, PTR_DAT_80083fb4's own first entry is DAT_8008d188 and
+    // PTR_DAT_80084124's is DAT_80084014 — neither sits inside the other table's own span, and
+    // 0x8008D188 in particular falls in the same gp-relative small-data region this very file's own
+    // scalar globals occupy (DAT_8008d15c through DAT_8008d494 all sit within a few hundred bytes
+    // of it), which on every other piece of evidence in this port is MUTABLE RUNTIME STATE, not a
+    // baked-in glyph table. Ghidra gives no other reference to either pointer table's own contents
+    // anywhere in the overlay, so there is no cross-check available the way Roster.cs's own table
+    // gave FUN_80057a7c's tail one. Embedding raw bytes here on the strength of two addresses
+    // alone, without knowing whether the target is static or a runtime record some other
+    // not-yet-ported function populates, is precisely the invented semantics rule 10 forbids. Left
+    // unperformed; param_1/param_2 are kept so the (still BLOCKED) caller's call site needs no
+    // change when this closes.
+    private static void FUN_80058338(int param_1, short param_2)
     {
         _ = param_1;
+        _ = param_2;
+    }
+
+    // GHIDRA: UpdateCentralGaugeBar @ 0x8005C6E4 (VS.EXE)
+    // 1276 bytes. Always called immediately after FUN_8005a5b0, on all four states, and it ends at
+    // 0x8005CBDF — one byte below FUN_8005cbe0, the roster consumer main calls just after creating
+    // this task. The three are one compilation unit. Ghidra already names the parameter `ctx`; kept
+    // rather than reverted to `param_1`, since that rename is the database's own, not this port's.
+    //
+    // Four parts. PART TWO is BLOCKED; the other three are closed in full.
+    //
+    // PART ONE, closed: the scroll-speed follower. ctx+0x3028 and ctx+0x302a are a pair of 1..8
+    // counters, one of which decays toward 1 while the other climbs toward 8, and which of the two
+    // climbs is decided by comparing DAT_8008d3a8 against the live gauge at ctx+0x302C
+    // (BattleState.CtxCentralGauge) — equal holds both where they are, DAT_8008d3a8 lagging behind
+    // means the counters swap roles from the previous frame's. DAT_8008d3a8 itself is a smoothed
+    // copy of the gauge: every frame it steps 0xEB (235) towards ctx+0x302C and is clamped to the
+    // target the instant a step would pass it, so it is a capped-rate follower, not the gauge
+    // itself — the two-register dance the original compiles this into (`iVar8`/`bVar1`) is kept
+    // rather than simplified, matching how this file already keeps the equivalent shared-assignment
+    // duplicated across sibling arms of an if/else for LAB_80056c64 above; C# forbids the original's
+    // `goto` into that shared statement the same way here. ctx+0x3024 and ctx+0x3026 are then
+    // advanced by the two counters, each wrapped mod 0x80 — the "0..128 scroll index" the two-tone
+    // strip PART TWO would sample from.
+    //
+    // PART TWO, BLOCKED, for the SAME reason VS_EXE/BattleManager.cs's own InitCentralGaugeBar
+    // documents at its PART TWO: the original scales ctx+0x302C into a 0..128 split point
+    // (`((ctx+0x302C + 30000) * 0x80) / 60000`), samples that many halfwords from `&DAT_800842b8`
+    // starting at the ctx+0x3024 cursor and the rest from `&DAT_800843b8` starting at the ctx+0x3026
+    // cursor — both raw PSX `.data` addresses, undeclared anywhere in this port, and both indexed mod
+    // 0x80, i.e. two 128-entry tables, not the 64-halfword pair InitCentralGaugeBar's own PART TWO
+    // describes for its own copy of the same two symbols — into a 128-halfword (256-byte) STACK
+    // buffer (`local_120`), then hands that stack address to
+    // `LoadImage_ReturnTPageOrClutId(local_120, 0, 0x1ed, 0x80, 1, '\0')`. PsxRam still has no
+    // operation that hands out a fresh, PSX-addressable scratch region for a C# local, and inventing
+    // a scratch-stack allocator here would be new architecture this file has no business
+    // introducing on its own — see InitCentralGaugeBar's own PART TWO for the fuller argument, which
+    // applies unchanged. Nothing downstream of this call depends on anything computed inside it: the
+    // scale value and both loop cursors are local temporaries the decompiler happens to name `iVar8`
+    // and `uVar11` again immediately afterward for unrelated purposes, so skipping the whole segment
+    // changes no observable state. Left unperformed, exactly as InitCentralGaugeBar leaves its own
+    // copy unperformed.
+    //
+    // PART THREE, closed: the growth/shrink of the bar's own geometry, and the colour pulse. Both
+    // are gated behind the animation VM's suspend flag, the same `(AnimVm.DAT_800b305a & 1) != 0`
+    // gate FUN_80055f94 opens with — when it is up, this function's only remaining act is PART FOUR.
+    //
+    // The four POLY_FT4 quads InitCentralGaugeBar built at ctx+0x2f84 (stride 0x28) are quads 0..3 in
+    // address order; every offset below is named against that layout (get-structure-info: y0 @ +0xA,
+    // y1 @ +0x12, y2 @ +0x1A, y3 @ +0x22, r0/g0/b0 @ +4/+5/+6) rather than given a private field name,
+    // for the same reason the file header gives for every other un-named ctx offset. Quads 0 and 1
+    // are the clut-0x7B00 pair InitCentralGaugeBar built first, quads 2 and 3 the clut-0x7B40 pair —
+    // the two teams' halves of the bar.
+    //
+    // ctx+0x10 bits 0x10000/0x20000/0x40000 pick one of three outcomes: bit 0x40000 clear selects a
+    // SHRINK of quads 0/1 (both y0/y1 and both y2/y3 move together by -8, read from quad 1 before the
+    // write and mirrored onto quad 0) once bit 0x20000 confirms it has not already finished (quad
+    // 0's own y0 below 200 means it has, and only the flag bit is then written back); bit 0x40000 set
+    // selects the matching GROW of quads 2/3's opposite pair, gated the same way through bit 0x30000
+    // and quad 0's y0 against 0x107. The original writes the updated flag word back to ctx+0x10 ONLY
+    // on the two "already finished" exits (`LAB_8005ca90`); the branch that actually performs a
+    // shrink or a grow falls straight through to PART THREE's second half WITHOUT storing the flag
+    // update its own local copy computed — the next read of ctx+0x10 a few lines below re-reads the
+    // stale value from memory. That looks like a mistake, and rule 12 keeps it: nothing here corrects
+    // it, the asymmetry is reproduced exactly as `beq`/`bne` place it.
+    //
+    // The colour pulse follows, on ctx+0x10 bit 0x80000 (reloaded fresh, not the local copy from the
+    // geometry step above): when clear, a one-shot reset — quads 0 and 1's own g0 bit 0 is the pulse
+    // latch, and finding it set snaps both quads' r0/g0/b0 back to neutral 0x80. When set, the pulse
+    // itself: quad 0/1's r0 is XORed with 0x3f while the gauge sits at or past its own team's zero
+    // (ctx+0x302C <= 0), their b0 XORed with 0x7f otherwise, and their g0 OR'd with 1 either way —
+    // the latch PART THREE's other half reads.
+    //
+    // PART FOUR, closed modulo the same PARTIAL VS_EXE/AnimCmdAppearance.cs already records for this
+    // exact global: DAT_8008d420 (the active DRAWENV's address) is a PRIVATE C# field in
+    // VS_EXE/VS_EXE_exe.cs, not PsxRam-backed, so `PsxRam.ReadI32(Dat8008d420Address)` currently
+    // yields 0 here for the same reason it does there — the fix is one line in VS_EXE_exe.cs and
+    // belongs to that file's owner. The four AddPrim calls submit the four quads into the same
+    // bucket, `DAT_8008d420 - (ctx+0x3030 * 4 + -0x206c)`, which is the environment's own
+    // `(0x7ff - otz) * 4 + 0x70` ordering-table formula AnimCmdAppearance.cs's pri_set already uses,
+    // with ctx+0x3030 as the OTZ; kept in the original's own subtraction form rather than rewritten
+    // to that equivalent, since the two are only arithmetically identical and the original never
+    // computes it that way.
+    private static void UpdateCentralGaugeBar(int ctx)
+    {
+        const int Dat8008d420Address = unchecked((int)0x8008D420);
+
+        // PART ONE — the scroll-speed follower and the two scroll cursors.
+        if (DAT_8008d3a8 == PsxRam.ReadI32(ctx + 0x302c))
+        {
+            if ((short)PsxRam.ReadU16(ctx + 0x3028) != 1)
+            {
+                short iVar8 = (short)((short)PsxRam.ReadU16(ctx + 0x3028) - 1);
+                PsxRam.WriteU16(ctx + 0x3028, (ushort)iVar8);
+                if (iVar8 < 1)
+                {
+                    PsxRam.WriteU16(ctx + 0x3028, 1);
+                }
+            }
+
+            if ((short)PsxRam.ReadU16(ctx + 0x302a) != 1)
+            {
+                short iVar8 = (short)((short)PsxRam.ReadU16(ctx + 0x302a) - 1);
+                PsxRam.WriteU16(ctx + 0x302a, (ushort)iVar8);
+                if (iVar8 < 1)
+                {
+                    PsxRam.WriteU16(ctx + 0x302a, 1);
+                }
+            }
+        }
+        else if (PsxRam.ReadI32(ctx + 0x302c) < DAT_8008d3a8)
+        {
+            short uVar2 = (short)((short)PsxRam.ReadU16(ctx + 0x3028) - 1);
+            PsxRam.WriteU16(ctx + 0x3028, (ushort)uVar2);
+            if (uVar2 < 1)
+            {
+                PsxRam.WriteU16(ctx + 0x3028, 1);
+            }
+
+            short sVar3 = (short)((short)PsxRam.ReadU16(ctx + 0x302a) + 1);
+            PsxRam.WriteU16(ctx + 0x302a, (ushort)sVar3);
+            if (8 < sVar3)
+            {
+                PsxRam.WriteU16(ctx + 0x302a, 8);
+            }
+        }
+        else
+        {
+            short uVar2 = (short)((short)PsxRam.ReadU16(ctx + 0x302a) - 1);
+            PsxRam.WriteU16(ctx + 0x302a, (ushort)uVar2);
+            if (uVar2 < 1)
+            {
+                PsxRam.WriteU16(ctx + 0x302a, 1);
+            }
+
+            short sVar3 = (short)((short)PsxRam.ReadU16(ctx + 0x3028) + 1);
+            PsxRam.WriteU16(ctx + 0x3028, (ushort)sVar3);
+            if (8 < sVar3)
+            {
+                PsxRam.WriteU16(ctx + 0x3028, 8);
+            }
+        }
+
+        // C# scopes a block's local names across every nested block inside it, so `iVar8` above
+        // (declared twice, once per sibling `if`) cannot be reused here even though this statement
+        // is textually later and neither sibling block is still open -- the same forced deviation
+        // this file's header already names for LAB_800561d4's goto. Ghidra's own decompiler reuses
+        // `iVar8` for this register too; `iVar8_2` is the smallest departure that still compiles.
+        int iVar8_2 = DAT_8008d3a8;
+        if (DAT_8008d3a8 == PsxRam.ReadI32(ctx + 0x302c))
+        {
+            DAT_8008d3a8 = iVar8_2;
+        }
+        else
+        {
+            bool bVar1;
+            if (DAT_8008d3a8 < PsxRam.ReadI32(ctx + 0x302c))
+            {
+                iVar8_2 = PsxRam.ReadI32(ctx + 0x302c);
+                DAT_8008d3a8 = DAT_8008d3a8 + 0xeb;
+                bVar1 = iVar8_2 < DAT_8008d3a8;
+            }
+            else
+            {
+                iVar8_2 = PsxRam.ReadI32(ctx + 0x302c);
+                bVar1 = DAT_8008d3a8 + -0xeb < iVar8_2;
+                DAT_8008d3a8 = DAT_8008d3a8 + -0xeb;
+            }
+
+            if (bVar1)
+            {
+                DAT_8008d3a8 = iVar8_2;
+            }
+        }
+
+        PsxRam.WriteU16(ctx + 0x3024,
+            (ushort)(((short)PsxRam.ReadU16(ctx + 0x3024) - (short)PsxRam.ReadU16(ctx + 0x3028)) & 0x7f));
+        PsxRam.WriteU16(ctx + 0x3026,
+            (ushort)(((short)PsxRam.ReadU16(ctx + 0x3026) + (short)PsxRam.ReadU16(ctx + 0x302a)) & 0x7f));
+
+        // PART TWO is BLOCKED here — see the comment above the function. Nothing is written for the
+        // /60000 scale, the two circular table samples, or the LoadImage_ReturnTPageOrClutId(local_120,
+        // 0, 0x1ed, 0x80, 1, 0) upload.
+
+        if ((AnimVm.DAT_800b305a & 1) != 0)
+        {
+            goto LAB_8005cb40;
+        }
+
+        // PART THREE — geometry (shrink/grow) then the colour pulse.
+        {
+            uint uVar11 = (uint)PsxRam.ReadI32(ctx + 0x10);
+            if ((uVar11 & 0x40000) == 0)
+            {
+                if ((uVar11 & 0x20000) == 0)
+                {
+                    uVar11 = uVar11 | 0x20000;
+                    if ((short)PsxRam.ReadU16(ctx + 0x2f8e) < 200)
+                    {
+                        PsxRam.WriteI32(ctx + 0x10, (int)uVar11);
+                    }
+                    else
+                    {
+                        short sVar3 = (short)((short)PsxRam.ReadU16(ctx + 0x2fbe) - 8); // quad1.y1
+                        short sVar5 = (short)((short)PsxRam.ReadU16(ctx + 0x2fce) - 8); // quad1.y3
+                        short sVar7 = (short)((short)PsxRam.ReadU16(ctx + 0x300e) - 8); // quad3.y1
+                        short sVar10 = (short)((short)PsxRam.ReadU16(ctx + 0x301e) - 8); // quad3.y3
+
+                        PsxRam.WriteU16(ctx + 0x2fbe, (ushort)sVar3);   // quad1.y1
+                        PsxRam.WriteU16(ctx + 0x2fb6, (ushort)sVar3);   // quad1.y0
+                        PsxRam.WriteU16(ctx + 0x2f96, (ushort)sVar3);   // quad0.y1
+                        PsxRam.WriteU16(ctx + 0x2f8e, (ushort)sVar3);   // quad0.y0
+                        PsxRam.WriteU16(ctx + 0x2fce, (ushort)sVar5);   // quad1.y3
+                        PsxRam.WriteU16(ctx + 0x2fc6, (ushort)sVar5);   // quad1.y2
+                        PsxRam.WriteU16(ctx + 0x2fa6, (ushort)sVar5);   // quad0.y3
+                        PsxRam.WriteU16(ctx + 0x2f9e, (ushort)sVar5);   // quad0.y2
+                        PsxRam.WriteU16(ctx + 0x300e, (ushort)sVar7);   // quad3.y1
+                        PsxRam.WriteU16(ctx + 0x3006, (ushort)sVar7);   // quad3.y0
+                        PsxRam.WriteU16(ctx + 0x2fe6, (ushort)sVar7);   // quad2.y1
+                        PsxRam.WriteU16(ctx + 0x2fde, (ushort)sVar7);   // quad2.y0
+                        PsxRam.WriteU16(ctx + 0x301e, (ushort)sVar10);  // quad3.y3
+                        PsxRam.WriteU16(ctx + 0x3016, (ushort)sVar10);  // quad3.y2
+                        PsxRam.WriteU16(ctx + 0x2ff6, (ushort)sVar10);  // quad2.y3
+                        PsxRam.WriteU16(ctx + 0x2fee, (ushort)sVar10);  // quad2.y2
+                    }
+                }
+            }
+            else if ((uVar11 & 0x30000) == 0)
+            {
+                if ((short)PsxRam.ReadU16(ctx + 0x2f8e) < 0x107)
+                {
+                    short sVar3 = (short)((short)PsxRam.ReadU16(ctx + 0x2fbe) + 8); // quad1.y1
+                    short sVar5 = (short)((short)PsxRam.ReadU16(ctx + 0x2fce) + 8); // quad1.y3
+                    short sVar7 = (short)((short)PsxRam.ReadU16(ctx + 0x300e) + 8); // quad3.y1
+                    short sVar10 = (short)((short)PsxRam.ReadU16(ctx + 0x301e) + 8); // quad3.y3
+
+                    PsxRam.WriteU16(ctx + 0x2fbe, (ushort)sVar3);   // quad1.y1
+                    PsxRam.WriteU16(ctx + 0x2fb6, (ushort)sVar3);   // quad1.y0
+                    PsxRam.WriteU16(ctx + 0x2f96, (ushort)sVar3);   // quad0.y1
+                    PsxRam.WriteU16(ctx + 0x2f8e, (ushort)sVar3);   // quad0.y0
+                    PsxRam.WriteU16(ctx + 0x2fce, (ushort)sVar5);   // quad1.y3
+                    PsxRam.WriteU16(ctx + 0x2fc6, (ushort)sVar5);   // quad1.y2
+                    PsxRam.WriteU16(ctx + 0x2fa6, (ushort)sVar5);   // quad0.y3
+                    PsxRam.WriteU16(ctx + 0x2f9e, (ushort)sVar5);   // quad0.y2
+                    PsxRam.WriteU16(ctx + 0x300e, (ushort)sVar7);   // quad3.y1
+                    PsxRam.WriteU16(ctx + 0x3006, (ushort)sVar7);   // quad3.y0
+                    PsxRam.WriteU16(ctx + 0x2fe6, (ushort)sVar7);   // quad2.y1
+                    PsxRam.WriteU16(ctx + 0x2fde, (ushort)sVar7);   // quad2.y0
+                    PsxRam.WriteU16(ctx + 0x301e, (ushort)sVar10);  // quad3.y3
+                    PsxRam.WriteU16(ctx + 0x3016, (ushort)sVar10);  // quad3.y2
+                    PsxRam.WriteU16(ctx + 0x2ff6, (ushort)sVar10);  // quad2.y3
+                    PsxRam.WriteU16(ctx + 0x2fee, (ushort)sVar10);  // quad2.y2
+                }
+                else
+                {
+                    uVar11 = uVar11 | 0x10000;
+                    PsxRam.WriteI32(ctx + 0x10, (int)uVar11);
+                }
+            }
+        }
+
+        if ((PsxRam.ReadI32(ctx + 0x10) & 0x80000) == 0)
+        {
+            if ((PsxRam.ReadU8(ctx + 0x2f89) & 1) != 0) // quad0.g0 bit 0 — the pulse latch
+            {
+                PsxRam.WriteU8(ctx + 0x2f8a, 0x80); // quad0.b0
+                PsxRam.WriteU8(ctx + 0x2f89, 0x80); // quad0.g0
+                PsxRam.WriteU8(ctx + 0x2f88, 0x80); // quad0.r0
+                PsxRam.WriteU8(ctx + 0x2fb2, 0x80); // quad1.b0
+                PsxRam.WriteU8(ctx + 0x2fb1, 0x80); // quad1.g0
+                PsxRam.WriteU8(ctx + 0x2fb0, 0x80); // quad1.r0
+            }
+        }
+        else
+        {
+            if (PsxRam.ReadI32(ctx + 0x302c) < 1)
+            {
+                PsxRam.WriteU8(ctx + 0x2f88, (byte)(PsxRam.ReadU8(ctx + 0x2f88) ^ 0x3f)); // quad0.r0
+                PsxRam.WriteU8(ctx + 0x2fb0, (byte)(PsxRam.ReadU8(ctx + 0x2fb0) ^ 0x3f)); // quad1.r0
+            }
+            else
+            {
+                PsxRam.WriteU8(ctx + 0x2f8a, (byte)(PsxRam.ReadU8(ctx + 0x2f8a) ^ 0x7f)); // quad0.b0
+                PsxRam.WriteU8(ctx + 0x2fb2, (byte)(PsxRam.ReadU8(ctx + 0x2fb2) ^ 0x7f)); // quad1.b0
+            }
+
+            PsxRam.WriteU8(ctx + 0x2f89, (byte)(PsxRam.ReadU8(ctx + 0x2f89) | 1)); // quad0.g0
+            PsxRam.WriteU8(ctx + 0x2fb1, (byte)(PsxRam.ReadU8(ctx + 0x2fb1) | 1)); // quad1.g0
+        }
+
+    LAB_8005cb40:
+
+        // PART FOUR — submit the four quads. PARTIAL: see the comment above the function.
+        LibGpu.AddPrim(PsxRam.ReadI32(Dat8008d420Address) - (PsxRam.ReadI32(ctx + 0x3030) * 4 + -0x206c), ctx + 0x2f84);
+        LibGpu.AddPrim(PsxRam.ReadI32(Dat8008d420Address) - (PsxRam.ReadI32(ctx + 0x3030) * 4 + -0x206c), ctx + 0x2fac);
+        LibGpu.AddPrim(PsxRam.ReadI32(Dat8008d420Address) - (PsxRam.ReadI32(ctx + 0x3030) * 4 + -0x206c), ctx + 0x2fd4);
+        LibGpu.AddPrim(PsxRam.ReadI32(Dat8008d420Address) - (PsxRam.ReadI32(ctx + 0x3030) * 4 + -0x206c), ctx + 0x2ffc);
     }
 
     // GHIDRA: FUN_800594b4 @ 0x800594B4 (VS.EXE)
@@ -2038,9 +2888,33 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_800290d0 @ 0x800290D0 (VS.EXE)
-    // BLOCKED: 76 bytes, and the last call the manager ever makes: state 2 runs it after the
-    // hand-back word is already stored and immediately before writing the terminal state 3.
+    // 76 bytes, and the last call the manager ever makes: state 2 runs it after the hand-back word
+    // is already stored and immediately before writing the terminal state 3.
+    //
+    // CLOSED. FUN_80053330 is TaskSystem.CreateTask (see VS_EXE/TaskSystem.cs), already called the
+    // same way from this file's own state 2 (0x800563F8, the scene-task birth). `&LAB_80029200` is
+    // Ghidra's own label for the callback, address-of'd and never called here, exactly like
+    // `&LAB_80055e3c` in main — Ghidra has not even promoted it to a named function, only a label,
+    // and nothing at 0x80029200 belongs to BattleManager: this call's list index is 5, not 9, this
+    // file's own list. It is passed through as the raw address CreateTask stores and is not ported
+    // here.
+    //
+    // The insertion point matches every other CreateTask call site already in this file:
+    // DAT_80083ba4 sits 0x14 bytes into TaskSystem.g_TaskListTail — five ints past its base — i.e.
+    // g_TaskListTail[5], the tail of the SAME list index (5) this call passes, so the new node is
+    // appended to the end of list 5. Checked against the image rather than assumed: DAT_80083ba4 -
+    // TaskSystem's own g_TaskListTail base (0x80083B90) is exactly 0x14.
+    //
+    // `**(undefined4 **)(iVar1 + 8) = 2;` is two dereferences, not one: `iVar1 + 8` is the new
+    // node's TaskContext field CreateTask itself just populated (raw offset 8, the same one
+    // FUN_80055ee0 above reads off TaskSystem.g_CurrentTask), so the first read fetches the fresh
+    // 0xc-byte workspace's address, and the write lands the constant 2 in THAT workspace's own
+    // first word — one word inside the 0xc bytes CreateTask zeroed for it, not into the task node.
     private static void FUN_800290d0()
     {
+        const int LAB_80029200 = unchecked((int)0x80029200);
+
+        int iVar1 = TaskSystem.CreateTask(LAB_80029200, 0, 5, 0xc, 0, TaskSystem.g_TaskListTail[5]);
+        PsxRam.WriteI32(PsxRam.ReadI32(iVar1 + 8), 2);
     }
 }

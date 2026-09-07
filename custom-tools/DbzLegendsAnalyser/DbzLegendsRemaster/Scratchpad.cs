@@ -31,13 +31,19 @@ namespace DbzLegendsRemaster;
 //                producers, and no evidence they agree.
 //   0x1F80009C   NOT a duplication at all, and worse than one: TITLE declares VECTOR_1f800094, a
 //                16-byte LibGte.VECTOR, so byte 0x9C is that vector's .vz field. VS declares a
-//                separate int DAT_1f80009c over the same byte and READS it while nothing anywhere
-//                writes it. That is an aliasing bug, recorded at its site rather than papered over
-//                by a merge.
+//                separate int DAT_1f80009c over the same byte. The "READS it while nothing anywhere
+//                writes it" half of that finding no longer holds: VS_EXE_exe.FUN_800411b4 (VS.EXE,
+//                0x800411B4) is now that writer, wired straight to BattleScene.DAT_1f80009c rather
+//                than a second declaration -- see that function's own comment for why. Still not
+//                merged with TITLE's VECTOR here: a shared writer within VS.EXE is not evidence the
+//                two OVERLAYS agree, only that VS.EXE's own two consumers now do.
 //   0x1F8000D0..E0  UNKNOWN, so not merged. Both SetupGeometry copies write these five words
-//                identically, but only TITLE ever reads them back; VS's consumer is unported. The
-//                write side agreeing proves nothing about meaning for reusable RAM -- the read
-//                side is what fixes it. They stay duplicated until VS's reader exists.
+//                identically. VS's consumer used to be unported; it now exists --
+//                VS_EXE_exe.FUN_800411b4 (VS.EXE, 0x800411B4) reads FileIo.DAT_1f8000d0 and writes
+//                FileIo.DAT_1f8000d4/d8/dc/e0 every frame. That closes VS's OWN read side, not
+//                whether TITLE and VS mean the same thing by it -- the write side agreeing already
+//                proved nothing for reusable RAM, and a same-overlay reader proves no more. They
+//                stay duplicated absent evidence the two overlays' values actually agree.
 //
 // Everything below is proven SAME by both overlays' reads, not by their writes. The comments come
 // with the declarations from TITLE_EXE/GteScratch.cs, unchanged: they are the evidence.

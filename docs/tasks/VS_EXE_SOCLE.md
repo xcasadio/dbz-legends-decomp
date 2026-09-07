@@ -33,8 +33,20 @@ declarees des deux cotes, chacune documentee a son site:
 
 **Et une adresse n'est pas un doublon mais un defaut**: `0x1F80009C`. TITLE
 declare `VECTOR_1f800094`, un `LibGte.VECTOR` de 16 octets — l'octet `0x9C` est
-donc son champ `.vz`. VS declare un `int DAT_1f80009c` par-dessus et **le lit
-alors que personne ne l'ecrit**. Aliasing, consigne, pas corrige.
+donc son champ `.vz`. VS declare un `int DAT_1f80009c` par-dessus. L'aliasing
+inter-overlay reste, consigne, pas corrige.
+
+**Mais la moitie « personne ne l'ecrit » etait fausse, et fausse de la meme
+maniere que tout le reste de cette session.** L'ecrivain existe: c'est
+`FUN_800411b4 @ 0x800411B4`, qui n'etait tout simplement pas portee. « Rien ne
+l'ecrit » etait une affirmation sur le *portage*, ecrite comme une affirmation
+sur le *jeu*. Elle est maintenant cablee sur le champ existant de `BattleScene`
+plutot que sur une seconde declaration.
+
+Et la retenue de la correction merite d'etre notee: un ecrivain partage **a
+l'interieur de VS.EXE** ne prouve pas que les deux overlays s'accordent, seulement
+que les deux consommateurs de VS.EXE s'accordent entre eux. La fusion avec le
+`VECTOR` de TITLE reste refusee.
 
 **Les 17 « doublons » inter-overlay n'en sont pas.** Chaque paire
 `TaskSystem`/`PadInput`/`PrimitivePools` est a une adresse **differente** dans

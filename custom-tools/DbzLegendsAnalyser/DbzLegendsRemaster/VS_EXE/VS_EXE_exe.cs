@@ -304,6 +304,14 @@ internal sealed class VS_EXE_exe
         // settles it and the four calls agree 4/4: 0x80083B3C + i*4 is list i's head, 0x80083B90 +
         // i*4 its tail. main inserts at the head for lists 0 and 0x13, at the tail for 9 and 0x14.
         TaskSystem.CreateTask(Lab8005d1fcAddress, 0x57, 0x14, 0x194, 0, TaskSystem.g_TaskListTail[20]);
+
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: CreateTask stores Fun800411b4Address raw in the node at +0x04, and the
+        // scheduler's per-list dispatch (TaskSystem.InvokeCallback) only reaches a body it has a
+        // registered delegate for -- see BattleManager.RegisterBattleManagerTask's identical shape.
+        // Without this line FUN_800411b4 would run once at boot (the direct call below) and then
+        // silently do nothing on every subsequent frame despite being on list 0's schedule.
+        TaskSystem.RegisterCallback(Fun800411b4Address, FUN_800411b4);
         TaskSystem.CreateTask(Fun800411b4Address, 0x58, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_800411b4();
         TaskSystem.CreateTask(Lab80027670Address, 0x55, 0x13, 0, 0, TaskSystem.g_TaskListHead[19]);
@@ -437,13 +445,218 @@ internal sealed class VS_EXE_exe
     // 0x194 bytes of workspace — the list main runs FIRST each frame, before ClearOTag.
     private const int Lab8005d1fcAddress = unchecked((int)0x8005D1FC);
 
+    // ---- FUN_800411b4's own scratchpad workspace, declared HERE rather than in Scratchpad.cs.
+    // These addresses are not proven to carry the SAME values TITLE.EXE keeps at the matching
+    // offsets in TITLE_EXE/GteScratch.cs -- only that VS.EXE's own compiled copy of this function
+    // (see FUN_800411b4's own comment: the same 824-byte source as TITLE's FUN_80037388, byte for
+    // byte) touches the same offsets. Scratchpad.cs's own header explains why a byte match alone is
+    // not enough to merge -- "two overlays storing different things at one address is entirely
+    // legitimate on the console" -- so these stay local to VS.EXE, the same treatment DAT_1f80012c
+    // above already gets and FileIo.cs already gives 0x1F8000D0-E0/0x1F800120.
+
+    // GHIDRA: DAT_1f80008c @ 0x1F80008C, DAT_1f80008e @ 0x1F80008E, DAT_1f800090 @ 0x1F800090 (VS.EXE)
+    // The one-frame-old camera rotation triplet: FUN_800411b4 saves SVECTOR_1f80007c's current
+    // vx/vy/vz here before overwriting it from DAT_1f800084/86/88 -- the same "history slot ahead of
+    // the swap" shape TITLE.EXE's FUN_80037388 uses at the identical offsets.
+    private static short DAT_1f80008c;
+
+    private static short DAT_1f80008e;
+
+    private static short DAT_1f800090;
+
+    // GHIDRA: SVECTOR_1f800020 @ 0x1F800020 (VS.EXE)
+    // A scratch SVECTOR FUN_800411b4 reuses for two unrelated RotMatrix/RotTrans calls in the same
+    // function. TITLE.EXE keeps the first of its four sprite-quad corners at this same offset
+    // (TITLE_EXE/GteScratch.cs), but nothing in VS.EXE's ported tree shows that reading applies
+    // here, so it keeps a raw name rather than borrowing TITLE's.
+    private static readonly SVECTOR SVECTOR_1f800020 = new();
+
+    // GHIDRA: VECTOR_1f800048 @ 0x1F800048 (VS.EXE)
+    // The second RotTrans's result vector; only .vz is read back, by FUN_800411b4 itself, for the
+    // DAT_1f800128 depth projection below.
+    private static readonly VECTOR VECTOR_1f800048 = new();
+
+    // GHIDRA: DAT_1f800078 @ 0x1F800078 (VS.EXE)
+    // The second RotTrans's (long *) flag output. PARTIAL, same as LibGte.RotTrans's own comment:
+    // the GTE FLAG register is not modelled in this port, so this is a write-only sink nothing in
+    // this function reads back.
+    private static readonly int[] DAT_1f800078 = new int[1];
+
+    // GHIDRA: DAT_1f800094 @ 0x1F800094, DAT_1f800098 @ 0x1F800098 (VS.EXE)
+    // The vx/vy of the FIRST RotTrans's result vector at 0x1F800094. Its vz is 0x1F80009C --
+    // ALREADY declared, by BattleScene.cs, as its own DAT_1f80009c ("a GTE scratchpad word the
+    // dispatcher multiplies the sine by"). Scratchpad.cs's header already records 0x1F80009C as a
+    // known aliasing point: TITLE keeps a 16-byte VECTOR there while "VS declares a separate int
+    // DAT_1f80009c over the same byte and READS it while nothing anywhere writes it." FUN_800411b4
+    // below is that missing writer. It is wired straight to BattleScene.DAT_1f80009c rather than a
+    // second declaration over the same address, per this project's own duplicate-symbol rule --
+    // compare addresses, not names, and one PSX byte gets one C# storage cell within an overlay.
+    // Only vx/vy are new here; vz reuses the existing field.
+    private static int DAT_1f800094;
+
+    private static int DAT_1f800098;
+
+    // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE)
+    // The depth-projected table offset FUN_800411b4 computes every frame; nothing else in this
+    // slice reads it back yet.
+    private static int DAT_1f800128;
+
+    // GHIDRA: DAT_8008d398 @ 0x8008D398 (VS.EXE)
+    // OWNERSHIP CAVEAT: this is BattleScene.FUN_80042054's own state word -- that function's real
+    // body (a many-case switch that reads and writes it repeatedly, per its own cross-references) is
+    // still a BLOCKED stub in BattleScene.cs, so nothing currently writes this field and the guard
+    // below never fires in this port's present state. Declared here, the first VS.EXE code (in this
+    // port) to reach it, rather than left implicit; when FUN_80042054 is transliterated it must use
+    // THIS field rather than a second one over the same address.
+    // Read via an UNSIGNED halfword (raw MIPS decode at 0x80041490: `lhu v0,0x29c(gp)`, gp-relative
+    // to VS.EXE's own 0x8008D0FC per the project's PCSX-Redux evidence channel: 0x8008D0FC + 0x29C
+    // = 0x8008D398) and compared unsigned (`sltiu`), hence the unsigned type.
+    private static ushort DAT_8008d398;
+
+    // GHIDRA: DAT_800c3bfc @ 0x800C3BFC (VS.EXE)
+    // BLOCKED: only ever address-taken by this function, never dereferenced, so its shape (which
+    // primitive, what size) is not established here. AddPrim's (int, int) overload takes the raw
+    // address, matching the original's `&DAT_800c3bfc` exactly without inventing a packet layout.
+    private const int Dat800c3bfcAddress = unchecked((int)0x800C3BFC);
+
     // GHIDRA: FUN_800411b4 @ 0x800411B4 (VS.EXE)
-    // BLOCKED: task id 0x58 on list 0, and main also calls it once directly, immediately after
-    // creating it.
+    // Task id 0x58 on list 0, and main also calls it once directly, immediately after creating it.
     private const int Fun800411b4Address = unchecked((int)0x800411B4);
 
+    //
+    // THE SAME SOURCE AS TITLE.EXE's FUN_80037388 @ 0x80037388, RECOMPILED: 824 bytes on both sides,
+    // and the two decompilations agree statement for statement (TITLE_EXE_exe.cs carries that
+    // function in full, with its own address annotations). The camera/geometry-offset task: swaps
+    // the live rotation/geometry-offset triplets with their pending counterparts (the pending side
+    // is primed elsewhere -- FileIo.SetupGeometry, at boot), rebuilds the rotation and translation
+    // matrices from them, and derives DAT_1f800128 from the projected depth of a second, unrelated
+    // RotTrans.
+    //
+    // SCRATCHPAD READING, address for address, following TITLE's own resolved layout
+    // (TITLE_EXE/GteScratch.cs):
+    //   0x1F80007C SVECTOR (Scratchpad.SVECTOR_1f80007c)      the live camera rotation
+    //   0x1F800084/86/88   (Scratchpad.DAT_1f800084/86/88)    the pending rotation
+    //   0x1F80008C/8E/90   (this file, above)                 one-frame-old rotation, saved here
+    //   0x1F8000B4/B8/BC/C0 (Scratchpad._DAT_1f8000b4 etc.)   the live geometry-offset triplet+extra
+    //   0x1F8000C4/C8/CC   (Scratchpad.DAT_1f8000c4 etc.)     its pending counterpart
+    //   0x1F8000D0/D4/D8/DC/E0 (FileIo.DAT_1f8000d0 etc.)     a second pending/live pair FileIo.cs
+    //                                                         already declares -- SetupGeometry
+    //                                                         primes D0/D4 from its own param_7 and
+    //                                                         param_4; this is that pair's first
+    //                                                         VS.EXE reader
+    //   0x1F800110/114/118/11C/124/120 (Scratchpad.* / FileIo.DAT_1f800120) the geometry-offset
+    //                                                         ring, same swap shape
+    //   0x1F800000 MATRIX (Scratchpad.MATRIX_1f800000)        the working rotation/translation matrix
+    //   0x1F800020 SVECTOR (this file, above)                 scratch, reused twice, unrelated to
+    //                                                         the four-corner array TITLE keeps there
+    //   0x1F800048 VECTOR, 0x1F800078 (this file, above)      second RotTrans's result and flag sink
+    //   0x1F800094/98/9C VECTOR (this file, above; vz is
+    //     BattleScene.DAT_1f80009c)                           first RotTrans's result
+    //   0x1F800128 (this file, above)                         the projected-depth table offset
+    //
+    // THE ONE NARROW READ: `DAT_1f800024 = DAT_1f8000c0 + 0x9d8` (Ghidra's own printed C, no
+    // underscore -- unlike every OTHER touch of 0x1F8000C0 in this function, which reads/writes the
+    // full 32 bits and so prints as `_DAT_1f8000c0`). Raw MIPS decode at 0x8004142c settles it:
+    // `lhu v0,0xc0(v0)`, an UNSIGNED HALFWORD load, not a word load. Reusing Scratchpad._DAT_1f8000c0
+    // (the existing 32-bit field) here anyway, rather than adding a second, narrower declaration
+    // over the same address, is not a guess: for a value later truncated to 16 bits by the SH that
+    // follows, `(X + 0x9d8) & 0xffff` and `((X & 0xffff) + 0x9d8) & 0xffff` are the same integer for
+    // every X, so the wider field reads back identically regardless of its high 16 bits. The
+    // compiler's choice to narrow the load here is an optimisation on its side, not a different
+    // source value -- the C source both sites compile from is the one already on Scratchpad.cs.
     private static void FUN_800411b4()
     {
+        DAT_1f80008c = Scratchpad.SVECTOR_1f80007c.vx;
+        DAT_1f80008e = Scratchpad.SVECTOR_1f80007c.vy;
+        DAT_1f800090 = Scratchpad.SVECTOR_1f80007c.vz;
+        Scratchpad.SVECTOR_1f80007c.vx = Scratchpad.DAT_1f800084;
+        Scratchpad.SVECTOR_1f80007c.vy = Scratchpad.DAT_1f800086;
+        Scratchpad.SVECTOR_1f80007c.vz = Scratchpad.DAT_1f800088;
+        FileIo.DAT_1f8000d4 = Scratchpad._DAT_1f8000b4;
+        FileIo.DAT_1f8000d8 = Scratchpad.DAT_1f8000b8;
+        FileIo.DAT_1f8000dc = Scratchpad._DAT_1f8000bc;
+        FileIo.DAT_1f8000e0 = Scratchpad._DAT_1f8000c0;
+        Scratchpad._DAT_1f8000b4 = Scratchpad.DAT_1f8000c4;
+        Scratchpad.DAT_1f8000b8 = Scratchpad.DAT_1f8000c8;
+        Scratchpad._DAT_1f8000bc = Scratchpad.DAT_1f8000cc;
+        Scratchpad._DAT_1f8000c0 = FileIo.DAT_1f8000d0;
+        Scratchpad.DAT_1f80011c = Scratchpad.DAT_1f800114;
+        Scratchpad.DAT_1f800118 = Scratchpad.DAT_1f800110;
+        Scratchpad.DAT_1f800114 = Scratchpad.DAT_1f800124;
+        Scratchpad.DAT_1f800110 = FileIo.DAT_1f800120;
+
+        RotMatrix(Scratchpad.SVECTOR_1f80007c, Scratchpad.MATRIX_1f800000);
+        Scratchpad.MATRIX_1f800000.t[2] = 0;
+        Scratchpad.MATRIX_1f800000.t[1] = 0;
+        Scratchpad.MATRIX_1f800000.t[0] = 0;
+        SetRotMatrix(Scratchpad.MATRIX_1f800000);
+        SetTransMatrix(Scratchpad.MATRIX_1f800000);
+
+        SVECTOR local_38 = new();
+        local_38.vx = 0;
+        local_38.vz = 0;
+        local_38.vy = (short)Scratchpad.DAT_1f8000b8;
+
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: RotTrans needs a real VECTOR object to write its three fields into, but the true
+        // backing storage for those three fields is split across DAT_1f800094/DAT_1f800098 (above)
+        // and BattleScene.DAT_1f80009c (the aliasing wiring explained above), so a throwaway object
+        // receives RotTrans's output here and is copied out field by field -- the same role local_38
+        // just above plays for a genuine stack local the original has.
+        VECTOR vector1f800094 = new();
+        int[] alStack_30 = new int[2];
+        RotTrans(local_38, vector1f800094, alStack_30);
+        DAT_1f800094 = vector1f800094.vx;
+        DAT_1f800098 = vector1f800094.vy;
+        BattleScene.DAT_1f80009c = vector1f800094.vz;
+
+        BattleScene.DAT_1f80009c = BattleScene.DAT_1f80009c + Scratchpad._DAT_1f8000c0;
+        SetGeomOffset(Scratchpad.DAT_1f800114, Scratchpad.DAT_1f800110);
+
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: TransMatrix's int[3] overload (LibGte.cs) exists for exactly this shape --
+        // "call sites that hold a real VECTOR reach the other overload instead of unpacking the
+        // vector at every call" -- and here the three components are NOT held in one VECTOR object
+        // (see the aliasing note above), so the int[] overload is the one that fits without building
+        // a second throwaway VECTOR.
+        TransMatrix(Scratchpad.MATRIX_1f800000,
+            new[] { DAT_1f800094, DAT_1f800098, BattleScene.DAT_1f80009c });
+        SetTransMatrix(Scratchpad.MATRIX_1f800000);
+        SetRotMatrix(Scratchpad.MATRIX_1f800000);
+        PushMatrix();
+
+        SVECTOR_1f800020.vy = 0;
+        SVECTOR_1f800020.vz = 0;
+        SVECTOR_1f800020.vx = Scratchpad.SVECTOR_1f80007c.vx;
+        RotMatrix(SVECTOR_1f800020, Scratchpad.MATRIX_1f800000);
+        Scratchpad.MATRIX_1f800000.t[2] = 0;
+        Scratchpad.MATRIX_1f800000.t[1] = 0;
+        Scratchpad.MATRIX_1f800000.t[0] = 0;
+        SetTransMatrix(Scratchpad.MATRIX_1f800000);
+        SetRotMatrix(Scratchpad.MATRIX_1f800000);
+
+        SVECTOR_1f800020.vx = 0;
+        SVECTOR_1f800020.vy = 0;
+        SVECTOR_1f800020.vz = (short)(Scratchpad._DAT_1f8000c0 + 0x9d8);
+        RotTrans(SVECTOR_1f800020, VECTOR_1f800048, DAT_1f800078);
+
+        int iVar1 = VECTOR_1f800048.vz;
+        if (VECTOR_1f800048.vz < 0)
+        {
+            iVar1 = VECTOR_1f800048.vz + 3;
+        }
+
+        DAT_1f800128 = 0x800 - (iVar1 >> 2);
+        if (DAT_1f800128 < 0)
+        {
+            DAT_1f800128 = 0;
+        }
+
+        PopMatrix();
+        if (DAT_8008d398 > 1)
+        {
+            AddPrim(DAT_8008d420 + 0x206c, Dat800c3bfcAddress);
+        }
     }
 
     // GHIDRA: LAB_80027670 @ 0x80027670 (VS.EXE)
@@ -731,6 +944,118 @@ internal sealed class VS_EXE_exe
     {
         _ = param_1;
     }
+
+    // GHIDRA: DAT_8008d3d0 @ 0x8008D3D0 (VS.EXE)
+    // Its only reference anywhere in the overlay: written here, never read.
+    private static short DAT_8008d3d0;
+
+    // GHIDRA: DAT_8008d39c @ 0x8008D39C (VS.EXE)
+    // Written here from param_1; also read at 0x800410A0, inside LAB_80040f78's own unpromoted body
+    // -- see that task entry's own const just below -- so the read site stays undescribed here.
+    private static short DAT_8008d39c;
+
+    // GHIDRA: LAB_80040f78 @ 0x80040F78 (VS.EXE)
+    // BLOCKED: a task entry point Ghidra never promoted to a function -- task id 0, list 0xd, 0xc
+    // bytes of workspace, tail-inserted on list 0xd. Same raw-address treatment as the other task
+    // entries in this file (Lab8005d1fcAddress and neighbours).
+    private const int Lab80040f78Address = unchecked((int)0x80040F78);
+
+    // GHIDRA: FUN_80040f30 @ 0x80040F30 (VS.EXE)
+    // 72 bytes, one callee (CreateTask, i.e. TaskSystem.CreateTask -- see TaskSystem.cs's own header
+    // for how FUN_80053330 was closed). DAT_80083bc4, the raw insert point Ghidra prints, is
+    // g_TaskListTail[0xd]: main's own comment on the task table arithmetic gives tail[i] =
+    // 0x80083B90 + i*4, and 0x80083B90 + 0xd*4 = 0x80083BC4 exactly.
+    //
+    // Its only caller is FUN_800414ec above, itself still a BLOCKED stub ("fed rand() & 7 -- one of
+    // eight variants chosen at boot, which is not established"), so this function is transliterated
+    // but not yet reachable -- the same state FUN_800411b4 was in before main's direct call and
+    // CreateTask registration existed.
+    private static void FUN_80040f30(short param_1)
+    {
+        DAT_8008d3d0 = 0;
+        DAT_8008d39c = param_1;
+        TaskSystem.CreateTask(Lab80040f78Address, 0, 0xd, 0xc, 0, TaskSystem.g_TaskListTail[0xd]);
+    }
+
+    // GHIDRA: FUN_80061bd8 @ 0x80061BD8 (VS.EXE)
+    // A table-driven image loader. param_1[0] is a record count (uVar7); records run from
+    // param_1[1], seven words (0x1C bytes) apart: tag, a byte offset into param_2, x, y, w, h,
+    // isClut. Tag 0 LZSS-decompresses the block at param_2+offset into FileIo.DAT_800a0d58 and
+    // uploads it through FileIo.LoadImage_ReturnTPageOrClutId; tag 1 uploads the block at
+    // param_2+offset directly through LoadImage, using x/y/w/h as a RECT and never touching the
+    // isClut field. Any OTHER tag value is not consumed as a record at all -- the record cursor
+    // only advances by one word instead of seven in that case, exactly as Ghidra's own decompilation
+    // shows (the reassignment to +7 words happens only inside the two matched branches); not
+    // corrected, per rule 12.
+    //
+    // Two callers: FUN_800414ec above (still BLOCKED) reaches it as
+    // `FUN_80061bd8(&g_cdFileBufferTable,&g_cdFileBufferTable)` -- the same buffer as both the table
+    // and the data region -- and one call from 0x80029700, outside this slice.
+    //
+    // PARTIAL: the tag-0 branch's DecompressLZSS source needs the shared PsxRam resolver, exactly as
+    // FileIo.DecompressAndLoadImage's own comment explains for the identical shape; when the
+    // resolver has no row for param_2+offset, this port skips that record's decompress/upload/
+    // DrawSync rather than dereferencing garbage, the same fallback DecompressAndLoadImage uses.
+    //
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: tag 1 writes its RECT fields into a LOCAL scratch rect rather than FileIo's own
+    // private RECT_8008d48c (the original's real target, `(RECT *)&DAT_8008d48c`): that field is
+    // fully overwritten before every read and never carried across calls, so a local produces the
+    // identical LoadImage argument without a second declaration over FileIo's private field, which
+    // this file cannot reach.
+    private static void FUN_80061bd8(int param_1, int param_2)
+    {
+        uint uVar7 = (uint)PsxRam.ReadI32(param_1);
+        uint uVar11 = 0;
+        if (uVar7 != 0)
+        {
+            int puVar9 = param_1 + 4;
+            do
+            {
+                int puVar10 = puVar9 + 4;
+                if (PsxRam.ReadI32(puVar9) == 0)
+                {
+                    uint uVar1 = (uint)PsxRam.ReadI32(puVar9 + 8);
+                    uint uVar2 = (uint)PsxRam.ReadI32(puVar9 + 12);
+                    uint uVar3 = (uint)PsxRam.ReadI32(puVar9 + 16);
+                    uint uVar4 = (uint)PsxRam.ReadI32(puVar9 + 20);
+                    uint uVar5 = (uint)PsxRam.ReadI32(puVar9 + 24);
+                    uint uVar6 = (uint)PsxRam.ReadI32(puVar10);
+                    puVar10 = puVar9 + 28;
+
+                    var resolved = PsxRam.AddressResolver?.Invoke(param_2 + (int)uVar6);
+                    if (resolved != null)
+                    {
+                        (byte[] src, int srcOffset) = resolved.Value;
+                        FileIo.DecompressLZSS(src, srcOffset, FileIo.DAT_800a0d58, 0);
+                        FileIo.LoadImage_ReturnTPageOrClutId(Dat800a0d58Address, (ushort)uVar1,
+                            (ushort)uVar2, (short)uVar3, (short)uVar4, (byte)uVar5);
+                        DrawSync(0);
+                    }
+                }
+                else if (PsxRam.ReadI32(puVar9) == 1)
+                {
+                    RECT rect = new();
+                    rect.x = (short)PsxRam.ReadI32(puVar9 + 8);
+                    rect.y = (short)PsxRam.ReadI32(puVar9 + 12);
+                    rect.w = (short)PsxRam.ReadI32(puVar9 + 16);
+                    rect.h = (short)PsxRam.ReadI32(puVar9 + 20);
+                    LoadImage(rect, param_2 + PsxRam.ReadI32(puVar10));
+                    puVar10 = puVar9 + 28;
+                }
+
+                uVar11 = uVar11 + 1;
+                puVar9 = puVar10;
+            } while (uVar11 < uVar7);
+        }
+    }
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: the same numeric address as FileIo.cs's own private Dat800a0d58Address, needed here
+    // because that constant's accessibility does not reach this file. It names a fixed PSX address,
+    // not mutable state, so a second const spelling it out carries none of the duplicate-symbol risk
+    // a second byte[] or scratchpad object would.
+    private const int Dat800a0d58Address = unchecked((int)0x800A0D58);
 
     // GHIDRA: DAT_80081828 @ 0x80081828, PTR_DAT_80081910 @ 0x80081910 (VS.EXE)
     // Two .data addresses FUN_80034d98 hands over as raw PSX pointers -- `&DAT_80081828` and, cast
