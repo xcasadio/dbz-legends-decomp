@@ -269,7 +269,7 @@ internal static class FighterAction
     // BattleState.FighterTaskNode) has state byte (+0x16a) equal to 0x16, the slot is forced to
     // -1; otherwise, when +0x138 bits 0x30000000 are BOTH clear, the slot comes from
     // FUN_800261ec(fighter) (below, BLOCKED); when either bit is set, the slot comes from
-    // FUN_8004b68c(fighter) instead (also below, BLOCKED). A slot of -1 re-stamps the current
+    // FighterMotion.FUN_8004b68c(fighter) instead (also below, BLOCKED). A slot of -1 re-stamps the current
     // state via FighterCombat.FUN_8004a638(fighter, 0); any other slot instead sets +0x138 bit
     // 0x40 and, only when the slot is in 0x23..0x28, dispatches it onward: 0x23..0x25 ->
     // FUN_8004a9e8(fighter, slot) (above, this file); 0x26..0x28 ->
@@ -295,7 +295,7 @@ internal static class FighterAction
             }
             else
             {
-                local_10 = FUN_8004b68c(param_1);
+                local_10 = FighterMotion.FUN_8004b68c(param_1);
             }
 
             if (local_10 == -1)
@@ -336,17 +336,9 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004b68c @ 0x8004B68C (VS.EXE)
-    // BLOCKED: 484 bytes, out of this slice. Called from FUN_8004b9cc above as
-    // FUN_8004b68c(fighter) when +0x138 bits 0x30000000 has either bit set. This is the same
-    // function WAVE 1's own header note already names as the caller of FUN_8004b5ac and one of
-    // the two callers of FUN_8004b4a4 — the command/attack-slot-buffer reader neither of those
-    // leaves' own callers were in scope to port. The stub returns -1 for the same reason
-    // FUN_800261ec's does above.
-    private static int FUN_8004b68c(int param_1)
-    {
-        _ = param_1;
-        return -1;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
+    // reach it by qualified name: an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is what check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_8004b33c @ 0x8004B33C (VS.EXE)
     // 148 bytes. One caller, FUN_8004bb70 below (`if (param_2 == 0x2a) { FUN_8004b33c(param_1);

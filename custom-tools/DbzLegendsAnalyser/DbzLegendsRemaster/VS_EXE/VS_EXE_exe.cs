@@ -521,7 +521,7 @@ internal sealed class VS_EXE_exe
     // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE)
     // The depth-projected table offset FUN_800411b4 computes every frame; nothing else in this
     // slice reads it back yet.
-    private static int DAT_1f800128;
+    internal static int DAT_1f800128;
 
     // GHIDRA: DAT_8008d398 @ 0x8008D398 (VS.EXE)
     // OWNERSHIP CAVEAT: this is BattleScene.FUN_80042054's own state word -- that function's real

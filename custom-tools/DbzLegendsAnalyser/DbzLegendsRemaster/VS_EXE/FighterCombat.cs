@@ -2107,7 +2107,7 @@ internal static class FighterCombat
     // bytes) that match a sprite-draw call's usual shape; drawing itself is out of this slice.
     // Kept as a precise no-op so the caller's own argument computation -- real PsxRam reads with
     // no side effects of their own -- still runs exactly where the original runs it.
-    private static void FUN_80052db4(int param_1, int param_2, int param_3, int param_4, int param_5,
+    internal static void FUN_80052db4(int param_1, int param_2, int param_3, int param_4, int param_5,
         int param_6, int param_7, int param_8, int param_9, int param_10, int param_11, int param_12,
         int param_13, int param_14, int param_15, int param_16, int param_17, int param_18)
     {

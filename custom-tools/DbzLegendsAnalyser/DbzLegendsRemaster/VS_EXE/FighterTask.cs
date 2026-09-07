@@ -360,10 +360,10 @@ internal static class FighterTask
                                 if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x8000000) == 0)
                                 {
                                     FUN_80047740(iVar3);
-                                    FUN_800477ec(iVar3, iVar3 + 0x114);
-                                    FUN_80047a24(iVar3, iVar3 + 0x114);
+                                    FighterMotion.FUN_800477ec(iVar3, iVar3 + 0x114);
+                                    FighterMotion.FUN_80047a24(iVar3, iVar3 + 0x114);
                                     FUN_80047b10(iVar3);
-                                    FUN_8004fd24(iVar3, iVar3 + 0x114);
+                                    FighterMotion.FUN_8004fd24(iVar3, iVar3 + 0x114);
                                 }
 
                                 // PHASE 10 @ 0x8005117C — the tail. Runs on the main path only; none
@@ -436,10 +436,10 @@ internal static class FighterTask
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
             FUN_80047740(param_1);
-            FUN_800477ec(param_1, param_1 + 0x114);
-            FUN_80047a24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
+            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
         }
     }
 
@@ -456,10 +456,10 @@ internal static class FighterTask
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
             FUN_80047740(param_1);
-            FUN_800477ec(param_1, param_1 + 0x114);
-            FUN_80047a24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
+            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
         }
     }
 
@@ -533,10 +533,10 @@ internal static class FighterTask
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
             FUN_80047740(param_1);
-            FUN_800477ec(param_1, param_1 + 0x114);
-            FUN_80047a24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
+            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
         }
     }
 
@@ -564,10 +564,10 @@ internal static class FighterTask
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
             FUN_80047740(param_1);
-            FUN_800477ec(param_1, param_1 + 0x114);
-            FUN_80047a24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
+            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
         }
 
         PsxRam.WriteU16(param_1 + 0x22a, 0);
@@ -661,10 +661,10 @@ internal static class FighterTask
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
             FUN_80047740(param_1);
-            FUN_800477ec(param_1, param_1 + 0x114);
-            FUN_80047a24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
+            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
         }
     }
 
@@ -1202,20 +1202,14 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_800477ec @ 0x800477EC (VS.EXE)
-    // BLOCKED: 568 bytes. Step 9.8. param_2 is the fighter's own position triple, iVar3 + 0x114.
-    private static void FUN_800477ec(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
+    // reach it by qualified name: an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is what check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_80047a24 @ 0x80047A24 (VS.EXE)
-    // BLOCKED: 236 bytes. Step 9.8, same two arguments as FUN_800477ec.
-    private static void FUN_80047a24(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
+    // reach it by qualified name: an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is what check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_80047b10 @ 0x80047B10 (VS.EXE)
     // CERTAIN, full decompilation, 340 bytes, 0x80047B10..0x80047C63. Step 9.8. VS_EXE/FileIo.cs
@@ -1266,22 +1260,9 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_8004fd24 @ 0x8004FD24 (VS.EXE)
-    // BLOCKED: 712 bytes. Step 9.8, last of the five, and the third to be handed iVar3 + 0x114. It
-    // closes the compilation unit that FUN_8004fa8c and FUN_8004fbfc open, ending at 0x8004FFEB.
-    //
-    // Checked this wave: its two callees are FUN_8004a108 (now ported, FighterCombat.FUN_8004a108)
-    // and FUN_800340a8 @ 0x800340A8 — STILL BLOCKED, 1764 bytes, 11 callees of its own (rand,
-    // SquareRoot0, ratan2, and eight more FUN_8003xxxx functions, none in this port), in a
-    // different address range from anything this file or FighterCombat.cs owns. FUN_800340A8 is
-    // the exact function that would unblock this stub. This function is called from every one of
-    // this wave's now-ported quintet call sites (FUN_80050658/8005070c/80050514/80050824/800501b8
-    // and the main body's own step 9.8) — all of them call this same still-empty stub, matching the
-    // precedent already set before this wave.
-    private static void FUN_8004fd24(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
+    // reach it by qualified name: an empty stub in the enclosing class silently beats a real
+    // body elsewhere, which is what check_function_addresses.py exists to catch.
 
     // GHIDRA: FUN_80050a14 @ 0x80050A14 (VS.EXE)
     // CERTAIN, full decompilation, 208 bytes. Phase 10, the tail — and it ends at 0x80050AE3, one
