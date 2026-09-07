@@ -1772,10 +1772,10 @@ internal static class BattleManager
     // Ghidra types it undefined2 and the image holds 0x0000. It and DAT_8008d15e are ADJACENT
     // halfwords, written the same value 0xFFFC on the two arms of one test, so they are a two-entry
     // per-side table addressed as two names.
-    private static ushort DAT_8008d15c;
+    internal static ushort DAT_8008d15c;
 
     // GHIDRA: DAT_8008d15e @ 0x8008D15E (VS.EXE)
-    private static ushort DAT_8008d15e;
+    internal static ushort DAT_8008d15e;
 
     // GHIDRA: DAT_8008d340 @ 0x8008D340 (VS.EXE)
     // NOT DECLARED HERE, and the first draft of this file got that wrong. Ghidra types it

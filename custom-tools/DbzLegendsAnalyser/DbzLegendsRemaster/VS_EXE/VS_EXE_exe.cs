@@ -328,6 +328,14 @@ internal sealed class VS_EXE_exe
         TaskSystem.RegisterCallback(Fun800411b4Address, FUN_800411b4);
         TaskSystem.CreateTask(Fun800411b4Address, 0x58, 0, 0, 0, TaskSystem.g_TaskListHead[0]);
         FUN_800411b4();
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: same shape and same reason as the RegisterCallback above. CreateTask stores
+        // Lab80027670Address raw in the node at +0x04, and TaskSystem's per-list dispatch reaches
+        // only a body it has a registered delegate for. Without this line the battle camera would
+        // sit on list 0x13's schedule and do nothing -- which is exactly what it did until
+        // VS_EXE/BattleCamera.cs closed it, and it is why CtxFlags bit 31 and every fighter's
+        // +0x138 bit 25 were never cleared.
+        TaskSystem.RegisterCallback(Lab80027670Address, BattleCamera.RunBattleCameraTask);
         TaskSystem.CreateTask(Lab80027670Address, 0x55, 0x13, 0, 0, TaskSystem.g_TaskListHead[19]);
 
         PrimitivePools.CreatePrimitivePools(0x14, 200, 100, 0x15e, 0x14, 0x14, 0, 0);
@@ -674,7 +682,10 @@ internal sealed class VS_EXE_exe
     }
 
     // GHIDRA: LAB_80027670 @ 0x80027670 (VS.EXE)
-    // BLOCKED: task id 0x55, list 0x13.
+    // THE BATTLE CAMERA, task id 0x55, list 0x13, no per-node workspace. NO LONGER BLOCKED: the
+    // body is VS_EXE/BattleCamera.cs's RunBattleCameraTask, registered with the scheduler at the
+    // CreateTask above. Ghidra never promoted this address to a function because main only takes it
+    // as a PARAM, which is why the address constant lives here and the body does not.
     private const int Lab80027670Address = unchecked((int)0x80027670);
 
     // GHIDRA: LAB_80055e3c @ 0x80055E3C (VS.EXE)

@@ -1512,6 +1512,56 @@ internal static class AnimCmdMesh
             outVec.vz);
         PsxRam.WriteU16(param_3 + 2 * 2, (ushort)(lVar1 & 0xfff));
     }
+
+    // GHIDRA: FUN_80045cf4 @ 0x80045CF4 (VS.EXE)
+    // 400 bytes, one callee (libgte's SquareRoot0). SIX callers, and they are why it lives here
+    // rather than in any one of them: four inside RunBattleCameraTask @ 0x80027670, one inside the
+    // CPU controller FUN_80023890, and one at 0x80054DE0. It is placed beside
+    // ComputeYawPitchToTarget below because the two are neighbours in the image (0x80045CF4 and
+    // 0x80045F34, 0x240 bytes apart) and every caller of one is a caller of the other.
+    //
+    // THE DISTANCE BETWEEN TWO POSITION TRIPLES, with the arena's X and Z axes WRAPPED and Y not.
+    // Both param_1 and param_2 are `short *` pointing at a +0x114-style vx/vy/vz triple. The X and
+    // Z differences are made positive and then, when larger than 0x7FFF, replaced by
+    // `0xFFFF - difference` -- which is the shorter way round a 0x10000-wide circular axis. The Y
+    // difference gets neither treatment: it is squared signed and as-is.
+    //
+    // The return is `(int)(short)SquareRoot0(...)`, so a distance above 32767 comes back NEGATIVE.
+    // Reproduced, not corrected (rule 12): the callers compare it against 0x2C1 and 0x100 and one
+    // divides by 0x2C00, and a negative there is the original's behaviour.
+    //
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: the two parameters are PSX addresses rather than managed arrays, because four of the
+    // six call sites pass `fighter + 0x114` -- an address inside a PsxRam workspace -- and the other
+    // two pass a caller stack local that RunBattleCameraTask gives a synthetic address of.
+    internal static int FUN_80045cf4(int param_1, int param_2)
+    {
+        int local_18 = (short)PsxRam.ReadU16(param_2) - (short)PsxRam.ReadU16(param_1);
+        if (local_18 < 0)
+        {
+            local_18 = -local_18;
+        }
+
+        if (0x7fff < local_18)
+        {
+            local_18 = 0xffff - local_18;
+        }
+
+        int local_14 = (short)PsxRam.ReadU16(param_2 + 4) - (short)PsxRam.ReadU16(param_1 + 4);
+        if (local_14 < 0)
+        {
+            local_14 = -local_14;
+        }
+
+        if (0x7fff < local_14)
+        {
+            local_14 = 0xffff - local_14;
+        }
+
+        int dy = (short)PsxRam.ReadU16(param_2 + 2) - (short)PsxRam.ReadU16(param_1 + 2);
+        int lVar1 = LibGte.SquareRoot0(local_18 * local_18 + dy * dy + local_14 * local_14);
+        return (short)lVar1;
+    }
     // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
     // THE DUPLICATE IS GONE. This file used to carry a second, incompatibly-shaped stub for this
     // address; the single implementation now lives in AnimCmdControl.cs, which owns the fuller
