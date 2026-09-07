@@ -789,13 +789,28 @@ internal sealed class VS_EXE_exe
     // 0x80110000 + 0x28000 = 0x80138000, far below the next region this port declares
     // (DAT_801C1000), so nothing is overlapped.
     //
+    // ENLARGED AGAIN, FROM 0x28000 TO 0xB1000, and for the reason the previous enlargement's own
+    // note predicted. 0x28000 is the largest SINGLE archive; FUN_80026AC0 loads SIX of them back to
+    // back, advancing `puVar7 = puVar7 + sectors * 0x800` after each. Once VsBootDiagnostic began
+    // seeding the roster the way SELECT.EXE does, the sixth read walked straight off the end and
+    // failed with "no PsxRam region covers destination 0x80138000" -- which is 0x80110000 + 0x28000
+    // exactly.
+    //
+    // THE NEW SIZE IS THE ORIGINAL'S OWN BOUND, not a guess: 0x801C1000 is the next address VS.EXE
+    // itself uses (SoundState.Dat801c1000Address, the ADPCM clip buffer), and 0x801C1000 -
+    // 0x80110000 = 0xB1000. That is how much room the original leaves between the two, so it is how
+    // much this staging area can have. For reference, the six largest character archives on the
+    // disc sum to 0xA6800 (BU.B 163840, DB.B 126976, RC.B 106496, GW.B 96256, NIN.B 94208, SB.B
+    // 94208), which fits inside it with 0xA800 to spare -- so the bound and the worst real roster
+    // agree, and neither is an assumption about the other.
+    //
     // STILL PARTIAL, and the same rule applies to the next reader as applied to this one: enlarge,
     // never shrink -- RamRegion updates the row rather than adding a second one -- and size it on
     // what that reader demonstrably reads. FUN_8005d25c and the FUN_80029xxx family are still
     // untransliterated and still reach this address.
     private const int Dat80110000Address = unchecked((int)0x80110000);
 
-    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0x28000);
+    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0xB1000);
 
     // GHIDRA: DAT_800c3cb8 @ 0x800C3CB8 (VS.EXE)
     // Two POLY_FT4 packets, contiguous (0x800C3CB8 and 0x800C3CB8 + 0x28 = 0x800C3CE0), CLOSED the

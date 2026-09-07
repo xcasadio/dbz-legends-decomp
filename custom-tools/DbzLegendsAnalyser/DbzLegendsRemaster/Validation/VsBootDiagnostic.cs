@@ -31,17 +31,52 @@ internal static class VsBootDiagnostic
         PsxSdkBridges.Install();
         PsxSdkBridges.ActivateVsExe();
 
-        // THE HANDOVER, seeded on purpose. SELECT.EXE writes a mode word at 0x801FF100 before it
-        // LoadExecs into VS.EXE -- BattleState.cs records that it takes one of three values in and
-        // 3/4/5 back out -- and booting VS.EXE on its own leaves it zero. A probe that measures a
-        // scenario the game never produces answers the wrong question, so the mode is an explicit
-        // argument here and is printed with the result. 0x801FF100 sits outside the bss range
-        // start() clears (0x8008D254..0x800C3DD4), so seeding it before start() survives.
+        // THE HANDOVER, AND WHY IT IS NOT ENOUGH TO SEED THE MODE WORD ALONE.
+        //
+        // This probe used to write only 0x801FF100 and leave the rest of the shared high-RAM block
+        // zero, and the note here said a probe that measures a scenario the game never produces
+        // answers the wrong question. It was still measuring one. Two whole pieces of the handover
+        // were missing, and each on its own is enough to stop the battle dead:
+        //
+        //   THE ROSTER. Roster.FUN_8005cbe0 reads six halfwords at 0x801FF102..0x801FF10C -- three
+        //   character ids per team, written by SELECT_EXE/CharacterSelect.cs at short indices
+        //   0x81..0x86 -- and every one of them being zero is why the battle context marks no slot,
+        //   why no slot record ever carries the 0x210 the substitution manager needs, and therefore
+        //   why no fighter's +0x144 is ever set and every fighter task stops at phase 1.
+        //
+        //   THE PAD REMAP TABLES. SLPS_003.55's own bootstrap FUN_8002165C is the only writer of
+        //   the fourteen masks at 0x801FF020 and the fourteen at 0x801FF03C. VS_EXE/PadInput.cs's
+        //   remap loop ORs those halfwords into the word the whole game reads, so with the tables
+        //   zero the remapped pad is zero no matter what the player presses -- and the entire
+        //   command decoder in FighterInput.cs reads only the remapped word.
+        //
+        // So the probe now runs the real bootstrap first, then writes the mode and the six ids the
+        // way SELECT.EXE does. 0x801FF000..0x801FF247 sits outside the bss range start() clears
+        // (0x8008D254..0x800C3DD4), so all of it survives into VS.EXE.
+        //
+        // Usage: --diag-vs [frames] [mode] [id0 id1 id2 id3 id4 id5]
+        // The six ids default to 1..6, which is a FIXTURE CHOICE, not a fact about the game: any
+        // value in the roster's own 1..38 range is a character, and the probe prints which ones it
+        // used so a run is reproducible.
+        SLPS_003_55.SLPS_003_55_exe.FUN_8002165c();
+
         int mode = -1;
         if (args.Length > 2 && int.TryParse(args[2], out int parsedMode))
         {
             mode = parsedMode;
-            PsxRam.WriteU16(unchecked((int)0x801FF100), (ushort)mode);
+        }
+
+        SharedHighRam.SHORT_ARRAY_801ff000[0x80] = (short)(mode < 0 ? 0 : mode);
+
+        short[] rosterIds = { 1, 2, 3, 4, 5, 6 };
+        for (int i = 0; i < 6; i++)
+        {
+            if (args.Length > 3 + i && short.TryParse(args[3 + i], out short parsedId))
+            {
+                rosterIds[i] = parsedId;
+            }
+
+            SharedHighRam.SHORT_ARRAY_801ff000[0x81 + i] = rosterIds[i];
         }
 
         FrameBaton.ResetHeadless(budget);
@@ -66,7 +101,8 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine(
             $"=== VS.EXE, budget {budget} frames, mode de relais 0x801FF100 = "
-            + (mode < 0 ? "non ensemence" : mode.ToString())
+            + (mode < 0 ? "0 (defaut)" : mode.ToString())
+            + $", roster {string.Join(",", rosterIds)}"
             + $", arret: {stopped} ===");
         Console.WriteLine();
         Console.WriteLine($"appels au repartiteur MANAGER  : {BattleManager.DiagManagerCalls}");

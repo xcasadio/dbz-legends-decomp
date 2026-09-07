@@ -557,7 +557,12 @@ internal sealed class SLPS_003_55_exe
     }
 
     // GHIDRA: FUN_8002165c @ 0x8002165C
-    private static void FUN_8002165c()
+    // `internal` rather than `private` so Validation/VsBootDiagnostic.cs can run it before booting
+    // VS.EXE on its own. That is not a convenience: this is the ONLY writer of the pad remap tables
+    // at 0x801FF020 / 0x801FF03C, and VS_EXE/PadInput.cs's remap loop turns every hardware button
+    // into nothing at all while they are zero, so a VS.EXE booted without it measures a machine
+    // whose pad is dead. The bootstrap runs it once for the whole game on the console.
+    internal static void FUN_8002165c()
     {
         SHORT_ARRAY_801ff000[0x00] = 1;
         SHORT_ARRAY_801ff000[0x01] = 0;

@@ -518,12 +518,28 @@ internal static class BattleManager
             uVar11 = (uint)PsxRam.ReadI32(iVar15 + 0x10);
         }
 
-        // 0x80056358 — the two pad overrides. Ghidra renders the first test as
-        // `(undefined *)(uVar11 & 0x80008000) == &DAT_80008000`, which is its way of writing the
-        // constant 0x8000: bit 15 up and bit 31 down. Both arms clear bits 12 and 13 and TOGGLE bit
-        // 14, so pressing the button flips the round body between its two arms. The second is
-        // gated on port 2 and on DAT_801FF100 saying the second side is human.
-        if ((uVar11 & 0x80008000) == 0x8000 && (uVar11 & 0x18000008) == 0)
+        // 0x80056358 — the two pad overrides. Both arms clear bits 12 and 13 and TOGGLE bit 14, so
+        // pressing the button flips the round body between its two arms. The second is gated on
+        // port 2 and on DAT_801FF100 saying the second side is human.
+        //
+        // THE GATE USED TO BE INVERTED HERE, and the comment that used to sit on this line argued
+        // for the inversion. Ghidra renders the test as
+        // `(undefined *)(uVar10 & 0x80008000) == &DAT_80008000`, and the earlier reading took
+        // `&DAT_80008000` for the constant 0x8000 -- "bit 15 up and bit 31 down". It is not: it is
+        // the ADDRESS 0x80008000, which is how Ghidra spells a bare 0x80008000 when it decides the
+        // value looks like a pointer. The image settles it, at 0x8005634C..0x8005635C:
+        //
+        //     lui v1,0x8000        v1 = 0x80000000
+        //     lw  a0,0x10(s2)      a0 = CtxFlags
+        //     ori v1,v1,0x8000     v1 = 0x80008000
+        //     and v0,a0,v1
+        //     bne v0,v1,0x800563d8     skip unless (CtxFlags & 0x80008000) == 0x80008000
+        //
+        // BOTH bits must be up, and FUN_80055EE0 sets both at arming (`| 0x8000a000`), so on the
+        // console this gate is OPEN for the whole round and the port had it shut for the whole
+        // round. This is the "inverted arm whose header comment describes the inversion" defect the
+        // repository's own notes list, caught by reading the bytes rather than the prose.
+        if ((uVar11 & 0x80008000) == 0x80008000 && (uVar11 & 0x18000008) == 0)
         {
             if ((PadInput.g_PadNewlyPressed[0] & 0x800) != 0)
             {
@@ -3136,7 +3152,8 @@ internal static class BattleManager
             if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0x180) != 0)
             {
                 DiagFun80026d98Calls++;
-                FUN_80026d98(param_1);
+                FighterSubstitution.RunFighterSubstitution(
+                    param_1, (uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest));
                 PsxRam.WriteI32(param_1 + BattleState.CtxRoundRequest,
                     (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffe7f));
             }
@@ -3462,16 +3479,14 @@ internal static class BattleManager
     });
 
     // GHIDRA: FUN_80026d98 @ 0x80026D98 (VS.EXE)
-    // BLOCKED: called once per frame from RunBattleManagerFrame, gated on CtxRoundRequest bits 0x100/0x180
-    // (both of which ARE proven and portable -- the gate itself is reproduced at the call site
-    // below), with the flag bits cleared unconditionally right after the call returns. NOT PORTABLE
-    // on this slice's own reconnaissance: it depends on FUN_80027340 (816 bytes, unported), which
-    // itself sits on a chain of four more missing functions. param_1 is kept so the call site needs
-    // no change when this closes.
-    private static void FUN_80026d98(int param_1)
-    {
-        _ = param_1;
-    }
+    // NO LONGER DECLARED HERE. It is CLOSED, in VS_EXE/FighterSubstitution.cs, under the name
+    // RunFighterSubstitution, together with the FUN_80027340 it depends on -- the one function in
+    // the whole overlay that writes a fighter's +0x144, which is the guard FighterTask's phase 1
+    // tests and was measured to fail on every frame.
+    //
+    // The stub that used to sit here took ONE parameter. The original takes two: `lw a1,0x2d60(s2)`
+    // at 0x8005BFDC loads CtxRoundRequest into a1 immediately before the `jal`, and the callee
+    // switches on four of its bits. The call site below now passes it.
 
     // =====================================================================================
     // THREE OF RunBattleManagerFrame's OWN CALLEES — per-slot HUD/portrait helpers, called from inside its
