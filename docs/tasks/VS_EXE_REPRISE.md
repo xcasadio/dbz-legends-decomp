@@ -314,52 +314,81 @@ LA PORTE DU BRAS D ATTAQUE DE L IA (+0x138 bit 0x10, FighterAi.cs:600):
  FUN_8004a9e8 (seul ecrivain du bit 0x10) appelee : 0   dernier local_10 : -1
 ```
 
-**LA CHAINE, DE L'OPCODE D'ATTAQUE VERS L'AMONT.** Chaque fleche est un seul
-ecrivain ou un seul appelant, verifie par `find-cross-references` :
+**LA CHAINE, CORRIGEE PAR LA MESURE.** Une version precedente de ce paragraphe
+donnait une chaine ou `FUN_8004c198` prenait toujours son dernier bras et ou le
+bit 0x20 passait par `FUN_8004bb70` puis `FUN_8004b33c`. **Les deux etaient
+faux**, et c'est instructif : ils avaient ete deduits d'un etat cumule
+(`+0x138 = 0x70040006`) plutot que comptes. Six investigations en contexte neuf,
+chacune attaquee par deux refutateurs, n'ont trouve **aucun defaut de
+translittération** sur six surfaces ; tout est soit du comportement fidele, soit
+une entree que le banc ne savait pas produire.
 
-1. La jauge veut une opcode 0x23..0x28. Seul `FUN_8002631c` en produit.
-2. Le ladder de l'IA qui l'appelle (`FighterAi.cs:600`) est garde par le **bit 0x10
-   du +0x138** du combattant.
-3. Le seul ecrivain du bit 0x10 de tout l'overlay est **`FUN_8004a9e8` @ 0x8004A9E8**
-   (`FighterAction.cs`). Mesure : appele **0 fois**.
-4. Il n'est atteint que depuis `FUN_8004b9cc` (0x8004B9CC), et seulement quand cette
-   fonction obtient un `local_10` de 0x23..0x25 — que lui donne `FUN_800261ec`, la
-   fonction fermee a la derniere session. Mesure : `FUN_8004b9cc` appelee **0 fois**.
-5. `FUN_8004b9cc` a **un seul appelant**, `FUN_8004c198` @ 0x8004C198 (l'etape 9.4 de
-   `FighterTask.cs:325`), et il n'y route que quand le **bit 0x20** est pose.
-6. Le seul ecrivain du bit 0x20 est **`FUN_8004b33c` @ 0x8004B33C**, atteint depuis
-   `FUN_8004bb70` quand la commande vaut 0x2A — et `FUN_8004c198` ne route vers
-   `FUN_8004bb70` que quand le **bit 0x08** est pose.
-7. Le bit 0x08 vient de `FighterCombat.FUN_8004a97c` @ 0x8004A97C.
+Ce que les compteurs disent vraiment :
 
-**OU CA S'ARRETE, MESURE.** `+0x138 cumules : 0x70040006` : les bits 1 et 2 sont
-poses, **et ni 0x08, ni 0x10, ni 0x20 ne le sont jamais**. Donc `FUN_8004c198`
-prend systematiquement son dernier bras, `bits 6 != 0` -> `FUN_8004bf50`, et le
-combattant tourne en rond dans l'etat « bits 1|2 » sans jamais entrer dans la
-sequence d'action.
+- `FUN_8004b098` est appele **997 a 1104 fois**, pas zero. Le masque
+  `+0x138 & 0x200FF` vaut zero a chaque visite ou presque ; les bits « jamais
+  clairs » sont `0x00000`. Le routeur n'est pas le blocage.
+- **La commande 0x2A est morte dans cette image.** Son unique porte est le bit
+  0x100000 du `+0x138` d'un combattant, et rien ne le pose : les onze
+  `lui rt,0x0010` du code de jeu sont tous des `and` sauf celui de 0x80056EFC, qui
+  fait `sw v0,0x10(s2)` — le mot de CONTEXTE, pas un combattant. Donc le maillon
+  `FUN_8004bb70 -> FUN_8004b33c -> bit 0x20` est une impasse, et le bit 0x20 aussi.
+- **Le vrai amorcage est le bras par defaut de `FUN_8004b098`** : commande
+  0x26/0x27/0x28 -> `FighterCombat.FUN_8004a97c` -> `+0x138` bit 0x08.
+- **La distance n'est pas en cause.** La formation de depart gravee en ROM a
+  0x80083DBA donne 320 unites de separation pour l'appariement par defaut, 480 au
+  maximum sur toutes les paires, contre un seuil de 0x2C1 = 705. La porte passe
+  des la premiere frame, sans aucun deplacement.
 
-**LA PROCHAINE QUESTION, precise :** qui pose et qui efface les bits 1 et 2 du
-+0x138 (`FighterAction.cs:58` et `:71` sont les ecrivains), et quelle entree fait
-sortir un combattant de cet etat. C'est la meme forme de question que la chaine de
-demarrage de round : un seul ecrivain, un seul appelant, une sonde par maillon.
-**Ne pas raisonner : les sondes de `FighterAction.cs` sont deja en place, en
-ajouter une par bras de `FUN_8004c198` et relancer.**
+**CE QUI A ETE OBTENU.** Le banc ne pouvait exprimer qu'un seul appui de deux
+frames. Or les deux evenements d'un combat sont a des centaines de frames l'un de
+l'autre et aucun ne se deplace : R1 doit tomber tot (la derogation de round a
+0x80056358), l'attaque bien plus tard (un combattant n'est pilote au pad qu'une
+fois le mot de contexte a ctx+0x10 porteur du bit 0x100000, pose par le bras de
+round a 0x80056EFC). Mesure : appels pad **0 a 500 frames, 4 a 550, 54 a 700, 120
+a 900**, tous avec le meme appui a la frame 300.
 
-Deux pistes secondaires si celle-la se ferme :
+`DBZ_PAD_SCRIPT` remplace donc l'appui unique par une suite `frame:masque` :
 
-1. **La distance.** `BattleCamera.cs:511` compare une separation a `0x2C1` et les
-   combattants demarrent aux bornes de l'arene.
-2. **Une vraie entree joueur.** `DBZ_PAD_PRESS_MASK` ne presse qu'un bouton pendant
-   deux frames. Une sequence d'attaque du decodeur de `FighterInput.cs` (la boussole
-   a huit points des boutons de face) n'a jamais ete jouee au banc.
+```
+DBZ_PAD_SCRIPT="300:800,540:1020,542:0" \
+  dotnet run --project custom-tools/DbzLegendsAnalyser/DbzLegendsRemaster -- --diag-vs 900
+```
 
-Le reste du travail utile n'est plus de la translitteration :
+En tapant RIGHT|TRIANGLE toutes les huit frames de 540 a 890, **la commande 0x26
+apparait 112 fois** — une valeur que ce portage n'avait jamais produite — et
+`FUN_8004a97c` s'execute **5 fois avec l'opcode 0x26**. La sequence d'action est
+amorcee pour la premiere fois.
 
-- la tache de scene n'a jamais tourne (`appels au repartiteur de scene : 0`), et le
-  diagnostic dit ou chercher : creation, enregistrement, ou parcours de liste ;
-- les 26 avertissements du build sont des globaux declares et jamais lus, chacun
-  attendant un lecteur qui est ailleurs ou nulle part ; les passer en revue une
-  fois dirait lesquels sont de vrais trous.
+**LE MAILLON SUIVANT, ET IL EST NET.** La jauge ne seme toujours pas, et la porte
+n'est plus dans `+0x138` :
+
+```
++0x134 cumules : 0x00000000   bit 31 (porte de la racine de jauge, etape 9.6) : JAMAIS VU
+```
+
+L'etape 9.6 (`FighterTask.cs`) n'appelle `FighterCombat.FUN_8004e758` que si
+`+0x134` bit 31 est pose. Sur 1788 cycles d'`UpdateFighter`, **le mot entier reste
+a zero** : ce n'est pas « le bit n'est pas pose », c'est « le mot n'est jamais
+ecrit ». Cote statique, aucun des 31 sites `sw rt,0x134(rs)` de l'image n'a de
+`lui rt,0x8000` a portee, et le portage ne contient qu'un effacement de ce bit
+(`SceneTransition.cs:1321`, masque 0x7fffffff) et aucun poseur.
+
+**A FAIRE ENSUITE, dans cet ordre :**
+
+1. Examiner les 31 sites `sw rt,0x134(rs)` un par un. Le balayage automatique ne
+   cherchait qu'un `lui 0x8000` a six instructions ; une valeur portant le bit 31
+   peut arriver autrement (copie d'un autre mot, `swl`/`swr`, base deja decalee).
+   Tant que ce n'est pas fait, « rien ne pose ce bit » est une mesure de CE
+   scenario, pas un absolu.
+2. Si le bit est bien mort, remonter d'un cran : ce que `FUN_8004a97c(0x26)` fait
+   ensuite, frame par frame, jusqu'a voir ou la sequence d'attaque s'interrompt.
+   Cinq executions sur 112 commandes, c'est peu : la coincidence exigee entre
+   « le routeur laisse passer » et « la commande vaut 0x26 » merite d'etre
+   comprise avant d'en tirer autre chose.
+3. `MatchFacingFaceThenOppositeFace` veut deux fronts de boutons de face
+   DIFFERENTS espaces de 1 a 4 frames, pour produire 0x28. Le script d'appui sait
+   maintenant l'exprimer ; personne ne l'a encore essaye.
 
 ---
 

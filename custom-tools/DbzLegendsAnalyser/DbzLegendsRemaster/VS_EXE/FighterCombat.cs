@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -688,8 +688,27 @@ internal static class FighterCombat
     // FUN_8004a108's own header note already closes that as a rendering artifact of a call site
     // passing an unread second argument — its real signature takes ONE parameter, so this port
     // calls it that way.
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probe only. This is the writer of +0x138 bit 0x08, the first bit of the
+    // action sequence the ki-gauge chain needs; DiagA97cOpcodes records which state opcodes ever
+    // reach it, because "called" and "called with an attack" are different facts.
+    internal static int DiagFun8004a97cCalls;
+
+    // The opcodes this port cares about run to 0x28, so a 32-bit map silently dropped every one of
+    // them. 64 bits, and the raw last value beside it.
+    internal static ulong DiagA97cOpcodes;
+
+    internal static int DiagA97cLastOpcode = -1;
+
     internal static void FUN_8004a97c(int param_1, int param_2)
     {
+        DiagFun8004a97cCalls++;
+        DiagA97cLastOpcode = param_2;
+        if (param_2 >= 0 && param_2 < 64)
+        {
+            DiagA97cOpcodes |= 1UL << param_2;
+        }
+
         FighterSetState(param_1, (ushort)param_2);
         PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) | 8);
         FUN_8004a108(param_1);

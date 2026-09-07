@@ -66,6 +66,26 @@ internal static class FighterTask
     // amount of pad decoding can reach a fighter.
     internal static uint DiagFighterFlagsEverSeen;
 
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Step 9.4 reaches
+    // FUN_8004b098 -- the one dispatcher that forwards an attack command word to
+    // FighterCombat.FUN_8004a97c, the writer of +0x138 bit 0x08 -- only when +0x138 & 0x200FF is
+    // zero. DiagRouter200ffAlways AND-accumulates that masked word across every visit, so a
+    // non-zero result names exactly which bits are NEVER clear at the moment a command arrives.
+    // Seeded to -1 so the first visit sets it rather than being ANDed against zero.
+    internal static int DiagRouter200ffAlways = -1;
+
+    internal static int DiagRouter200ffEverZero;
+
+    internal static int DiagFun8004b098Calls;
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probe only. Step 9.6 calls the gauge root FighterCombat.FUN_8004e758
+    // only when +0x134 bit 31 is set, so the cumulative OR of that word says whether the bit is
+    // ever raised at all -- the same question, one field over, that DiagFighterFlagsEverSeen
+    // answers for +0x138.
+    internal static uint DiagFighter134EverSeen;
+
     // The distinct non-negative command words step 9.3 has produced, counted by opcode. Sized to
     // cover every opcode this port has seen named (the largest is 0x2A).
     internal static readonly int[] DiagCommandWords = new int[0x40];
@@ -316,10 +336,18 @@ internal static class FighterTask
                                 // 9.4 — three-way, on +0x138: bits 8..14 pick FUN_8004cea0; failing
                                 // that, bits 0..7 or bit 17 pick FUN_8004c198; otherwise
                                 // FUN_8004b098. Only the first of the three is not handed iVar2.
+                                int diagMasked = PsxRam.ReadI32(iVar3 + 0x138) & 0x200ff;
+                                DiagRouter200ffAlways &= diagMasked;
+                                if (diagMasked == 0)
+                                {
+                                    DiagRouter200ffEverZero++;
+                                }
+
                                 if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x7f00) == 0)
                                 {
                                     if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x200ff) == 0)
                                     {
+                                        DiagFun8004b098Calls++;
                                         FUN_8004b098(iVar3, uStack_10, iVar2);
                                     }
                                     else
@@ -340,6 +368,7 @@ internal static class FighterTask
                                 // otherwise, at which point this reads another combatant's +0x138 and
                                 // +0x16A to decide whether to drop bit 20 of its OWN +0x138. That
                                 // asymmetry is the original's and is reproduced verbatim.
+                                DiagFighter134EverSeen |= (uint)PsxRam.ReadI32(iVar3 + 0x134);
                                 if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x80000000) != 0)
                                 {
                                     if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x20000000) == 0)

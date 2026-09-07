@@ -417,6 +417,21 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine();
         Console.WriteLine();
+        Console.WriteLine("  LE ROUTEUR DE L ETAPE 9.4 (il faut +0x138 & 0x200FF == 0 pour FUN_8004b098):");
+        Console.WriteLine(
+            $"   visites ou le masque valait zero : {FighterTask.DiagRouter200ffEverZero}"
+            + $"   bits JAMAIS clairs : 0x{(FighterTask.DiagRouter200ffAlways == -1 ? 0 : FighterTask.DiagRouter200ffAlways):X5}");
+        Console.WriteLine(
+            $"   FUN_8004b098 appelee : {FighterTask.DiagFun8004b098Calls}"
+            + $"   FUN_8004a97c (ecrivain du bit 0x08) appelee : {FighterCombat.DiagFun8004a97cCalls}"
+            + $"   opcodes vus : 0x{FighterCombat.DiagA97cOpcodes:X16}"
+            + $" (dernier 0x{FighterCombat.DiagA97cLastOpcode:X})");
+        Console.WriteLine(
+            $"   +0x134 cumules : 0x{FighterTask.DiagFighter134EverSeen:X8}"
+            + $"   bit 31 (porte de la racine de jauge, etape 9.6) : "
+            + ((FighterTask.DiagFighter134EverSeen & 0x80000000u) != 0 ? "VU" : "JAMAIS VU"));
+
+        Console.WriteLine();
         Console.WriteLine("  LA PORTE DU BRAS D ATTAQUE DE L IA (+0x138 bit 0x10, FighterAi.cs:600):");
         Console.WriteLine(
             $"   FUN_8004b9cc appelee : {FighterAction.DiagFun8004b9ccCalls}"
