@@ -1,4 +1,4 @@
-namespace DbzLegendsRemaster.VS_EXE;
+﻿namespace DbzLegendsRemaster.VS_EXE;
 
 // THE SHAPE OF A BATTLE — the offsets and shared globals every tranche-2 slice reads, declared once,
 // before any of them is written.
@@ -39,7 +39,14 @@ internal static class BattleState
     // GHIDRA: battleContext + 0x00 (VS.EXE)
     // LE MOT D'ETAT du gestionnaire, valeurs 0..3. Le repartiteur entier de LAB_80055e3c est
     // `**(ushort **)(DAT_8008d16c + 8)`; `sh v1,0x0(s0)` @ 0x80055F38 y ecrit 1 et `sh v0,0x0(s1)`
-    // @ 0x80057A24 y ecrit 3. AUCUN des quatre corps n'y ecrit 2 — voir la note de BattleManager.
+    // @ 0x80057A24 y ecrit 3.
+    //
+    // THE WRITER OF 2 HAS BEEN FOUND, and this note used to say there was none. It is
+    // FUN_8005a5b0, at `sh v1,0x0(s2)` @ 0x8005AE04, gated behind a FULL-TEAM WIPE -- every slot of
+    // one team dead -- which is why inspecting the four dispatcher bodies never turned it up. The
+    // old wording, "AUCUN des quatre corps n'y ecrit 2", was a claim about the code that had been
+    // READ, written as a claim about the game; this port has now made that mistake five times, and
+    // it is the same shape every time.
     internal const int CtxState = 0x00;
 
     // GHIDRA: battleContext + 0x10 (VS.EXE)
@@ -58,6 +65,42 @@ internal static class BattleState
     internal const int CtxActingSlotTeamA = 0x14;
 
     internal const int CtxActingSlotTeamB = 0x16;
+
+    // GHIDRA: battleContext + 0x20 (VS.EXE)
+    // TWELVE PER-SLOT SUB-RECORDS OF 0x1C0 BYTES, and this one is closed by ARITHMETIC rather than
+    // by reading a meaning into it.
+    //
+    // FUN_8005a5b0 sets `puVar20 = ctx + 0x20` once, before its top gate (`addiu s5,s2,0x20`), and
+    // then walks it with a stride of 0xE0 HALFWORDS -- 0x1C0 bytes -- twelve times. The closure is
+    // that 0x20 + 12 * 0x1C0 = 0x20 + 0x1500 = 0x1520, which lands exactly on CtxFighterSlots
+    // below. The array fills the whole previously-unclaimed gap between the acting-slot cursors and
+    // the fighter-slot pointers, with nothing left over. An off-by-one stride or count would not
+    // land on a named field.
+    //
+    // THIS IS THE BASE THREE OTHER FUNCTIONS WERE MISSING. BattleManager's note on FUN_80057a7c
+    // says its param_1 "is a per-slot sub-record the caller reaches by an offset the still-blocked
+    // caller doesn't expose"; FUN_80058120 works on the same record; FUN_80058338's own note
+    // independently derives `ctx + slot * 0x1C0 + 0x20` for the numeric readout it draws. All three
+    // were describing this array from the inside without being able to name where it starts.
+    internal const int CtxSlotSubRecords = 0x20;
+
+    internal const int CtxSlotSubRecordStride = 0x1C0;
+
+    // Sub-record fields, only where the code PROVES the offset. Meanings are deliberately not
+    // asserted -- these are positions, and the bits below are recorded as observations at their
+    // sites rather than given names here.
+    //   +0x00  a flags halfword. FUN_8005a5b0 sets bit 0x08 on the acting slot and clears it on
+    //          every other slot of the same team; bit 0x80 selects which slots get an ordinal at
+    //          +0x14; bit 0x200 is cleared alongside CtxSlotRecords bit 0x1000.
+    //   +0x14  a halfword written three ways in one call: the literal 5 for slots 0..5 and 9 for
+    //          slots 6..11, then overwritten with a sequential 0,1,2 (restarting at 6 for the
+    //          second team) for at most three slots per team, acting slot first.
+    //   +0x20  the numeric-readout sub-record FUN_80058338 splits into digits.
+    internal const int SubRecordFlags = 0x00;
+
+    internal const int SubRecordOrdinal = 0x14;
+
+    internal const int SubRecordNumericReadout = 0x20;
 
     // GHIDRA: battleContext + 0x1520 (VS.EXE)
     // TWELVE fighter slots, four bytes each — but only six ever hold a fighter. FUN_800511A8
@@ -95,6 +138,35 @@ internal static class BattleState
     // GHIDRA: battleContext + 0x302C (VS.EXE)
     // THE CENTRAL GAUGE, bounded to +/-30000 — the tug-of-war bar between the two teams, and the
     // last field of the context (0x302C + 4 = 0x3030, inside the 0x3034 the task reserves).
+    // GHIDRA: battleContext + 0x2D60 (VS.EXE)
+    // THE END-OF-ROUND REQUEST WORD, a full 32-bit field, filled by one function and drained by the
+    // same call that reads it. BattleManager already documented this offset from the CALLER's side
+    // -- "zeroed when the match is armed, later OR'd with 3" -- and FUN_8005a5b0 shows the other
+    // half: bit 0 runs the team-A tally, bit 1 the team-B tally, bit 2 gates the win/loss compute
+    // and is cleared unconditionally at its end, bits 0x8/0x10/0x20/0x40/0x80 carry that compute's
+    // outcome, and bits 0x100/0x180 gate the call to FUN_80026d98 and are cleared right after it
+    // runs. Nothing survives the call that set it.
+    internal const int CtxRoundRequest = 0x2D60;
+
+    // GHIDRA: battleContext + 0x2DC4 .. + 0x2DCA (VS.EXE)
+    // THE TALLY ICON, four halfwords that drive one small numeric HUD element. Each is named from
+    // what the code does to it, not from what it might mean on screen:
+    //   +0x2DC4  the running maximum found by scanning the twelve slots; compared > 9 at the end to
+    //            decide whether a second digit primitive is submitted.
+    //   +0x2DC6  set to 0x40 whenever a new maximum is found, decremented by one per call, and
+    //            reaching zero is what advances the state below.
+    //   +0x2DC8  an even phase counter, tested against 0, 4 and 0x10, stepped by +-2, and split at
+    //            threshold 9 to pick which half of the keyframe table an interpolation reads.
+    //   +0x2DCA  the state selector: bit 2 gates the whole animation, bit 1 selects the instant
+    //            show, bit 0 selects growing, bit 3 (only when bit 0 is clear) selects shrinking.
+    internal const int CtxTallyValue = 0x2DC4;
+
+    internal const int CtxTallyHold = 0x2DC6;
+
+    internal const int CtxTallyPhase = 0x2DC8;
+
+    internal const int CtxTallyState = 0x2DCA;
+
     internal const int CtxCentralGauge = 0x302C;
 
     internal const int CtxCentralGaugeLimit = 30000;
