@@ -201,6 +201,69 @@ la fonction qui les lit est exactement ce que le socle existe pour eviter de
 rater. La porter sans eux reviendrait a inventer des noms pour des offsets, ce
 que le mandat refuse.
 
+## `FUN_8005a5b0`: la reconnaissance, et pourquoi elle precede le portage
+
+C'est le dernier verrou *portable* (libsnd est du travail SDK, pas de la
+translitteration). 8500 octets, **1078 lignes** decompilees, quatre appelants
+(`FUN_80055f94` deux fois dont une par `LAB_80057794`, `FUN_800578e0`,
+`FUN_80057a40`) et seulement cinq appelees: `FUN_80058338`, `FUN_80026d98`,
+`FUN_80057a7c`, `FUN_80058120` (deux fois) et `AddPrim` (douze fois).
+
+**Signature: `void FUN_8005a5b0(short *param_1)`.** Un seul parametre, une grande
+structure. C'est une machine a etats par combattant, pas un rendu: les douze
+`AddPrim` sont la queue.
+
+### Le piege a desamorcer avant tout le reste
+
+Ghidra declare un local `auStack_100b8[32768]` — **64 Ko de pile**. Il n'existe
+pas. Le prologue reel, lu en octets a `0x8005A5B0`:
+
+```
+3C02800B  lui   v0,0x800B
+9442305A  lhu   v0,0x305A(v0)     ; DAT_800b305a, la porte d'entree
+27BDFF38  addiu sp,sp,-0xC8       ; la trame fait 0xC8 = 200 octets
+```
+
+C'est un artefact du decompilateur. Le seul vrai tableau local est
+`local_b8[76]`. Quelqu'un qui porterait depuis le listing allouerait un tampon de
+64 Ko et modeliserait une structure qui n'existe pas — exactement la classe
+d'erreur que cette session a corrigee trois fois.
+
+### Ce qui est deja lisible de la structure
+
+- `param_1 + 8` — un mot de drapeaux `uint`. Bits vus: `0x10000000` (garde une
+  branche entiere), `0x4000`, et `0x10000600` pose en bloc.
+- `param_1[0xad8 + n * 10]`, **douze entrees de dix shorts** — l'enregistrement
+  par combattant. Les bornes sont explicites et donnent le sens des champs:
+
+  | champ | borne | lecture |
+  |---|---|---|
+  | `+0` | drapeaux | bits `0x200`, `0x81`, `0x1000` |
+  | `+1` | `[0, 0x640]` | 1600 |
+  | `+2` | `[0, 16000]` | |
+  | `+3` | `[0, 20000]` | |
+  | `+5` | `[0, 99]` | un compteur a deux chiffres |
+
+- `param_1[0xa90 + n * 2]` — **un pointeur par entree** vers un bloc de tache:
+  le code va chercher `*(bloc + 8) + 0x138` et y pose `0x4000000`. C'est la meme
+  forme `+0x08 = contexte` que `SoundState` a etablie pour la tache son.
+- `param_1[0x16b2]` / `param_1[0x16b3]`, et une table de `ushort` a l'octet
+  `0x2c14` indexee par la meme entree.
+- L'entree entiere est gardee par `(DAT_800b305a & 1) == 0`, le meme drapeau
+  global que `ExecuteAnimStreamBatch` consulte.
+
+### L'ordre a suivre
+
+**`BattleState.cs` d'abord, la machine ensuite** — exactement l'ordre que ce
+document a prescrit pour la tache son, et pour la meme raison. Porter 1078 lignes
+qui indexent `0xad8`, `0xa90`, `0x16b2` et `0x2c14` sans avoir nomme ces offsets
+reviendrait a inventer des noms au fil de l'eau, ce que le mandat refuse, et a
+les inventer differemment a chaque site.
+
+La structure est grande (au-dela de `0x2c14` shorts, soit plus de 22 Ko), donc
+`BattleState.cs` doit declarer **ce que cette fonction touche**, pas la structure
+entiere, et le dire.
+
 ## Ce qui attend toujours l'utilisateur
 
 - **Pousser** le sous-module `PsxSdkMonogame` puis le superprojet. Rien n'a ete
