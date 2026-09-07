@@ -915,16 +915,46 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
-    // BLOCKED: 96 bytes, out of this slice. AnimCmdEffects.cs already carries an independent
-    // private stub for this SAME address (called there from AnimCmd_EffSet's re-arm path with a
-    // different argument shape); that stub is local to that file's class and not reachable from
-    // here, so this is FighterCombat's own placeholder, called as FighterSetState actually calls
-    // it: (fighter, *(int*)(*(int*)(fighter+0x148)+0x38), state).
-    private static void FUN_80053970(int param_1, int param_2, int param_3)
+    // CLOSED (was BLOCKED) -- 96 bytes, 7 call sites total, two of them in THIS class
+    // (FighterSetState above, and FUN_80043598 below). AnimCmdEffects.cs carries an INDEPENDENT
+    // private stub for this SAME address, still a stub (called there from AnimCmd_EffSet's re-arm
+    // path); that stub is local to that file's own class and not reachable from here, so this
+    // remains FighterCombat's own copy of the body rather than a shared one -- see the sweep note
+    // on cross-file duplicates this project already tracks. Ghidra's own decompilation closes the
+    // body without ambiguity:
+    //
+    //   *(ushort*)(param_1+4) = 0;
+    //   if (param_2 >= 0) param_2 = param_2 + *(int*)param_1;
+    //   uint table = *(uint*)((param_3 & 0xffff) * 4 + param_2);
+    //   *(int*)(param_1+8) = (int)table;
+    //   if (table < 0x80000000) *(int*)(param_1+8) = (int)(table + *(int*)param_1);
+    //   *(ushort*)(param_1+6) = 0;
+    //
+    // param_1 is a task workspace -- FighterSetState's own fighter, or FUN_80043598's own freshly
+    // built attack-event record below. param_2 is a table BASE: either an absolute address (as
+    // FUN_80043598 passes it, unaffected by the `param_2 >= 0` add since *param_1 would only be
+    // folded in for a relative offset) or a value ADDED to param_1's own +0 word first when
+    // non-negative (as FighterSetState passes it: *(int*)(*(int*)(fighter+0x148)+0x38), a table
+    // pointer, always non-negative, so the add always fires there). param_3 selects a 4-byte entry
+    // in that table by its own low 16 bits. Neither table has a name in this port.
+    private static void FUN_80053970(int param_1, int param_2, uint param_3)
     {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
+        PsxRam.WriteU16(param_1 + 4, 0);
+
+        if (param_2 >= 0)
+        {
+            param_2 += PsxRam.ReadI32(param_1);
+        }
+
+        uint table = (uint)PsxRam.ReadI32((int)((param_3 & 0xffff) * 4) + param_2);
+        PsxRam.WriteI32(param_1 + 8, unchecked((int)table));
+
+        if (table < 0x80000000)
+        {
+            PsxRam.WriteI32(param_1 + 8, unchecked((int)(table + (uint)PsxRam.ReadI32(param_1))));
+        }
+
+        PsxRam.WriteU16(param_1 + 6, 0);
     }
 
     // GHIDRA: FUN_80026424 @ 0x80026424 (VS.EXE)
@@ -1911,5 +1941,321 @@ internal static class FighterCombat
         }
 
         return local_14 >> 0x1a;
+    }
+
+    // =====================================================================================
+    // THE ATTACK-EVENT TASK -- the OTHER path into FUN_8004ee48 (see this file's own header note
+    // on that function: its one caller was, until now, an unanalyzed stretch of code Ghidra
+    // previewed as UndefinedFunction_800429a8). FUN_80043598 CREATES the task; FUN_800429a8 IS
+    // its per-frame entry; FUN_8004ee48 above is what it eventually calls to actually apply the
+    // attack. FUN_80043598's own call site closes a piece of FUN_8004ee48's own open evidence too:
+    // that function's header note left its own param_1+0x3c/+0x8 "attacker" chain as "reproduced
+    // exactly as written" without saying what +0x3c holds; FUN_80043598 below stamps it with
+    // `TaskSystem.g_CurrentTask` at CREATION time, i.e. whatever task was running the anim-stream
+    // interpreter (AnimCmd_ChDanSet) that asked for this attack-event -- the attacking fighter's
+    // own task, +8 of which FUN_8004ee48 already documents as "the ACTING fighter".
+    //
+    // proposedNames (see this task's own report, not applied to the code): FUN_80043598 as
+    // something like CreateAttackEventTask, FUN_800429a8 as UpdateAttackEventTask -- the evidence
+    // that closes this: FUN_80043598 is AnimCmd_ChDanSet's own "clear" arm's registration call
+    // (opcode 40, `ch_dan_set`), builds a 0xC0-byte workspace from two RESOLVED TARGETS plus a
+    // type halfword and a flag byte, and its entry (FUN_800429a8) redraws that workspace every
+    // frame (FUN_80052db4) until its own +0x78 sign bit is set, at which point it hands the whole
+    // workspace to FUN_8004ee48 -- THE gauge-contribution seed this whole wave exists to reach --
+    // then deletes its own task (TaskSystem.DeleteTask, list 0xb).
+    // =====================================================================================
+
+    // GHIDRA: FUN_800429a8 @ 0x800429A8 (VS.EXE)
+    private const int FUN_800429a8_Address = unchecked((int)0x800429A8);
+
+    // GHIDRA: FUN_80043598 @ 0x80043598 (VS.EXE)
+    // 312 bytes. One caller: AnimCmd_ChDanSet's "clear" arm in VS_EXE/AnimCmdEffects.cs
+    // (`FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);`, opcode 40's own two resolved
+    // targets, word 2 sign-extended, and the flag byte).
+    //
+    // DUPLICATE DECLARATION, NOT FIXED HERE. AnimCmdEffects.cs's own call site above is
+    // UNQUALIFIED, so it keeps binding to that file's own private stub of this same address --
+    // this port's own duplicate-symbol defect, flagged in this slice's own report rather than
+    // fixed, since AnimCmdEffects.cs is not this file's to edit (see this file's own top-of-file
+    // ownership note). This IS the real body; AnimCmdEffects.cs's copy is dead code from its own
+    // call site's perspective until that file's own stub is removed by whoever owns it.
+    //
+    // Two callees: FUN_80053330 (TaskSystem.CreateTask, already ported) and FUN_80053970 (this
+    // file's own copy above, now closed). Creates the task (id 0, list 0xb, 0xC0-byte workspace,
+    // entry FUN_800429a8, inserted at g_TaskListTail[0xb]); on success, resolves the node's own +8
+    // workspace and stamps it: param_1's three halfwords onto +0x40/+0x42/+0x44, param_2's first
+    // two onto +0x48/+0x4a (its third, param_2[2], stays in `targetZ` and is written to +0x4c only
+    // at the very end -- exactly where Ghidra's own decompilation places that store, kept literal
+    // rather than moved up next to the other two), the CURRENT task (the caller's own task, i.e.
+    // the ATTACKING fighter's, per this section's own header note) onto +0x3c, param_3 onto +0x7c,
+    // a fixed 0x4000000 onto +0x78 (bit 26 -- NOT the sign bit FUN_800429a8 tests before calling
+    // FUN_8004ee48, so that call never fires on the task's first frame), and a fixed table of
+    // twelve intra-workspace pointers (+0xc, +0x80, +0x84, +0x88, +0x8c, +0x90, +0x94, +0x9c,
+    // +0xa0, +0xa4, +0xa8) whose targets Ghidra's own arithmetic gives directly -- no further
+    // meaning asserted for what each slot is FOR, only that each points where the original points
+    // it. Finally calls FUN_80053970(workspace, &PTR_DAT_800217f0, param_4) to seed +8 from that
+    // table, exactly as FUN_80053970's own header above documents.
+    internal static void FUN_80043598(int param_1, int param_2, short param_3, uint param_4)
+    {
+        TaskSystem.RegisterCallback(FUN_800429a8_Address, FUN_800429a8);
+
+        int taskNode = TaskSystem.CreateTask(
+            FUN_800429a8_Address, 0, 0xb, 0xc0, 0, TaskSystem.g_TaskListTail[0xb]);
+
+        if (taskNode != 0)
+        {
+            int workspace = PsxRam.ReadI32(taskNode + 8);
+
+            PsxRam.WriteU16(workspace + 0x40, PsxRam.ReadU16(param_1));
+            PsxRam.WriteU16(workspace + 0x42, PsxRam.ReadU16(param_1 + 2));
+            PsxRam.WriteU16(workspace + 0x44, PsxRam.ReadU16(param_1 + 4));
+            PsxRam.WriteU16(workspace + 0x48, PsxRam.ReadU16(param_2));
+            PsxRam.WriteU16(workspace + 0x4a, PsxRam.ReadU16(param_2 + 2));
+
+            int currentTask = TaskSystem.g_CurrentTask;
+            ushort targetZ = PsxRam.ReadU16(param_2 + 4); // param_2[2] -- write deferred to +0x4c below, exactly as decompiled
+
+            PsxRam.WriteU16(workspace + 0x7c, unchecked((ushort)param_3));
+            PsxRam.WriteI32(workspace + 0x3c, currentTask);
+            PsxRam.WriteI32(workspace + 0x78, 0x4000000);
+            PsxRam.WriteI32(workspace + 0xc, workspace + 0x80);
+            PsxRam.WriteI32(workspace + 0x80, workspace + 0x10);
+            PsxRam.WriteI32(workspace + 0x84, workspace + 0x40);
+            PsxRam.WriteI32(workspace + 0x88, workspace + 0x48);
+            PsxRam.WriteI32(workspace + 0x8c, workspace + 0x60);
+            PsxRam.WriteI32(workspace + 0x90, workspace + 0x78);
+            PsxRam.WriteI32(workspace + 0x94, workspace + 0x7e);
+            PsxRam.WriteI32(workspace + 0x9c, workspace + 0x70);
+            PsxRam.WriteI32(workspace + 0xa0, workspace + 0x50);
+            PsxRam.WriteI32(workspace + 0xa4, workspace + 0x58);
+            PsxRam.WriteI32(workspace + 0xa8, workspace + 0x7c);
+            PsxRam.WriteU16(workspace + 0x4c, targetZ);
+
+            // GHIDRA: PTR_DAT_800217f0 @ 0x800217F0 (VS.EXE) -- AnimCmdEffects.cs already declares
+            // a private const for this exact address (PTR_DAT_800217f0Address) for its own,
+            // independent call into its own stub of FUN_80053970; that const is private to that
+            // file's own class and not reachable from here. Only the ADDRESS is used below, as a
+            // table base FUN_80053970 adds an offset onto -- never its contents -- so a second
+            // numeric literal for the same immutable address duplicates no STATE the way a second
+            // DAT_ storage cell would; there is nothing here for two declarations to disagree
+            // about. Raw literal per rule 1, rather than a second same-named private const.
+            FUN_80053970(workspace, unchecked((int)0x800217F0), param_4);
+        }
+    }
+
+    // GHIDRA: FUN_800429a8 @ 0x800429A8 (VS.EXE)
+    // 592 bytes, 7 callees. Never called directly anywhere in the image (Ghidra's own
+    // cross-reference for this function shows exactly one incoming reference, and its type is
+    // PARAM, not CALL: FUN_80043598 above takes its ADDRESS and hands it to CreateTask as the
+    // task's entry point). This is the task's own per-frame body, dispatched purely through
+    // TaskSystem's callback table -- the same mechanism FighterTask.UpdateFighter,
+    // BattleScene.UpdateBattleScene and PrimitivePools.ResetPrimitivePoolCursors already use in
+    // this port, always through TaskSystem.RegisterCallback's own zero-argument Action delegate.
+    //
+    // EVERY FRAME (while the anim VM is not globally paused, AnimVm.DAT_800b305a bit 0 clear):
+    // sets the workspace's own +0x78 bit 1; computes an orientation byte at +0x7e from its own
+    // +0x4c/+0x4a fields (FUN_80045b70, BLOCKED below -- an unnamed table lookup); calls
+    // FUN_800539d0(workspace) -- this file's own already-ported keyframe-stream scanner; recomputes
+    // +0x7e the SAME way a second time (kept literal, not de-duplicated, exactly as Ghidra's own
+    // decompilation renders it twice); and folds the freshly recomputed +0x7e's own top two bits
+    // into `param_1` for the draw call below.
+    //
+    // EVERY FRAME REGARDLESS: draws the workspace via FUN_80052db4 (BLOCKED below -- a "primitive
+    // pool" call PrimitivePools.cs's own header note already names in passing), passing +0x28, a
+    // sign-extended position delta computed from +0x40 against the live camera-offset scratchpad
+    // triple (Scratchpad._DAT_1f8000b4/_bc -- the same idiom BattleManager.cs's own
+    // FUN_80057a7c already establishes for this exact `(int)(((uint)a-(uint)b)*0x10000)>>0x10`
+    // sign-extend shape), +0x42 as a plain signed halfword, +0x74, `param_1`'s own top bits, and a
+    // run of literal constants (a 0x200 scale pair, three 0x80 RGB-neutral bytes) that match a
+    // sprite-draw call's usual shape.
+    //
+    // DEVIATION -- `param_1` ITSELF. Ghidra infers a first parameter from a0's value at function
+    // entry, but per the incoming-reference evidence above, this function's only real "caller" is
+    // the task dispatcher, which -- like every other task callback in this port -- invokes it with
+    // NO real argument. a0 therefore holds whatever the PREVIOUS call left behind on the console:
+    // genuine uninitialized register content, not a value any caller supplies. It is read in
+    // exactly one place (the draw call's own 5th argument, `param_1 >> 0x10`, and only when the
+    // anim VM is globally paused so the block that would otherwise overwrite it never runs), and
+    // FUN_80052db4 is itself a BLOCKED stub that discards every argument, so the value can never be
+    // observed downstream. Modelled as a local starting at 0 -- the same DEVIATION posture this
+    // file already takes for FUN_8004d0fc's own uninitialized local: a defined value only because
+    // C# requires one, not a claim about what the console actually held there.
+    //
+    // ONLY WHEN THE VM IS NOT PAUSED, AFTERWARD: when +0x78's own SIGN BIT is set (never true on
+    // the task's first frame -- FUN_80043598 above seeds +0x78 with 0x4000000, bit 26, not bit
+    // 31), calls FUN_8004ee48(workspace) above -- THE call this whole wave exists to reach. A -1
+    // result leaves the record as is; a 0 result jumps straight to LAB_80042bd0 (self-deletion,
+    // below), skipping the reposition block AND the trailing +0x78 sign-bit clear; any OTHER
+    // result rerolls the workspace's own +0x4a/+0x4c position pair through two rand() draws (each
+    // reduced mod 0xc00 with a -0x600 bias, matching this file's own established
+    // "int/short-truncating idiom stays literal" posture elsewhere) and calls FUN_800461fc
+    // (BLOCKED below -- a GTE rotate/translate) on the result, then always clears +0x78's own sign
+    // bit.
+    //
+    // FINALLY: unless the workspace's own +4 halfword is nonzero, falls into LAB_80042bd0 and
+    // calls TaskSystem.DeleteTask(TaskSystem.g_CurrentTask, 0xb) -- the task deletes ITSELF, on
+    // its own list. The `goto` is the original's own control flow and is kept literal: the
+    // FUN_8004ee48-returned-0 path reaches this same deletion call WITHOUT running the +0x78
+    // sign-bit clear or the +4 gate the fall-through path runs first.
+    private static void FUN_800429a8()
+    {
+        int param_1 = 0;
+
+        int iVar4 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
+
+        if ((AnimVm.DAT_800b305a & 1) == 0)
+        {
+            PsxRam.WriteI32(iVar4 + 0x78, PsxRam.ReadI32(iVar4 + 0x78) | 2);
+
+            byte bVar1 = FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
+            PsxRam.WriteU8(iVar4 + 0x7e, (byte)(bVar1 & 0x3f));
+
+            FUN_800539d0(iVar4);
+
+            byte uVar2 = FUN_80045b70((short)PsxRam.ReadU16(iVar4 + 0x4c), (short)PsxRam.ReadU16(iVar4 + 0x4a));
+            PsxRam.WriteU8(iVar4 + 0x7e, uVar2);
+
+            param_1 = unchecked((PsxRam.ReadU8(iVar4 + 0x7e) & 0xc0) << 0x18);
+        }
+
+        FUN_80052db4(
+            PsxRam.ReadI32(iVar4 + 0x28),
+            (int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10,
+            (short)PsxRam.ReadU16(iVar4 + 0x42),
+            (int)(((uint)PsxRam.ReadU16(iVar4 + 0x44) - (uint)Scratchpad._DAT_1f8000bc) * 0x10000) >> 0x10,
+            param_1 >> 0x10,
+            0,
+            0,
+            0x200,
+            0x200,
+            PsxRam.ReadI32(iVar4 + 0x74),
+            0,
+            0,
+            0,
+            0,
+            0x80,
+            0x80,
+            0x80,
+            // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE) -- already declared, PRIVATE, in
+            // VS_EXE_exe.cs ("the depth-projected table offset FUN_800411b4 computes every
+            // frame"). Not reachable from this file, and not readable through PsxRam either: like
+            // the rest of the 0x1F8000xx scratchpad, it is modelled as a plain C# storage cell
+            // rather than a PsxRam-backed address (see Scratchpad.cs's own header), so a raw
+            // PsxRam read here would not agree with the live value anyway. FUN_80052db4 discards
+            // every argument (BLOCKED stub, below), so the gap has no observable effect.
+            0);
+
+        if ((AnimVm.DAT_800b305a & 1) != 0)
+        {
+            return;
+        }
+
+        if (PsxRam.ReadI32(iVar4 + 0x78) < 0)
+        {
+            int iVar3 = FUN_8004ee48(iVar4);
+
+            if (iVar3 != -1)
+            {
+                if (iVar3 == 0)
+                {
+                    goto LAB_80042bd0;
+                }
+
+                int rand1 = Kernel.rand();
+                PsxRam.WriteU16(iVar4 + 0x4a, unchecked((ushort)(
+                    (short)PsxRam.ReadU16(iVar4 + 0x4a) - 0x600 + (short)rand1 + (short)(rand1 / 0xc00) * -0xc00)));
+
+                int rand2 = Kernel.rand();
+                PsxRam.WriteU16(iVar4 + 0x4a, (ushort)(PsxRam.ReadU16(iVar4 + 0x4a) & 0xfff));
+
+                PsxRam.WriteU16(iVar4 + 0x4c, unchecked((ushort)(
+                    (short)PsxRam.ReadU16(iVar4 + 0x4c) - 0x600 + (short)rand2 + (short)(rand2 / 0xc00) * -0xc00)));
+
+                short local_18 = (short)PsxRam.ReadU16(iVar4 + 0x7c);
+                PsxRam.WriteU16(iVar4 + 0x4c, (ushort)(PsxRam.ReadU16(iVar4 + 0x4c) & 0xfff));
+                short local_16 = 0;
+                short local_14 = 0;
+
+                FUN_800461fc(local_18, local_16, local_14, iVar4 + 0x48, iVar4 + 0x60);
+            }
+
+            PsxRam.WriteI32(iVar4 + 0x78, PsxRam.ReadI32(iVar4 + 0x78) & 0x7fffffff);
+        }
+
+        if (PsxRam.ReadU16(iVar4 + 4) != 0)
+        {
+            return;
+        }
+
+    LAB_80042bd0:
+        TaskSystem.DeleteTask(TaskSystem.g_CurrentTask, 0xb);
+    }
+
+    // GHIDRA: FUN_80052db4 @ 0x80052DB4 (VS.EXE)
+    // BLOCKED: 1404 bytes, out of this slice -- the "primitive pool" drawer
+    // VS_EXE/PrimitivePools.cs's own header note already names in passing ("FUN_80052DB4
+    // @ 0x80052DB4 and its neighbours, which walk +0x04/+0x24/+0x44 for slot 1"). FUN_800429a8's
+    // only call to it above passes the attack-event workspace's own position fields (+0x28, +0x40,
+    // +0x42, +0x44, +0x74), the frame's own rotation byte pair (folded into the caller's own
+    // `param_1`), and a run of literal constants (a 0x200 scale pair, three 0x80 RGB-neutral
+    // bytes) that match a sprite-draw call's usual shape; drawing itself is out of this slice.
+    // Kept as a precise no-op so the caller's own argument computation -- real PsxRam reads with
+    // no side effects of their own -- still runs exactly where the original runs it.
+    private static void FUN_80052db4(int param_1, int param_2, int param_3, int param_4, int param_5,
+        int param_6, int param_7, int param_8, int param_9, int param_10, int param_11, int param_12,
+        int param_13, int param_14, int param_15, int param_16, int param_17, int param_18)
+    {
+        _ = param_1;
+        _ = param_2;
+        _ = param_3;
+        _ = param_4;
+        _ = param_5;
+        _ = param_6;
+        _ = param_7;
+        _ = param_8;
+        _ = param_9;
+        _ = param_10;
+        _ = param_11;
+        _ = param_12;
+        _ = param_13;
+        _ = param_14;
+        _ = param_15;
+        _ = param_16;
+        _ = param_17;
+        _ = param_18;
+    }
+
+    // GHIDRA: FUN_80045b70 @ 0x80045B70 (VS.EXE)
+    // BLOCKED: 388 bytes, out of this slice. Ghidra's own signature is `undefined1
+    // FUN_80045b70(ushort param_1, short param_2)`; FUN_800429a8's two calls above pass its own
+    // workspace's own +0x4c (param_1) and +0x4a (param_2) fields, both read as signed halfwords
+    // (`lh`), to compute an orientation/facing byte -- a table lookup (&DAT_80082e44, then a
+    // second table at an offset this slice does not resolve) this port does not chase further.
+    // Kept as a precise no-op returning 0.
+    private static byte FUN_80045b70(short param_1, short param_2)
+    {
+        _ = param_1;
+        _ = param_2;
+        return 0;
+    }
+
+    // GHIDRA: FUN_800461fc @ 0x800461FC (VS.EXE)
+    // BLOCKED: 228 bytes, out of this slice. Ghidra's own signature is `void
+    // FUN_800461fc(SVECTOR *param_1, ushort *param_2, VECTOR *param_3)` -- a GTE rotate/translate
+    // (PushMatrix, RotMatrix, SetTransMatrix, SetRotMatrix, RotTrans, PopMatrix), the same
+    // PsxSdkMonogame GTE family VS_EXE/FileIo.cs's own scratchpad note already flags for a later
+    // slice. FUN_800429a8's own call above builds param_1's three halfwords on its OWN C stack
+    // (local_18/local_16/local_14), which this port has no PSX address for -- the same gap this
+    // file's own AnimCmdEffects.cs sibling already documents for AnimCmd_CheffWait's identical
+    // "synthetic command built in a caller's stack frame" case. Passed here as three plain values
+    // instead of a pointer, since this stub is a no-op either way. param_2/param_3 stay real PSX
+    // addresses (workspace+0x48, workspace+0x60).
+    private static void FUN_800461fc(short param1Vx, short param1Vy, short param1Vz, int param_2, int param_3)
+    {
+        _ = param1Vx;
+        _ = param1Vy;
+        _ = param1Vz;
+        _ = param_2;
+        _ = param_3;
     }
 }

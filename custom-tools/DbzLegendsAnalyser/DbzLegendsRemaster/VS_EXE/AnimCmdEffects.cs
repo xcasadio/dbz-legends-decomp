@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -1088,7 +1088,7 @@ internal static class AnimCmdEffects
                 iVar8 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar5 >> 8), iVar8);
                 if (iVar2 != 0 && iVar8 != 0)
                 {
-                    FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
+                    FighterCombat.FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
                 }
             }
         }
@@ -1377,16 +1377,17 @@ internal static class AnimCmdEffects
     }
 
     // GHIDRA: FUN_80043598 @ 0x80043598 (VS.EXE)
-    private static void FUN_80043598(int param_1, int param_2, int param_3, uint param_4)
-    {
-        // BLOCKED: 312 bytes. AnimCmd_ChDanSet's registration arm — it is handed the two resolved
-        // targets, word 2 sign-extended and the flag byte. Its counterpart, the record it leaves
-        // at the task context's +0x30, is what the same handler's other arm finalises. Slice 2.
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-        _ = param_4;
-    }
+    // MOVED TO VS_EXE/FighterCombat.cs, where its real 312-byte body now lives with the rest of the
+    // attack-event chain. The empty stub that used to sit here is DELETED rather than left, and the
+    // deletion matters more than the move: C# binds an unqualified call to the enclosing class
+    // first, so AnimCmd_ChDanSet's own call below was resolving to this no-op and never to the real
+    // implementation. It compiled, it ran, and opcode 40's arm did nothing.
+    //
+    // That is the third time this port has hit one Ghidra address with two declarations, and the
+    // second time the duplicate silently won over a working body. The call site below is now
+    // QUALIFIED, which is what deleting a same-named private member requires: two static classes in
+    // one namespace do not merge, so an unqualified call would simply stop compiling rather than
+    // fall through.
 
     // GHIDRA: FUN_80045130 @ 0x80045130 (VS.EXE)
     private static int FUN_80045130(int param_1, int param_2, int param_3, int param_4)
