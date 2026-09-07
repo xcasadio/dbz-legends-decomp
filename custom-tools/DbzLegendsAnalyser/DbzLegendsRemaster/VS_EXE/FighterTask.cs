@@ -839,7 +839,7 @@ internal static class FighterTask
             if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10000000) == 0)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
             }
             else
             {
@@ -868,14 +868,14 @@ internal static class FighterTask
                     }
 
                     DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
                     return uVar1;
                 }
             }
             else if (handover == 2)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
                 return uVar1;
             }
 
@@ -895,22 +895,10 @@ internal static class FighterTask
     private const int Dat801ff100ShortIndex = 0x80;
 
     // GHIDRA: FUN_80023890 @ 0x80023890 (VS.EXE)
-    // BLOCKED: 5096 bytes, ten callees, and the whole of the CPU-side controller — the arm
-    // SelectFighterCommand takes for any fighter that is not marked pad-driven. Its own callees
-    // (FUN_80024C78, FUN_80025494, FUN_8002575C, FUN_80025A3C, FUN_80025B10, FUN_80025DC4,
-    // FUN_8002631C, FUN_800264D8, FUN_80045CF4, plus rand) are a family of comparable size, and it
-    // reads a three-level table of behaviour profiles rooted at PTR_DAT_800807A4.
-    //
-    // The stub returns -1, which the caller turns into the state-byte fallback at +0x16A. That is
-    // NOT the original's value: the original returns a command opcode. It is chosen over 0 because
-    // 0 is itself a live command in the decoder this wave ported (DecodeCommandFlagsClear's
-    // "nothing pressed" arm), so returning 0 would look like a real decision, while -1 is the one
-    // value step 9.3's own caller already documents as "no command".
-    private static int FUN_80023890(int param_1)
-    {
-        _ = param_1;
-        return -1;
-    }
+    // NO LONGER DECLARED HERE. THE CPU CONTROLLER IS CLOSED, in VS_EXE/FighterAi.cs, together with
+    // its nine callees -- 5096 bytes of root plus about 5600 of subtree. SelectFighterCommand below
+    // reaches it by qualified name; while a stub for the same address sat in THIS file, C# bound
+    // these three call sites to the stub and the real body would have been dead code.
 
     // GHIDRA: FUN_8004b098 @ 0x8004B098 (VS.EXE)
     // CERTAIN, full decompilation, 676 bytes. Step 9.4's default arm, taken when neither +0x138

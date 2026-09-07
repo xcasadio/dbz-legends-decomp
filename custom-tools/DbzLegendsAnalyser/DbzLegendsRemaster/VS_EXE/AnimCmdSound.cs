@@ -571,7 +571,7 @@ internal static class AnimCmdSound
     // VAB (DAT_8008d284 + 0x154), plus a per-sound triple read out of DAT_80084C10 and a single
     // retry of FUN_8006b4a0 when the first key-on returns -1. Six call sites, five of them outside
     // the animation VM. Result discarded at the call site in this file.
-    private static int FUN_8005fd9c(uint param_1, ushort param_2, short param_3)
+    internal static int FUN_8005fd9c(uint param_1, ushort param_2, short param_3)
     {
         return 0;
     }
