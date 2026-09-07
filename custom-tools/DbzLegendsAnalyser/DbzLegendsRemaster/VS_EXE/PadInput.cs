@@ -1,4 +1,4 @@
-using static PsxSdkMonogame.LibEtc;
+﻿using static PsxSdkMonogame.LibEtc;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -96,8 +96,21 @@ internal static class PadInput
     // This is the ProcessPadInput of TITLE.EXE word for word; the C# name comes from there, the
     // Ghidra symbol is still raw. Both call sites in VS.EXE pass 0 — main @ 0x8006251C and the
     // mislabelled SpuInit thunk @ 0x800617E8.
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Nothing in the
+    // transliterated runtime touches them. They exist because "the round never starts" and "the
+    // pad never reaches the round" look identical from outside.
+    internal static int DiagProcessCalls;
+
+    internal static uint DiagRawEverSeen;
+
+    internal static uint DiagEdgeEverSeen;
+
+    internal static uint DiagRemappedEverSeen;
+
     internal static void ProcessPadInput(uint playerIndex)
     {
+        DiagProcessCalls++;
         uint[] local_20 = new uint[2];
 
         playerIndex = playerIndex & 0xffff;
@@ -161,5 +174,9 @@ internal static class PadInput
 
         DAT_8008d3ac = DAT_8008d3b8 ^ (uVar3 & DAT_8008d3b8);
         DAT_8008d3b0 = DAT_8008d3bc ^ (uVar1 & DAT_8008d3bc);
+
+        DiagRawEverSeen |= DAT_8008d518[0];
+        DiagEdgeEverSeen |= g_PadNewlyPressed[0];
+        DiagRemappedEverSeen |= DAT_8008d3b8;
     }
 }

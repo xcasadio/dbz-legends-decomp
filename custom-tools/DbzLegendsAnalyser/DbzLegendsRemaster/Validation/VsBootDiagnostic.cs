@@ -20,6 +20,27 @@ namespace DbzLegendsRemaster.Validation;
 // every visit names the stall.
 internal static class VsBootDiagnostic
 {
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: reads one environment variable as hex or decimal, 0 when absent or unparsable.
+    private static uint ParseHexEnvironment(string name)
+    {
+        string? raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return 0;
+        }
+
+        raw = raw.Trim();
+        if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return uint.TryParse(raw.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out uint hex)
+                ? hex
+                : 0;
+        }
+
+        return uint.TryParse(raw, out uint dec) ? dec : 0;
+    }
+
     internal static int Run(string[] args)
     {
         int budget = 240;
@@ -80,6 +101,37 @@ internal static class VsBootDiagnostic
         }
 
         FrameBaton.ResetHeadless(budget);
+
+        // THE PAD, PRESSED ON PURPOSE. RunBattleRound's two overrides at 0x80056358 are the only
+        // writers in the whole overlay that clear CtxFlags bits 12/13 and toggle bit 14, and until
+        // one of them fires the round body reaches its `goto LAB_80056c64` on every frame and does
+        // nothing else. FUN_80055EE0 arms the match with bits 13, 14, 15 and 31 all set, so that is
+        // the state a match starts in and a button is what leaves it.
+        //
+        // A headless run has no host thread and therefore no pad at all, so a probe without this
+        // cannot tell "the port is wrong" from "nobody pressed anything". The mask is the pad's own
+        // active-low word: DBZ_PAD_PRESS_MASK names the raw libetc button bits to hold (0x800 is
+        // R1, which is what both overrides test through g_PadNewlyPressed), and
+        // DBZ_PAD_PRESS_FRAME the headless frame to hold them on. Held for exactly two frames, so
+        // ProcessPadInput sees one rising edge and no auto-repeat.
+        //
+        // Off by default: with neither variable set the run is exactly what it was.
+        uint pressMask = ParseHexEnvironment("DBZ_PAD_PRESS_MASK");
+        int pressFrame = (int)ParseHexEnvironment("DBZ_PAD_PRESS_FRAME");
+        if (pressMask != 0 && pressFrame > 0)
+        {
+            FrameBaton.HeadlessFrameHook = frame =>
+            {
+                if (frame == pressFrame)
+                {
+                    PadInputBackend.PressHeadless(~pressMask);
+                }
+                else if (frame == pressFrame + 2)
+                {
+                    PadInputBackend.PressHeadless(0xFFFFFFFFu);
+                }
+            };
+        }
 
         string stopped = "budget epuise";
         try
@@ -170,6 +222,12 @@ internal static class VsBootDiagnostic
                 : "   <-- une variante de VariantBackgroundColorTable: FUN_800414ec a tourne"));
 
         Console.WriteLine();
+        Console.WriteLine(
+            $"  PAD : ProcessPadInput x{PadInput.DiagProcessCalls}"
+            + $"   brut cumule 0x{PadInput.DiagRawEverSeen:X8}"
+            + $"   fronts cumules 0x{PadInput.DiagEdgeEverSeen:X8}"
+            + $"   remappe cumule 0x{PadInput.DiagRemappedEverSeen:X8}");
+
         Console.Write("  creneaux, drapeaux du dossier (+0x15B0) :");
         for (int i = 0; i < 12; i++)
         {
