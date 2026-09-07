@@ -170,9 +170,12 @@ se compose de :
 
 Dépendances par **pointeur** que le graphe `jal` ne voyait pas (réfutation) : V→X1, X1→X2/X3/X4,
 X3→X4 ; V n'est donc pas une feuille pure. Cycles S↔R et A↔S : se résolvent par signatures dans
-le socle, pas par lecture croisée. `FUN_8003f6c0` (A, 724 o) **n'est plus bloquée** : `RotAverage3` a été ajoutée à
-`PsxSdkMonogame.LibGte`, marquée `PARTIAL` (reconstruite : aucun corps compilé n'existe dans
-les images) et épinglée par le banc `--validate-gte-rotavg`. Voir `VS_EXE_SOCLE.md`.
+le socle, pas par lecture croisée. `FUN_8003f6c0` (A, 724 o) **est faite**. Le déblocage a tenu en deux temps, et le second corrige
+le premier : `RotAverage3` a d'abord été ajoutée à `PsxSdkMonogame.LibGte` *reconstruite*, sous
+l'affirmation qu'aucun corps compilé n'existait dans les images ; c'était faux. Elle est à
+`0x800772E4` dans VS.EXE, et `FUN_8003f6c0` est justement ce qui l'appelle. La routine porte
+désormais son vrai corps décodé, avec les deux paramètres de sortie `p` et `flag` que la
+reconstruction avait écartés par raisonnement. Voir `VS_EXE_SOCLE.md`.
 
 Frontière du groupe S à corriger : remplacer `GAP_80026738` (100 o, boucle morte) par
 `LAB_80026784` (260 o, handler de la table `0x80083C6C`) ; recaler `GAP_80055780` sur

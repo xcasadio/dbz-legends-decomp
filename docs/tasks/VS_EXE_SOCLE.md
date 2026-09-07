@@ -9,7 +9,8 @@ reste valable.
 | | |
 |---|---|
 | Outillage de couture | `check_vs_dispatch.py` sort enfin `1` en cas de desaccord; `check_duplicate_symbols.py` rapatrie dans `custom-tools/scripts/` |
-| `RotAverage3` | ajoute a `LibGte`, marque `PARTIAL`, banc `--validate-gte-rotavg` |
+| `RotAverage3` | ajoutee a `LibGte` reconstruite, **puis remplacee par son vrai corps** `0x800772E4`; banc `--validate-gte-rotavg` |
+| `FUN_8003f6c0` | debloquee et transliteree: la transformation GTE par maillage, 724 octets |
 | Scratchpad GTE | dix-neuf mots partages dans `Scratchpad.cs` a la racine |
 | Doublons intra-VS | 0 stockage duplique, 0 type divergent (etait 12 et 2) |
 | `SoundState.cs` | le workspace son declare: taille 0x194 fermee deux fois, cinq bancs CD nommes par leurs litteraux |
@@ -117,6 +118,61 @@ ete corrigee** — ce pour quoi il existe. Il affirme desormais la marche comple
 
 Reste aussi le second verrou, independant: `FUN_8005a5b0` (`BattleManager.cs`,
 8500 octets), sans lequel aucun combattant ne bouge et la jauge ne monte jamais.
+
+## La meme erreur, deux fois, et ce qu'elle coute
+
+Le retour de Ghidra a corrige `FUN_8005f704`. Appliquer le meme controle a
+`RotAverage3` a trouve **exactement le meme defaut**, ce qui en fait une classe
+et non un accident.
+
+`RotAverage3` avait ete **reconstruite**, sous l'affirmation ecrite qu'« aucun
+symbole `RotAverage3` autonome n'a ete trouve dans les images ». Cette phrase
+etait vraie de la recherche faite, et fausse des images: la routine est a
+`0x800772E4` dans VS.EXE, 88 octets. Le corps reconstruit avait la bonne
+sequence d'operations et la **mauvaise signature**: six parametres au lieu de
+huit, les sorties `p` et `flag` ecartees par le raisonnement « l'appelant ne les
+garde pas ».
+
+C'est litteralement le defaut de `CdControl`, dont le troisieme argument avait
+ete supprime comme « un local de pile que ce portage n'a rien pour remplir ».
+**Deux fois, un parametre de sortie a ete argumente hors d'existence a partir de
+ce que l'appelant fait, au lieu de ce que la routine ecrit.**
+
+Et il faut dire pourquoi aucun banc ne l'a vu, parce que c'est instructif: le
+seul appelant jette les deux sorties, donc l'OTZ etait identique. Le banc
+`--validate-gte-rotavg` compare `RotAverage3` a `RotAverage4`; **une comparaison
+entre deux routines ne peut pas voir un parametre qu'on ne demande a aucune des
+deux.** Un banc borne la correction, il ne borne pas la signature. Seule la
+table des symboles repond a ca.
+
+Consequence pratique pour la suite: **avant de porter, demander a Ghidra la
+signature de chaque appelee**, meme quand le desassemblage semble suffire. Le
+desassemblage seul donne les offsets et les largeurs justes, et des sens
+plausibles et faux.
+
+## `FUN_8003f6c0`, debloquee par ricochet
+
+Elle etait marquee `BLOCKED` dans `AnimCmdMesh.cs` pour une seule raison:
+« LibGte fournit `RotAverage4` mais pas `RotAverage3` ». Le motif a disparu, et
+il valait mieux qu'il disparaisse *apres* la correction: c'est le seul site du
+portage qui appelle `RotAverage3`, il aurait donc herite de la signature fausse.
+
+C'est la transformation GTE par maillage, 724 octets, un seul appelant
+(`AnimCmd_CulSet` @ `0x80038998`). Elle compose la matrice modele — rotation du
+creneau `param_3`, translation de `param_4` biaisee par les deux offsets du
+scratchpad, echelle de `param_5` — contre la matrice camera du scratchpad, puis
+projette chaque quad et ecrit l'OTZ dans la table Z par primitive.
+
+Le `pad` du premier sommet porte le **genre** de la primitive, lu en demi-mot
+signe: `0` -> `RotAverage4`, `1` -> `RotAverage3(v0,v1,v2)`, sinon
+`RotAverage3(v0,v2,v3)`. Le troisieme cas est ce qui prouve que ce champ est un
+genre et pas un compte de sommets: un quad coupe sur l'autre diagonale fait
+toujours trois sommets, mais pas les memes trois.
+
+Le socle a servi exactement a ce pour quoi il a ete fait: `Scratchpad.cs`
+fournissait deja `MATRIX_1f800000`, `_DAT_1f8000b4` et `_DAT_1f8000bc`, et
+`SpriteRenderer` fournissait le precedent du pont adresse -> (buffer, offset)
+via `LibGpu.RamResolve`. Rien n'a eu a etre invente.
 
 ## Le prochain pas, precisement
 

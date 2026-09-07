@@ -1191,25 +1191,162 @@ internal static class AnimCmdMesh
     // small and fully readable, and are described below so that the next slice does not have to
     // re-derive them.
 
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: stands in for the primitive packet when `param_1` is not addressable in this port,
+    // exactly as SpriteRenderer's s_unmappedPrimitive does at its own RotAverage4 site. On the
+    // console param_1 always points at real RAM. Here the pool only becomes addressable once its
+    // allocator has run, and an unmapped address has no byte buffer to give the sxy destinations.
+    // Pointing them here keeps the GTE work, the control flow and the ordering-table write exactly
+    // as they are; only the projected corners land somewhere nothing reads. 0x34 is the packet
+    // stride, and the furthest destination is +0x2C. This path does not exist on hardware.
+    private static readonly byte[] s_unmappedPrimitive = new byte[0x34];
+
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: the original passes SVECTOR* straight to the SDK, whose C# entry points take
+    // SVECTOR objects, so the pointer is dereferenced here. The copy is exact because every
+    // consumer of these -- RotMatrix, RotAverage3, RotAverage4 -- only READS them: they reach the
+    // GTE through ldv3/ldv0, which load and never store back.
+    private static LibGte.SVECTOR ReadSvector(int psxAddress) => new()
+    {
+        vx = (short)PsxRam.ReadU16(psxAddress),
+        vy = (short)PsxRam.ReadU16(psxAddress + 2),
+        vz = (short)PsxRam.ReadU16(psxAddress + 4),
+        pad = (short)PsxRam.ReadU16(psxAddress + 6),
+    };
+
     // GHIDRA: FUN_8003f6c0 @ 0x8003F6C0 (VS.EXE)
-    // BLOCKED — and this one is blocked by the SDK, not by ownership: it has exactly ONE caller,
-    // AnimCmd_CulSet at 0x80038998, so it is this family's function and nothing else will claim it.
-    // It cannot be transliterated here because PsxSdkMonogame's LibGte provides RotAverage4 but no
-    // RotAverage3, and adding it means editing LibGte.cs, which is not this file.
+    // 724 bytes, exactly one caller: AnimCmd_CulSet at 0x80038998.
     //
-    // What it does, and the evidence behind the opcode-9 verdict in the file header: PushMatrix;
-    // ReadRotMatrix(&DAT_1f800000); RotMatrix(param_3, local) — param_3 is the rotation slot;
-    // translation from param_4[0..2] with _DAT_1f8000b4 and _DAT_1f8000bc subtracted off X and Z;
-    // ScaleMatrix with param_5[0..2]; CompMatrix; SetRotMatrix; SetTransMatrix; then, for param_7
-    // primitives, RotAverage4 when the vertex quad's pad is 0, RotAverage3 on (v0,v1,v2) when it is
-    // 1 and on (v0,v2,v3) otherwise, storing the returned OTZ into param_6[i] and forcing a zero to
-    // 0x801; PopMatrix. param_8 non-zero replaces the composed rotation with the uncomposed one.
+    // THIS WAS BLOCKED, AND THE BLOCKER HAS LAPSED. The note here used to say it could not be
+    // written because LibGte offered RotAverage4 but no RotAverage3. RotAverage3 now exists, and
+    // exists as its real body decoded at 0x800772E4 rather than as the reconstruction that was
+    // added first -- which matters here, because this is the only site in the port that calls it.
+    //
+    // WHAT IT IS: the per-mesh GTE transform. It builds one model matrix -- rotation from the
+    // rotation slot at param_3, translation from param_4 biased by the two scratchpad offsets,
+    // scale from param_5 -- composes it against the camera matrix sitting in the scratchpad, then
+    // projects each primitive's vertex quad and writes the resulting OTZ into the per-primitive
+    // ordering-table Z array at param_6.
+    //
+    // THE QUAD'S FIRST VERTEX CARRIES THE PRIMITIVE KIND in its pad field, read as a SIGNED
+    // halfword (`lh v1,-0x12(s2)` at 0x8003F82C):
+    //     0    -> RotAverage4 over (v0,v1,v2,v3), four screen points
+    //     1    -> RotAverage3 over (v0,v1,v2)
+    //     else -> RotAverage3 over (v0,v2,v3)
+    // The third case is what makes that field a KIND rather than a vertex count: a quad split on
+    // the other diagonal is still three vertices, but not the same three.
     //
     // param_9 / param_10 / param_11 are the three further argument words AnimCmd_CulSet stores; the
     // body never reads them. They are kept on the signature so the call site stays literal.
     private static void FUN_8003f6c0(int param_1, int param_2, int param_3, int param_4, int param_5,
         int param_6, ushort param_7, short param_8, ushort param_9, ushort param_10, ushort param_11)
     {
+        LibGte.PushMatrix();
+        LibGte.ReadRotMatrix(Scratchpad.MATRIX_1f800000);
+
+        var local_d8 = new LibGte.MATRIX();
+        LibGte.RotMatrix(ReadSvector(param_3), local_d8);
+
+        // All six of these are `lh` -- signed halfwords -- at 0x8003F720..0x8003F770.
+        local_d8.t[0] = (short)PsxRam.ReadU16(param_4) - Scratchpad._DAT_1f8000b4;
+        local_d8.t[1] = (short)PsxRam.ReadU16(param_4 + 2);
+        local_d8.t[2] = (short)PsxRam.ReadU16(param_4 + 4) - Scratchpad._DAT_1f8000bc;
+
+        var local_68 = new LibGte.VECTOR();
+        local_68.vx = (short)PsxRam.ReadU16(param_5);
+        local_68.vy = (short)PsxRam.ReadU16(param_5 + 2);
+        local_68.vz = (short)PsxRam.ReadU16(param_5 + 4);
+        LibGte.ScaleMatrix(local_d8, local_68);
+
+        var local_b8 = new LibGte.MATRIX();
+        LibGte.CompMatrix(Scratchpad.MATRIX_1f800000, local_d8, local_b8);
+
+        ushort local_40 = param_7;
+        if (param_8 != 0)
+        {
+            // The original spells out all nine elements one by one; nine is the whole 3x3, so the
+            // composed rotation is replaced wholesale by the uncomposed one. The TRANSLATION
+            // CompMatrix produced is deliberately left alone -- that asymmetry is the point of the
+            // flag, and copying `t` as well would silently change what it does.
+            for (int i = 0; i < 9; i++)
+            {
+                local_b8.m[i] = local_d8.m[i];
+            }
+        }
+
+        LibGte.SetRotMatrix(local_b8);
+        LibGte.SetTransMatrix(local_b8);
+
+        int iVar4 = 0;
+        if (0 < (int)((uint)param_7 << 0x10))
+        {
+            // The original's two stack longs, allocated once and reused by every iteration exactly
+            // as the console does. Both routines write through them and nothing here reads them
+            // back; they exist because the SDK signature has them, not because this caller wants
+            // the values.
+            int[] local_38 = new int[1];
+            int[] local_30 = new int[1];
+
+            do
+            {
+                // JUSTIFICATION: C# language bridge only
+                // RELATION: the sxy destinations are `(long *)(param_1 + 8)` and its neighbours --
+                // words INSIDE the primitive packet -- so the SDK entry points take the packet's
+                // byte buffer plus offsets. The raw pointer is split into that pair here, the same
+                // way SpriteRenderer splits its own.
+                if (!LibGpu.RamResolve(param_1, out byte[] pBuf, out int pOff))
+                {
+                    // PARTIAL: see s_unmappedPrimitive above. Unreachable on hardware.
+                    pBuf = s_unmappedPrimitive;
+                    pOff = 0;
+                }
+
+                // The pad of the quad's FIRST vertex, signed halfword.
+                short kind = (short)PsxRam.ReadU16(param_2 + 6);
+                int lVar2;
+                if (kind == 0)
+                {
+                    lVar2 = LibGte.RotAverage4(
+                        ReadSvector(param_2), ReadSvector(param_2 + 8),
+                        ReadSvector(param_2 + 0x10), ReadSvector(param_2 + 0x18),
+                        pBuf, pOff + 8, pOff + 0x14, pOff + 0x20, pOff + 0x2c,
+                        local_38, local_30);
+                }
+                else if (kind == 1)
+                {
+                    lVar2 = LibGte.RotAverage3(
+                        ReadSvector(param_2), ReadSvector(param_2 + 8), ReadSvector(param_2 + 0x10),
+                        pBuf, pOff + 8, pOff + 0x14, pOff + 0x20,
+                        local_38, local_30);
+                }
+                else
+                {
+                    lVar2 = LibGte.RotAverage3(
+                        ReadSvector(param_2), ReadSvector(param_2 + 0x10), ReadSvector(param_2 + 0x18),
+                        pBuf, pOff + 8, pOff + 0x14, pOff + 0x20,
+                        local_38, local_30);
+                }
+
+                // Stored as a halfword (`sh`), then read back as a SIGNED halfword and forced to
+                // 0x801 if it came out zero. The write-then-read-back is the original's own shape
+                // and is kept: an OTZ of 0 would land in ordering-table bucket 0 and sort in front
+                // of everything, so the game pushes it to the far end instead.
+                int otzSlot = ((iVar4 << 0x10) >> 0xf) + param_6;
+                PsxRam.WriteU16(otzSlot, (ushort)lVar2);
+                if ((short)PsxRam.ReadU16(otzSlot) == 0)
+                {
+                    PsxRam.WriteU16(otzSlot, 0x801);
+                }
+
+                // Four SVECTORs per primitive (0x20 bytes) and one 0x34-byte packet per primitive.
+                param_2 = param_2 + 0x20;
+                param_1 = param_1 + 0x34;
+                iVar4 = iVar4 + 1;
+            }
+            while ((iVar4 * 0x10000 >> 0x10) < (short)local_40);
+        }
+
+        LibGte.PopMatrix();
     }
 
     // GHIDRA: FUN_80045f34 @ 0x80045F34 (VS.EXE)
