@@ -773,31 +773,231 @@ internal static class FighterTask
     }
 
     // GHIDRA: FUN_8004b098 @ 0x8004B098 (VS.EXE)
-    // BLOCKED: 676 bytes. Step 9.4's default arm, taken when neither +0x138 bits 8..14 nor bits
-    // 0..7/17 are set.
+    // CERTAIN, full decompilation, 676 bytes. Step 9.4's default arm, taken when neither +0x138
+    // bits 8..14 nor bits 0..7/17 are set. param_3 is iVar2 from the caller's step 9.1 -- the
+    // OTHER fighter workspace step 9.1 may have re-pointed to, or this fighter itself in the
+    // ordinary case where FUN_8004fa8c returned 0.
+    //
+    // THREE-WAY TOP LEVEL:
+    //   1. This fighter's own battle-context Ki gauge (BattleState.CtxKiGauge, read through its
+    //      own slot, the SAME "ctx + slot*CtxSlotRecordStride + CtxKiGauge" address
+    //      FighterCombat.FUN_8004e758 already reads for the identical "< 400" gate) below 400
+    //      forces state 0x20 (FighterAction.FUN_8004ad0c), clears +0x138 bit 0x40000, and stamps
+    //      +0x15e = 0x3c -- an out-of-Ki lockout timer, not named further here.
+    //   2. Failing that, a four-way OR falls back to FighterCombat.FUN_8004a638(param_1, 0) when:
+    //      param_3's own +0x138 bits 5..7 (0xe0) are all clear, OR param_3's own FighterTaskNode
+    //      (+0xac) is not the currently running task (TaskSystem.g_CurrentTask, VS.EXE's
+    //      DAT_8008d16c -- the SAME "+0xac == g_CurrentTask" test FUN_8004e758 already makes, here
+    //      negated), OR this fighter's own +0x138 bit 0x80000 is set, OR this fighter's own state
+    //      byte at +0x16b is 0x1c.
+    //   3. Otherwise: +0x138 bit 0x8000 routes to FighterAction.FUN_8004b024; failing that, bit
+    //      0x800000 routes to FighterAction.FUN_8004ad80; failing THAT, param_2 (the frame's
+    //      command word) picks one of five arms: 0x26/0x27/0x28 -> FighterCombat.FUN_8004a97c;
+    //      0x21 -> FighterAction.FUN_8004aa44 then FighterAction.FUN_8004bf50; 0x13/0x14 ->
+    //      FighterAction.FUN_8004a910; 0x1c -> FighterCombat.FUN_8004aa9c then
+    //      FighterAction.FUN_8004ad80; anything else -> FighterCombat.FUN_8004a638(param_1,
+    //      param_2).
+    //
+    // +0x16b and +0x15e are not named anywhere else in this port and are left as raw offsets.
     private static void FUN_8004b098(int param_1, uint param_2, int param_3)
     {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
+        if ((short)PsxRam.ReadU16(
+                PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    + PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) * BattleState.CtxSlotRecordStride
+                    + BattleState.CtxKiGauge)
+            < 400)
+        {
+            FighterAction.FUN_8004ad0c(param_1);
+            PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfffbffff));
+            PsxRam.WriteU16(param_1 + 0x15e, 0x3c);
+        }
+        // CORRECTED: THESE TWO ARMS WERE THE WRONG WAY ROUND, and this is step 9.4's default
+        // dispatch -- the arm taken on nearly every ordinary frame -- so the error was not a corner
+        // case. The branches settle it:
+        //     0x8004B18C  1440000D  bne v0,zero,+0xD   ; condition TRUE -> jump to the dispatch
+        //     0x8004B1A4  10620007  beq v1,v0,+7       ; +0x16B == 0x1C -> jump to the dispatch
+        //     0x8004B1B4  0C01298E  jal 0x8004A638     ; reached ONLY by falling through
+        //     0x8004B1BC  08012CC9  j   0x8004B324     ; and then skipping the dispatch entirely
+        // So ANY of the four conditions selects the DISPATCH, and the bare FUN_8004a638(param_1, 0)
+        // runs only when none of them holds. The first version had it exactly inverted, and its
+        // header comment described the inverted version, so the misreading came before the code.
+        //
+        // The test is negated here rather than the two bodies being moved: the dispatch block below
+        // is long, and inverting the condition changes the one thing that was wrong.
+        else if (!((((uint)PsxRam.ReadI32(param_3 + 0x138) & 0xe0) == 0)
+            || (PsxRam.ReadI32(param_3 + BattleState.FighterTaskNode) != TaskSystem.g_CurrentTask)
+            || (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x80000) != 0)
+            || ((sbyte)PsxRam.ReadU8(param_1 + 0x16b) == 0x1c)))
+        {
+            FighterCombat.FUN_8004a638(param_1, 0);
+        }
+        else
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000) == 0)
+            {
+                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x800000) == 0)
+                {
+                    if (param_2 == 0x26 || param_2 == 0x27 || param_2 == 0x28)
+                    {
+                        FighterCombat.FUN_8004a97c(param_1, (int)param_2);
+                    }
+                    else if (param_2 == 0x21)
+                    {
+                        FighterAction.FUN_8004aa44(param_1);
+                        FighterAction.FUN_8004bf50(param_1);
+                    }
+                    else if (param_2 == 0x13 || param_2 == 0x14)
+                    {
+                        FighterAction.FUN_8004a910(param_1, (int)param_2);
+                    }
+                    else if (param_2 == 0x1c)
+                    {
+                        FighterCombat.FUN_8004aa9c(param_1);
+                        FighterAction.FUN_8004ad80(param_1);
+                    }
+                    else
+                    {
+                        FighterCombat.FUN_8004a638(param_1, (int)param_2);
+                    }
+                }
+                else
+                {
+                    FighterAction.FUN_8004ad80(param_1);
+                }
+            }
+            else
+            {
+                FighterAction.FUN_8004b024(param_1);
+            }
+        }
     }
 
     // GHIDRA: FUN_8004c198 @ 0x8004C198 (VS.EXE)
-    // BLOCKED: 272 bytes. Step 9.4's arm for +0x138 & 0x200FF.
+    // CERTAIN, full decompilation, 272 bytes. Step 9.4's arm for +0x138 & 0x200FF -- a five-way
+    // dispatch purely on +0x138 bits 0x20/8/0x10/6, all five arms already ported in
+    // FighterAction.cs.
     private static void FUN_8004c198(int param_1, uint param_2, int param_3)
     {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x20) == 0)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 8) == 0)
+            {
+                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10) == 0)
+                {
+                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 6) == 0)
+                    {
+                        FighterAction.FUN_8004b8a0(param_1, (int)param_2, param_3);
+                    }
+                    else
+                    {
+                        FighterAction.FUN_8004bf50(param_1);
+                    }
+                }
+                else
+                {
+                    FighterAction.FUN_8004bd3c(param_1, param_2);
+                }
+            }
+            else
+            {
+                FighterAction.FUN_8004bb70(param_1, (int)param_2);
+            }
+        }
+        else
+        {
+            FighterAction.FUN_8004b9cc(param_1);
+        }
     }
 
     // GHIDRA: FUN_8004cea0 @ 0x8004CEA0 (VS.EXE)
-    // BLOCKED: 604 bytes. Step 9.4's arm for +0x138 & 0x7F00, and the only one of the three that is
-    // NOT handed iVar2 — it takes the fighter and the command word alone.
+    // CERTAIN, full decompilation, 604 bytes. Step 9.4's arm for +0x138 & 0x7F00, and the only one
+    // of the three that is NOT handed iVar2 -- it takes the fighter and the command word alone.
+    //
+    // TWO PARTS, both unconditional relative to each other -- the first never skips the second.
+    //
+    // PART 1 -- gated on +0x138 bits 28/29 (0x30000000), the SAME pair phase 8 above sets when
+    // this fighter's own slot matches one of the battle context's two targeting cursors
+    // (CtxActingSlotTeamA / CtxActingSlotTeamB). When either is set, this scans
+    // BattleState.CtxFighterSlots (ctx+0x1520) over this fighter's OWN half of the twelve-wide
+    // array -- slots 0..5 when this fighter's own slot (+0x173) is < 6, slots 6..11 otherwise.
+    // CtxFighterSlots' own header note already closes that team A occupies slots 0,1,2 and team B
+    // occupies 6,7,8 within that same array, so this walks the fighter's own team's half, not the
+    // opposing team's. Each filled slot entry is read as a task-node pointer, exactly like the
+    // caller's own step 9.1 (+8 gives the task's workspace pointer), and that workspace's own
+    // +0x138 bit 0x20000 is tested -- the SAME bit the caller's step 9.4 dispatch already uses to
+    // route to this function's sibling FUN_8004c198. If NO scanned slot has that bit set,
+    // FighterCombat.FUN_8004c3e0(param_1) runs; its bool return is discarded here exactly as the
+    // original discards it.
+    //
+    // PART 2 -- unconditional, a five-way dispatch on +0x138 bits 0x4000 / 0x3800 / 0x400 / 0x200,
+    // all five arms already ported in FighterCombat.cs.
     private static void FUN_8004cea0(int param_1, uint param_2)
     {
-        _ = param_1;
-        _ = param_2;
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x30000000) != 0)
+        {
+            bool bVar1 = false;
+            int local_18;
+            int iVar2;
+
+            if (PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) < 6)
+            {
+                local_18 = 0;
+                iVar2 = local_18;
+            }
+            else
+            {
+                local_18 = 6;
+                iVar2 = local_18;
+            }
+
+            for (; local_18 < iVar2 + 6; local_18 = local_18 + 1)
+            {
+                int slotPtr = PsxRam.ReadI32(
+                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                        + BattleState.CtxFighterSlots + local_18 * 4);
+
+                if (slotPtr != 0
+                    && ((uint)PsxRam.ReadI32(PsxRam.ReadI32(slotPtr + 8) + 0x138) & 0x20000) != 0)
+                {
+                    bVar1 = true;
+                }
+            }
+
+            if (!bVar1)
+            {
+                FighterCombat.FUN_8004c3e0(param_1);
+            }
+        }
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x4000) == 0)
+        {
+            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x3800) == 0)
+            {
+                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x400) == 0)
+                {
+                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x200) == 0)
+                    {
+                        FighterCombat.FUN_8004c9cc(param_1);
+                    }
+                    else
+                    {
+                        FighterCombat.FUN_8004ca54(param_1, (int)param_2);
+                    }
+                }
+                else
+                {
+                    FighterCombat.FUN_8004cb24(param_1, (int)param_2);
+                }
+            }
+            else
+            {
+                FighterCombat.FUN_8004cc64(param_1, (int)param_2);
+            }
+        }
+        else
+        {
+            FighterCombat.FUN_8004cd84(param_1);
+        }
     }
 
     // GHIDRA: FUN_80047688 @ 0x80047688 (VS.EXE)
