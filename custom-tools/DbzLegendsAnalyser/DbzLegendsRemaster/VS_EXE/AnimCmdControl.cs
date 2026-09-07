@@ -571,13 +571,15 @@ internal static class AnimCmdControl
                                 LAB_8003ab54:
                                     sVar12 = (short)(sVar12 + -0x400);
                                 LAB_8003ab5c:
-                                    FUN_80047550(iVar10, VStack_80, 0, sVar12, 0x10);
+                                    FUN_80047550(iVar10, VStack80Address, 0, sVar12, 0x10);
                                     PsxRam.WriteU16(
                                         psVar8,
-                                        (ushort)(short)((short)PsxRam.ReadU16(psVar8) + (short)VStack_80.vx));
+                                        (ushort)(short)((short)PsxRam.ReadU16(psVar8)
+                                            + (short)PsxRam.ReadI32(VStack80Address)));
                                     PsxRam.WriteU16(
                                         psVar8 + 4,
-                                        (ushort)(short)((short)PsxRam.ReadU16(psVar8 + 4) + (short)VStack_80.vz));
+                                        (ushort)(short)((short)PsxRam.ReadU16(psVar8 + 4)
+                                            + (short)PsxRam.ReadI32(VStack80Address + 8)));
                                 }
                             }
                         }
@@ -972,15 +974,76 @@ internal static class AnimCmdControl
     // slice must write. They are declared with their Ghidra address and left empty; the bodies
     // above are complete around them.
 
+    // JUSTIFICATION: PSX hardware adaptation only
+    // RELATION: `VECTOR VStack_80`, the stack slot AnimCmd_Utility's sub-command 3 passes to
+    // FUN_80047550 BY ADDRESS. The one shared implementation below takes a PSX address, so this
+    // file's slot needs one. Deliberately distinct from the three synthetic stack addresses already
+    // in use -- BattleScene 0x807FFFD0, AnimCmdEffects 0x807FFFE0, AnimVmInterpreter 0x807FFFF0 --
+    // so the four can never alias. The stack really lives here: crt0 starts SP at 0x807FFFF8.
+    //
+    // DEVIATION, stated because it is one: the original has ONE slot, and this port now has two --
+    // the managed `VStack_80` used by the ApplyMatrixLV call earlier in the handler, and these
+    // sixteen PSX-addressable bytes. They are equivalent here because the two uses are disjoint:
+    // nothing reads VStack_80 between the ApplyMatrixLV call and the FUN_80047550 call, and the two
+    // reads that follow the call (the part's x and z) are taken from THIS region, which is what the
+    // console reads back out of the slot the callee just wrote.
+    private const int VStack80Address = unchecked((int)0x807FFFC0);
+
+    private static readonly byte[] RAM_vstack80 = LibGpu.RamRegion(VStack80Address, 0x10);
+
     // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
-    // BLOCKED: 312 bytes. Called by AnimCmd_Utility's sub-command 3 with a rotation pointer, an
-    // output VECTOR, 0, an angle and 0x10; it fills the vector, which the caller then adds to a
-    // part's x and z. The prototype is not printed by Ghidra and is taken from the call site.
-    // DOUBLON ASSUME: AnimCmdMesh.cs porte la meme adresse avec (int, int, uint, ushort, int),
-    // parce que son site d'appel passe l'ADRESSE PSX 0x801FAA84 la ou celui-ci passe `VStack_80`,
-    // un VECTOR managé sans adresse. Les octets confirment que `a1` est un pointeur aux deux sites.
-    // Voir la note complete dans AnimCmdMesh.cs. Corps vides des deux cotes: rien ne diverge encore.
-    private static void FUN_80047550(int param_1, VECTOR param_2, int param_3, short param_4, int param_5)
+    // 312 bytes. Given a stored orientation at param_1 and a distance x, produce the rotated offset
+    // vector: "step x units in the direction this orientation points", with an additive bias on each
+    // of the two angles and a fixed 0x400 (quarter-turn) correction on the Y axis. Every caller then
+    // adds the result's vx and vz into a part's position.
+    //
+    // THE DUPLICATE IS RESOLVED HERE, and what resolved it was evidence rather than taste. This
+    // address used to be stubbed in TWO files with incompatible C# shapes -- `VECTOR param_2` here
+    // and `int param_2` in AnimCmdMesh.cs -- because one call site passes a stack local and the
+    // other passes the global at 0x801FAA84. Ghidra's own prototype is
+    //     void FUN_80047550(int param_1, VECTOR *vector, short param_3, short param_4, short x)
+    // so `vector` is a POINTER at both sites, and the question was only how this port represents
+    // one. The cross-references decide it: VECTOR_801faa84 is READ by four sites outside its
+    // caller (0x8003C728, 0x8003C7B0, 0x8003C7E8, 0x8003D178) and written by a fifth (0x8003D2AC).
+    // A managed C# VECTOR would never reach those readers, so the parameter must be a PSX ADDRESS,
+    // and the stack-local site gets a synthetic one -- exactly the pattern this port already uses
+    // for Local18Address and Local30Address. One address, one implementation, one storage.
+    //
+    // Both angle loads are `lhu` (0x800475A0, 0x800475CC), unsigned, and both results are masked to
+    // 12 bits, so the sign extension the decompiler prints makes no difference to the value.
+    internal static void FUN_80047550(int param_1, int vector, short param_3, short param_4, short x)
     {
+        PushMatrix();
+
+        var svector = new SVECTOR();
+        var matrix = new MATRIX();
+        int[] flag = new int[2];
+
+        svector.vx = 0;
+        svector.vy = (short)((PsxRam.ReadU16(param_1 + 2) + param_4 - 0x400) & 0xfff);
+        svector.vz = (short)((PsxRam.ReadU16(param_1 + 4) + param_3) & 0xfff);
+        RotMatrix(svector, matrix);
+
+        matrix.t[2] = 0;
+        matrix.t[1] = 0;
+        matrix.t[0] = 0;
+        svector.vy = 0;
+        svector.vz = 0;
+        svector.vx = x;
+
+        SetTransMatrix(matrix);
+        SetRotMatrix(matrix);
+
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: the original is `RotTrans(&svector, vector, flag)` writing three longs straight
+        // through the caller's pointer. LibGte's RotTrans fills a managed VECTOR, so the result is
+        // copied out to the PSX address here. VECTOR is vx/vy/vz at +0/+4/+8.
+        var outVector = new VECTOR();
+        RotTrans(svector, outVector, flag);
+        PsxRam.WriteI32(vector + 0, outVector.vx);
+        PsxRam.WriteI32(vector + 4, outVector.vy);
+        PsxRam.WriteI32(vector + 8, outVector.vz);
+
+        PopMatrix();
     }
 }

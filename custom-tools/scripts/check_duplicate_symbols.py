@@ -19,6 +19,10 @@ CE QUE CETTE PASSE NE VOIT PAS, dit ici parce qu'un vert doit etre lisible:
     filtre est volontaire (il cible les globales translitterees), mais il est une limite reelle.
   * les regions dont la base ou la taille ne se resout pas. Elles sont listees comme angles morts
     au lieu d'etre comptees comme propres, et le compte final le dit.
+  * les noms qualifies dont le dernier segment est ambigu (`POLY_FT4Ref.Size` se reduit a `Size`,
+    qui existe dans plusieurs classes). Quand les candidats divergent, la region devient un angle
+    mort au lieu d'etre dimensionnee au hasard -- une premiere version prenait la premiere valeur
+    trouvee et a signale deux symboles comme contenus dans des bornes ou ils ne sont pas.
 
 Usage: python custom-tools/scripts/check_duplicate_symbols.py [--strict]
        --strict sort 1 sur les doublons de STOCKAGE, pas sur les doublons d'ADRESSE.
@@ -66,12 +70,14 @@ decls = defaultdict(list)   # symbole -> [(overlay, fichier, ligne, type, const?
 # une seconde copie et un defaut.
 REGION = re.compile(r'RamRegion\(\s*([^,]+?)\s*,\s*([^,)]+?)\s*[,)]')
 CONST = re.compile(r'\bconst\s+(?:int|uint)\s+(\w+)\s*=\s*([^;]+);')
+CLASS = re.compile(r'\b(?:class|struct|record)\s+(\w+)')
 LITERAL = re.compile(r'^(?:unchecked\(\(u?int\)\s*)?(0[xX][0-9A-Fa-f]+|\d+)\)?$')
 ARRAY = re.compile(r'\b(\w+)\s*=\s*new\s+byte\[([^\]]+)\]')
 ARITH = re.compile(r'^[0-9A-Fa-fxX*+\-() ]+$')
 regions = []   # [overlay, fichier, ligne, expr_base, expr_taille]
 sources = {}   # (overlay, fichier) -> lignes
 consts = defaultdict(dict)   # overlay -> nom -> valeur
+qualified = {}               # "Classe.NOM" -> valeur, y compris depuis le SDK (voir plus bas)
 for folder in FOLDERS:
     d = os.path.join(ROOT, folder)
     for name in sorted(os.listdir(d)):
@@ -79,12 +85,18 @@ for folder in FOLDERS:
             continue
         src = io.open(os.path.join(d, name), encoding="utf-8-sig").read().splitlines()
         sources[(folder, name)] = src
+        cls = None
         for i, line in enumerate(src, 1):
+            k = CLASS.search(line)
+            if k:
+                cls = k.group(1)
             c = CONST.search(line)
             if c:
                 lit = LITERAL.match(c.group(2).strip())
                 if lit:
                     consts[folder][c.group(1)] = int(lit.group(1), 0)
+                    if cls:
+                        qualified[cls + "." + c.group(1)] = int(lit.group(1), 0)
             a_ = ARRAY.search(line)
             if a_:
                 consts[folder].setdefault("[]" + a_.group(1), a_.group(2).strip())
@@ -174,6 +186,29 @@ def arith(expr):
     except Exception:
         return None
 
+# LE SDK EST LU POUR SES CONSTANTES, PAS POUR SES DECLARATIONS. Les tailles des structures
+# primitives (POLY_FT4Ref.Size, POLY_GT4Ref.Size ...) y vivent, et sans elles une region declaree
+# `RamRegion(addr, POLY_FT4Ref.Size * 5)` n'est pas mesurable. Ne pas les lire a coute cher: une
+# premiere version reduisait `POLY_FT4Ref.Size` a `Size`, tombait sur `SharedHighRam.Size = 0x248`
+# du portage, dimensionnait la region a 0xB68 au lieu de 0xC8 et signalait DEUX symboles comme
+# contenus dans des bornes ou ils ne sont pas. Le nom qualifie est desormais exige tel quel.
+SDK = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "PsxSdkMonogame", "PsxSdkMonogame")
+if os.path.isdir(SDK):
+    for name in sorted(os.listdir(SDK)):
+        if not name.endswith(".cs"):
+            continue
+        cls = None
+        for line in io.open(os.path.join(SDK, name), encoding="utf-8-sig").read().splitlines():
+            k = CLASS.search(line)
+            if k:
+                cls = k.group(1)
+            c = CONST.search(line)
+            if c and cls:
+                lit = LITERAL.match(c.group(2).strip())
+                if lit:
+                    qualified.setdefault(cls + "." + c.group(1), int(lit.group(1), 0))
+
+
 def value_of(expr, folder, depth=0):
     """Base ou taille: litteral, arithmetique litterale, `const`, longueur d un `new byte[...]`,
     ou adresse GHIDRA d un symbole DAT_. Rend None quand rien ne tranche, ce qui compte comme un
@@ -187,6 +222,10 @@ def value_of(expr, folder, depth=0):
     v = arith(expr)
     if v is not None:
         return v
+    if expr in qualified:
+        return qualified[expr]
+    if "." in expr and re.match(r'^[A-Za-z_][\w.]*$', expr):
+        return None      # nom qualifie inconnu: angle mort declare, jamais une supposition
     sym = expr.split(".")[-1]
 
     # RamRegion(addr, someByteArray): la taille est la longueur declaree du tableau.
@@ -195,16 +234,44 @@ def value_of(expr, folder, depth=0):
             v = value_of(consts[f]["[]" + sym], f, depth + 1)
             if v is not None:
                 return v
+
+    # L'AMBIGUITE VAUT UN ANGLE MORT, PAS UNE SUPPOSITION. Le nom qualifie est reduit a son
+    # dernier segment (`POLY_FT4Ref.Size` -> `Size`), et un segment aussi generique existe dans
+    # plusieurs classes. Prendre la premiere trouvee a produit deux FAUX POSITIFS: la taille de
+    # deux regions de cinq POLY_FT4 (0xC8) a ete resolue a 0xB68 en attrapant le `Size` d'une autre
+    # classe, ce qui a fait tomber deux symboles voisins DANS des bornes ou ils ne sont pas.
+    # Un vérificateur qui hurle a tort s'apprend a ignorer, donc: valeurs candidates divergentes
+    # => None, et la region part en angle mort declare.
+    cands = set()
     for f in [folder] + [x for x in consts if x != folder]:
         if sym in consts[f]:
             got = consts[f][sym]
-            return got if isinstance(got, int) else value_of(got, f, depth + 1)
+            v = got if isinstance(got, int) else value_of(got, f, depth + 1)
+            if v is not None:
+                cands.add(v)
+    if len(cands) == 1:
+        return cands.pop()
+    if len(cands) > 1:
+        return None
     for f, _, _, _, _, a in decls.get(sym, []):
         if a and f == folder:
             return int(a, 16)
     for *_, a in decls.get(sym, []):
         if a:
             return int(a, 16)
+
+    # Derniere chance: une expression MIXTE, du type `POLY_FT4Ref.Size * 2`. On substitue chaque
+    # identifiant par sa valeur connue puis on evalue -- si et seulement si TOUS les identifiants
+    # se resolvent. Un seul inconnu et on rend None, donc angle mort declare plutot que devine.
+    idents = set(re.findall(r'[A-Za-z_][\w.]*', expr))
+    if idents and depth < 3:
+        sub = expr
+        for ident in sorted(idents, key=len, reverse=True):
+            v = value_of(ident, folder, depth + 1)
+            if v is None:
+                return None
+            sub = sub.replace(ident, str(v))
+        return arith(sub)
     return None
 
 print()

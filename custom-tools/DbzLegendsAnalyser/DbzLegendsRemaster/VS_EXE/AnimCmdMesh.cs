@@ -956,7 +956,9 @@ internal static class AnimCmdMesh
                 PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
             if (iVar1 != 0)
             {
-                FUN_80047550(iVar1, DAT_801faa84, (uint)(uStack_1e & 0xfff), uStack_1c, (int)(short)uStack_1a);
+                AnimCmdControl.FUN_80047550(
+                    iVar1, DAT_801faa84, (short)(uStack_1e & 0xfff), (short)uStack_1c,
+                    (short)uStack_1a);
             }
         }
 
@@ -1511,27 +1513,12 @@ internal static class AnimCmdMesh
         PsxRam.WriteU16(param_3 + 2 * 2, (ushort)(lVar1 & 0xfff));
     }
     // GHIDRA: FUN_80047550 @ 0x80047550 (VS.EXE)
-    // BLOCKED: 312 bytes, called by AnimCmd_MovexpSet avec le creneau de rotation resolu, l'ADRESSE
-    // du triplet DAT_801faa84, une valeur de douze bits, et deux operandes de plus.
-    //
-    // CETTE SOUCHE EST DELIBEREMENT LAISSEE EN DOUBLE, ET C'EST LA SEULE DU PORTAGE.
-    // AnimCmdControl.cs porte la meme adresse avec une AUTRE liste de parametres:
-    //     ici      (int param_1, int  param_2, uint param_3, ushort param_4, int param_5)
-    //     la-bas   (int param_1, VECTOR param_2, int param_3, short  param_4, int param_5)
-    // Les octets disent que les deux ont raison sur le fond: `a1` est un POINTEUR aux deux sites
-    // d'appel — `lui a1,0x801f; ori a1,a1,-21884` donne 0x801FAA84 ici (0x8003C4B0..0x8003C4C0),
-    // et `addiu a1,sp,104` donne une adresse de pile la-bas (0x8003AB3C). Un pointeur dans les deux
-    // cas, vers un triplet en forme de VECTOR.
-    //
-    // Mais les deux sites ne peuvent PAS s'ecrire avec un seul type C#: AnimCmdControl passe
-    // `VStack_80`, un `VECTOR` managé cree par `new()` et qui n'a aucune adresse PSX, tandis qu'ici
-    // l'argument EST une adresse PSX. Les unifier demande de decider comment ce portage represente
-    // une VECTOR de pile adressable — une decision d'architecture, pas une deduction. Les neuf
-    // autres doublons de VS.EXE ont ete fusionnes; celui-ci attend cette decision, et le dire
-    // explicitement vaut mieux que de choisir en silence l'un des deux et de casser l'autre site.
-    // Les deux corps sont vides, donc rien ne diverge tant qu'aucun des deux n'est transliteré.
-    private static void FUN_80047550(int param_1, int param_2, uint param_3, ushort param_4, int param_5)
-    {
-    }
+    // THE DUPLICATE IS GONE. This file used to carry a second, incompatibly-shaped stub for this
+    // address; the single implementation now lives in AnimCmdControl.cs, which owns the fuller
+    // note on why the second parameter is a PSX ADDRESS rather than a managed VECTOR. The short
+    // version: VECTOR_801faa84, which THIS file's call site passes, is read by four other sites
+    // and written by a fifth, so a managed copy would never reach them. The call site below calls
+    // across rather than re-declaring.
+
 
 }
