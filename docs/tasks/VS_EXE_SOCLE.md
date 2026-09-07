@@ -337,6 +337,64 @@ affirmation sur le *jeu*.
 Reste deux appelees en souche, pour des raisons deja consignees: `FUN_80026d98`
 (chaine de cinq fonctions manquantes) et `FUN_80058338` (deja refusee).
 
+## L'ETAT DE LA CHAINE APRES TROIS VAGUES
+
+Toute la chaine est cartographiee ET portee, sauf son declencheur. Nomme dans
+Ghidra comme dans le portage:
+
+```
+  ???  met un combattant en etat d'attaque          <-- LE SEUL MAILLON MANQUANT
+   |     FighterTask etape 9.4: FUN_8004b098 / FUN_8004c198 / FUN_8004cea0
+   |     (souches, avec leurs sous-arbres)
+   v
+  deux routes, les DEUX portees:
+   |  FUN_8004e758 ....... derriere un garde dont AUCUN setter n'existe
+   |                        dans le code decompile (3 recherches exhaustives)
+   |  FUN_8004ee48 ....... via CreateAttackEventTask -> UpdateAttackEventTask
+   v
+  AddSlotGaugeContribution @ 0x8004E108
+   |     seul ecrivain de la contribution par slot dans toute l'image
+   v
+  RunBattleRound @ 0x80055F94  somme les douze, clampe a +/-30000
+   v
+  CtxFlags bit 3               leve seulement a l'extreme
+   v
+  la tache de scene est creee
+   v
+  RenderBattleScene3D          son SEUL appelant est cette tache
+```
+
+**Mesure, pas supposition** (`--diag-vs 300`, manette maintenue sur trois
+masques): `UpdateFighter` tourne 792 fois, les deux racines **0 fois**.
+
+## CE QUE LES VAGUES ONT CORRIGE, ET CE QUI SE REPETE
+
+Trois vagues, ~50 fonctions, et **le meme defaut trois fois**: une adresse Ghidra
+declaree dans deux fichiers. C# lie un appel non qualifie a la classe englobante
+d'abord, donc la souche vide bat le vrai corps. **Ca compile, ca tourne, et le
+travail ne se fait pas.** Deux fois sur trois, ca a rendu du code correct
+totalement mort.
+
+La contre-mesure est desormais dans chaque brief: chercher l'ADRESSE dans tout
+`VS_EXE/` avant de declarer quoi que ce soit.
+
+Deuxieme classe recurrente, elle aussi trouvee trois fois par la revue adverse:
+du **travail supprime**. Deux stores `SWL/SWR` inconditionnels perdus, une boucle
+de douze iterations disparue, et un appel sur deux d'une paire (`param_2` = 0
+puis 1). Chacun verifie octet par octet avant correction; aucun n'etait un faux
+positif.
+
+## DEUX CORRECTIONS QUI N'ETAIENT PAS DES BUGS DE PORTAGE
+
+- **`data/AT1` et `AT2` n'etaient pas deployes.** Le boot a leve
+  `FileNotFoundException` en nommant le chemin exact -- comportement voulu, pas
+  de simulation de lecteur CD -- et c'est comme ca que la lacune s'est trouvee.
+- **La region de transit `0x80110000` faisait 0x5800.** Son propre commentaire
+  avait predit qu'il faudrait l'agrandir quand `FUN_80026ac0` serait portee. Elle
+  fait maintenant 0x28000, mesure sur le plus gros fichier lisible (`AT1/BU.B`,
+  80 secteurs). Et `LibDs.ReadDataSectors` ne sort plus silencieusement de sa
+  boucle: il leve en nommant le fichier, le secteur d'arret et l'adresse exacte.
+
 ## LA CHAINE COMPLETE DE L'ECRAN BLEU, mesuree maillon par maillon
 
 Le symptome — ecran de chargement puis fond du draw-env — a survecu a deux
