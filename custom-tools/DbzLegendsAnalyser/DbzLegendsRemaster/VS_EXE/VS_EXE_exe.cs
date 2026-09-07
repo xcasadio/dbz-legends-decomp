@@ -111,7 +111,7 @@ internal sealed class VS_EXE_exe
     // GHIDRA: DAT_8008d420 @ 0x8008D420 (VS.EXE)
     // Holds the active DRAWENV's ADDRESS, not the object: the original adds 0x70 to it to reach
     // the ordering table.
-    private static int DAT_8008d420;
+    internal static int DAT_8008d420;
 
     // GHIDRA: DAT_8008d444 @ 0x8008D444 (VS.EXE)
     // The frame counter, saturating rather than wrapping: main only increments it while it is
@@ -491,18 +491,47 @@ internal sealed class VS_EXE_exe
     // function. TITLE.EXE keeps the first of its four sprite-quad corners at this same offset
     // (TITLE_EXE/GteScratch.cs), but nothing in VS.EXE's ported tree shows that reading applies
     // here, so it keeps a raw name rather than borrowing TITLE's.
-    private static readonly SVECTOR SVECTOR_1f800020 = new();
+    internal static readonly SVECTOR SVECTOR_1f800020 = new();
 
     // GHIDRA: VECTOR_1f800048 @ 0x1F800048 (VS.EXE)
     // The second RotTrans's result vector; only .vz is read back, by FUN_800411b4 itself, for the
     // DAT_1f800128 depth projection below.
-    private static readonly VECTOR VECTOR_1f800048 = new();
+    internal static readonly VECTOR VECTOR_1f800048 = new();
 
     // GHIDRA: DAT_1f800078 @ 0x1F800078 (VS.EXE)
     // The second RotTrans's (long *) flag output. PARTIAL, same as LibGte.RotTrans's own comment:
     // the GTE FLAG register is not modelled in this port, so this is a write-only sink nothing in
     // this function reads back.
-    private static readonly int[] DAT_1f800078 = new int[1];
+    internal static readonly int[] DAT_1f800078 = new int[1];
+
+    // GHIDRA: SVECTOR_1f800028 @ 0x1F800028, SVECTOR_1f800030 @ 0x1F800030,
+    //         SVECTOR_1f800038 @ 0x1F800038, SVECTOR_1f800058 @ 0x1F800058,
+    //         VECTOR_1f800060 @ 0x1F800060, DAT_1f800074 @ 0x1F800074 (VS.EXE)
+    // THE SPRITE QUAD'S OWN SCRATCH, added for VS_EXE/SpriteDrawer.cs and declared HERE rather than
+    // in that file because this file already owns SVECTOR_1f800020, VECTOR_1f800048 and
+    // DAT_1f800078 at the same block of addresses -- one PSX byte gets one C# storage cell within
+    // an overlay, and splitting the block across two classes is exactly the duplicate-storage the
+    // seam checker exists to stop.
+    //
+    // WHAT THEY ARE, and now the reading SVECTOR_1f800020's own note above declined to borrow from
+    // TITLE.EXE is earned: 0x1F800020/28/30/38 ARE the four corners of a sprite quad, because
+    // FUN_80052DB4 hands exactly those four to RotAverage4 and fills them from the record's own
+    // width and height. TITLE_EXE/GteScratch.cs keeps the same four at the same offsets for the
+    // same reason -- the two overlays are relinked twins of one source file.
+    //
+    // 0x1F800058 is the per-quad rotation triple (flip flags, then the caller's own angles);
+    // 0x1F800060 the scale VECTOR; 0x1F800074 RotAverage4's `p` output, a write-only sink here.
+    internal static readonly SVECTOR SVECTOR_1f800028 = new();
+
+    internal static readonly SVECTOR SVECTOR_1f800030 = new();
+
+    internal static readonly SVECTOR SVECTOR_1f800038 = new();
+
+    internal static readonly SVECTOR SVECTOR_1f800058 = new();
+
+    internal static readonly VECTOR VECTOR_1f800060 = new();
+
+    internal static readonly int[] DAT_1f800074 = new int[1];
 
     // GHIDRA: DAT_1f800094 @ 0x1F800094, DAT_1f800098 @ 0x1F800098 (VS.EXE)
     // The vx/vy of the FIRST RotTrans's result vector at 0x1F800094. Its vz is 0x1F80009C --
@@ -807,21 +836,28 @@ internal sealed class VS_EXE_exe
     // failed with "no PsxRam region covers destination 0x80138000" -- which is 0x80110000 + 0x28000
     // exactly.
     //
-    // THE NEW SIZE IS THE ORIGINAL'S OWN BOUND, not a guess: 0x801C1000 is the next address VS.EXE
-    // itself uses (SoundState.Dat801c1000Address, the ADPCM clip buffer), and 0x801C1000 -
-    // 0x80110000 = 0xB1000. That is how much room the original leaves between the two, so it is how
-    // much this staging area can have. For reference, the six largest character archives on the
-    // disc sum to 0xA6800 (BU.B 163840, DB.B 126976, RC.B 106496, GW.B 96256, NIN.B 94208, SB.B
-    // 94208), which fits inside it with 0xA800 to spare -- so the bound and the worst real roster
-    // agree, and neither is an assumption about the other.
+    // THE NEW SIZE IS THE ORIGINAL'S OWN BOUND, and it was WRONG ONCE ALREADY. The first attempt
+    // used 0xB1000, on the reasoning that 0x801C1000 (the ADPCM clip buffer) is the next address
+    // VS.EXE itself uses. It is not: transliterating the sound driver turned up three more buffers
+    // this port had never seen -- 0x801B6000, 0x801B9000 and 0x801BE000 -- all INSIDE that span.
+    // The bound is therefore 0x801B6000 - 0x80110000 = 0xA6000, and the lesson is that "the next
+    // address I know about" is only a bound until the next slice lands.
+    //
+    // WHAT THAT COSTS, stated rather than hidden: the six largest character archives on the disc
+    // sum to 0xA6800 (BU.B 163840, DB.B 126976, RC.B 106496, GW.B 96256, NIN.B 94208, SB.B 94208),
+    // which is 0x800 -- one sector -- MORE than fits. That is a property of the original's own
+    // memory map, not of this port: those three sound buffers sit at those addresses on the console
+    // too. Either the game cannot present six such characters at once, or the console overruns the
+    // same way. Nothing read so far settles which, so the region is sized to the bound and the
+    // shortfall is recorded here.
     //
     // STILL PARTIAL, and the same rule applies to the next reader as applied to this one: enlarge,
     // never shrink -- RamRegion updates the row rather than adding a second one -- and size it on
     // what that reader demonstrably reads. FUN_8005d25c and the FUN_80029xxx family are still
     // untransliterated and still reach this address.
-    private const int Dat80110000Address = unchecked((int)0x80110000);
+    internal const int Dat80110000Address = unchecked((int)0x80110000);
 
-    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0xB1000);
+    private static readonly byte[] DAT_80110000 = RamRegion(Dat80110000Address, 0xA6000);
 
     // GHIDRA: DAT_800c3cb8 @ 0x800C3CB8 (VS.EXE)
     // Two POLY_FT4 packets, contiguous (0x800C3CB8 and 0x800C3CB8 + 0x28 = 0x800C3CE0), CLOSED the

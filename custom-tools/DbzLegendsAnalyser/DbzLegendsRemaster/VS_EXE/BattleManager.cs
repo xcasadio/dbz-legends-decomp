@@ -266,7 +266,7 @@ internal static class BattleManager
     //   0x80055FE4  the central gauge: count both teams, scale, accumulate  (skipped when pegged)
     //   0x8005625C  the +/-30000 clamps, high then low
     //   0x80056290  the pegged-gauge arm: raise 0x80000, and 8 as well when no slot is still live
-    //   0x80056358  the two pad overrides on the flag word, gated by 0x80008000 == 0x8000
+    //   0x80056358  the two pad overrides on the flag word, gated by (flags & 0x80008000) == 0x80008000
     //   0x800563D8  THE THREE-WAY on the flag word:
     //                 bit 3 clear  -> 0x80056820  the round body, itself two arms on bit 14
     //                                   0x800569A0  bit 14 clear: legality sweep + cursor repair

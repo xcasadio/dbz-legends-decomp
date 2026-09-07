@@ -14,10 +14,14 @@ namespace DbzLegendsRemaster.VS_EXE;
 // WHY IT MATTERS BEYOND THE VIEW, and why it is ported now rather than with the rest of the
 // rendering. Two bits that stop the whole battle are cleared HERE and nowhere else:
 //
-//   CtxFlags bit 31. `& 0x7fffffff` at 0x80027FB4 is the only instruction in the overlay that
-//   clears it -- a byte scan for a mask of that shape finds fourteen `lui _,0x7fff` sites and this
-//   is the one that lands on the battle context. Until it clears, RunBattleRound's own
-//   `(CtxFlags & 0x80008000) == 0x8000` gate stays shut.
+//   CtxFlags bit 31. `and v0,v0,a0` at 0x80027A7C followed by `sw v0,0x10(v1)` at 0x80027A80,
+//   with the 0x7FFFFFFF mask built at 0x80027A64/0x80027A70, is the only place in the overlay that
+//   clears it. A byte scan for a mask of that shape finds thirteen `lui _,0x7fff` INSTRUCTIONS (a
+//   fourteenth match at 0x80083124 is data, not code), and this is the one that lands on the
+//   battle context. Until it clears, RunBattleRound's own
+//   `(CtxFlags & 0x80008000) == 0x8000` gate stays shut -- note that this is the gate that wants
+//   bit 31 CLEAR and bit 15 SET, which is a DIFFERENT test from the pad override at 0x80056358,
+//   where the compare register holds 0x80008000 and BOTH bits must be up.
 //
 //   Every fighter's +0x138 bit 25. The loop four instructions later walks all twelve slots and
 //   clears it. UpdateFighter skips step 9.3 -- the frame's command word -- while that bit is up,
@@ -145,6 +149,10 @@ internal static class BattleCamera
     // THE OPENING FLY-IN. 0x154 is the countdown, seeded to 0x50 by the hold-pose arm; the other
     // three are the eye's height, distance and projection as it comes in, each stepping towards a
     // floor on every tick.
+    // Both of these are loaded with `lh` and tested with `slti` in the image (0x80027974,
+    // 0x800279F4, 0x80027A3C), so every read below sign-extends. The declared width stays `ushort`
+    // because the stores are `sh` and the values live in 0x00..0x100, where the two agree; the
+    // casts are there so the code says which one the original does.
     private static ushort DAT_8008d154;
 
     private static short DAT_8008d156;
@@ -310,7 +318,7 @@ internal static class BattleCamera
             return;
         }
 
-        // 0x80027980 — pick the slot to follow. Normally ctx+0x1A, the published cursor; but while
+        // 0x8002789C — pick the slot to follow. Normally ctx+0x1A, the published cursor; but while
         // CtxFlags bit 28 is up, the first slot whose record carries 0x1000 (one that has just gone
         // down) wins instead. The loop's own exit assignment is the original's: it sets uVar17 back
         // to the cursor on the iteration that does NOT break, so falling out of the loop leaves the
@@ -336,7 +344,7 @@ internal static class BattleCamera
 
         uint puVar8 = (uint)PsxRam.ReadI32(ctx + BattleState.CtxFlags) & 0x80008000;
 
-        // 0x80027A1C — THE OPENING POSE, held while both bit 31 and bit 15 are up. It also seeds the
+        // 0x800278F8 — THE OPENING POSE, held while both bit 31 and bit 15 are up. It also seeds the
         // fly-in below: 0x50 ticks, starting high, far and wide.
         if (puVar8 == 0x80008000)
         {
@@ -356,14 +364,14 @@ internal static class BattleCamera
 
         short sVar4 = (short)uVar17;
 
-        // 0x80027AB4 — THE FLY-IN, run while bit 31 is up and bit 15 has been cleared by
+        // 0x8002796C — THE FLY-IN, run while bit 31 is up and bit 15 has been cleared by
         // RunBattleRound's legality-sweep arm. It eases the eye down and in on every tick, and on the
         // LAST tick it does the two things the whole battle waits for: clears CtxFlags bit 31 and
         // clears every fighter's +0x138 bit 25. It also sets +0x22C bit 0 on every fighter, which is
         // what the CPU controller reads as "the round has begun".
         if (puVar8 == 0x80000000)
         {
-            if (0x10 < DAT_8008d154)
+            if (0x10 < (short)DAT_8008d154)
             {
                 Scratchpad.DAT_1f8000c8 = DAT_8008d158;
                 FileIo.DAT_1f8000d0 = DAT_8008d156;
@@ -378,7 +386,7 @@ internal static class BattleCamera
                 }
 
                 DAT_8008d15a = (ushort)(DAT_8008d15a - 1);
-                if (DAT_8008d15a < 0xd0)
+                if ((short)DAT_8008d15a < 0xd0)
                 {
                     DAT_8008d15a = 0xd0;
                 }
@@ -387,10 +395,20 @@ internal static class BattleCamera
             }
 
             ushort uVar5f = (ushort)(Scratchpad.DAT_1f800086 + 0x20);
-            if (0x20 < ((ushort)Scratchpad.DAT_1f800086 & 0xfff) - 0x7f0)
+
+            // THE COMPARE IS UNSIGNED, and getting that wrong was a real defect this file shipped
+            // once. The image at 0x80027A18..0x80027A24 is
+            //     andi  v0,a0,0xfff ; addiu v0,v0,-0x7f0 ; sltiu v0,v0,0x21 ; bne v0,zero,<skip>
+            // -- `sltiu`, so the block runs whenever `(angle & 0xFFF) - 0x7F0` is 0x21 or more AS AN
+            // UNSIGNED value, which includes every angle below 0x7F0 (the subtraction wraps). C#
+            // promotes `ushort & int` to `int`, so the natural spelling is SIGNED and skips the
+            // whole lower half of the circle. The cast is what makes it the original's test, and
+            // this block is the one that decides which frame the fly-in ends on -- and therefore
+            // which frame the round starts on.
+            if (0x20 < (uint)((((ushort)Scratchpad.DAT_1f800086) & 0xfff) - 0x7f0))
             {
                 Scratchpad.DAT_1f800086 = (short)uVar5f;
-                if (DAT_8008d154 < 0x11)
+                if ((short)DAT_8008d154 < 0x11)
                 {
                     DAT_8008d154 = (ushort)(DAT_8008d154 + 1);
                 }
@@ -405,8 +423,9 @@ internal static class BattleCamera
             uVar16 = 0;
             DAT_8008d154 = (ushort)(DAT_8008d154 - 1);
 
-            // THE CLEAR OF CtxFlags BIT 31 — `sw v0,0x10(s2)` after `and v0,v0,at` with at =
-            // 0x7FFFFFFF, at 0x80027FB4. Nothing else in the overlay does this.
+            // THE CLEAR OF CtxFlags BIT 31 — `and v0,v0,a0` at 0x80027A7C and `sw v0,0x10(v1)` at
+            // 0x80027A80, with the 0x7FFFFFFF mask built at 0x80027A64/0x80027A70. Nothing else in
+            // the overlay does this.
             PsxRam.WriteI32(ctx + BattleState.CtxFlags,
                 (int)((uint)PsxRam.ReadI32(ctx + BattleState.CtxFlags) & 0x7fffffff));
 

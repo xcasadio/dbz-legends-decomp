@@ -130,31 +130,30 @@ internal static class FighterMotion
         int local_58 = 0x249;
         int local_54 = 0x249;
 
-        // BLOCKED: FighterCombat.FUN_80052db4 is the 18-parameter no-op stub for 0x80052DB4 and it
-        // returns void. It is called qualified rather than redeclared here — one Ghidra address,
-        // one C# body — and it has to become `internal` (it is `private` today) for this to build.
-        FighterCombat.FUN_80052db4(
+        // CLOSED: 0x80052DB4 is VS_EXE/SpriteDrawer.cs's own body now, and it RETURNS the ordering
+        // -table bucket it used. The store into +0x13C below carries that value instead of the 0 the
+        // stub forced.
+        int drawResult = SpriteDrawer.FUN_80052db4(
             PsxRam.ReadI32(param_1 + 0x98),
             (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
             (short)PsxRam.ReadU16(param_2 + 2),
             (short)(PsxRam.ReadU16(param_2 + 4) - (ushort)Scratchpad._DAT_1f8000bc),
-            local_4c,
+            (ushort)local_4c,
             0,
             0,
             local_54,
             local_58,
             PsxRam.ReadI32(param_1 + 0x140),
-            PsxRam.ReadU16(param_1 + 0x15a),
-            (ushort)local_4e,
-            (byte)local_50,
-            (byte)local_52,
+            (short)PsxRam.ReadU16(param_1 + 0x15a),
+            local_4e,
+            (sbyte)local_50,
+            (sbyte)local_52,
             PsxRam.ReadU8(param_1 + 0x150),
             PsxRam.ReadU8(param_1 + 0x151),
             PsxRam.ReadU8(param_1 + 0x152),
             VS_EXE_exe.DAT_1f800128);
 
-        // See the BLOCKED paragraph in this function's header note for why the stored value is 0.
-        PsxRam.WriteI32(param_1 + 0x13c, 0);
+        PsxRam.WriteI32(param_1 + 0x13c, drawResult);
     }
 
     // GHIDRA: FUN_80047a24 @ 0x80047A24 (VS.EXE)
@@ -183,7 +182,7 @@ internal static class FighterMotion
         // back. Every caller still passes the fighter. Kept in the signature for that reason.
         _ = param_1;
 
-        FighterCombat.FUN_80052db4(
+        SpriteDrawer.FUN_80052db4(
             unchecked((int)0x8007F7B8),
             (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
             0,
@@ -264,8 +263,8 @@ internal static class FighterMotion
             }
         }
 
-        // BLOCKED: FUN_800340a8 @ 0x800340A8 is not ported anywhere — see the stub below.
-        FUN_800340a8(
+        // CLOSED: FUN_800340a8 @ 0x800340A8 (1764 bytes) is VS_EXE/SceneGeometry.cs's own body.
+        SceneGeometry.FUN_800340a8(
             PsxRam.ReadU16(TaskSystem.g_CurrentTask),
             PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex),
             param_2,
@@ -276,33 +275,9 @@ internal static class FighterMotion
     }
 
     // GHIDRA: FUN_800340a8 @ 0x800340A8 (VS.EXE)
-    // BLOCKED: 1764 bytes, 0x800340A8..0x8003478B, out of this slice. Eleven callees of its own
-    // (rand, SquareRoot0, ratan2 and eight more FUN_8003xxxx functions, none in this port), in an
-    // address range nothing this port owns has entered yet. FighterTask.cs's own note on
-    // FUN_8004fd24 already named this function as the exact one that would unblock it.
-    //
-    // Seven arguments, all verified against the marshalling at 0x8004FF6C..0x8004FFCC:
-    //   param_1  ushort  the halfword at TaskSystem.g_CurrentTask + 0        (`lhu`)
-    //   param_2  byte    the fighter's BattleState.FighterSlotIndex (+0x173) (`lbu`)
-    //   param_3  int     FUN_8004fd24's own param_2, i.e. fighter + 0x114 — the position triple
-    //   param_4  int     fighter + 0x11c, a second address inside the same zeroed region
-    //   param_5  byte    the fighter's state byte +0x16a                     (`lbu`)
-    //   param_6  int     local_10, the +0x138 bit-18 flag
-    //   param_7  int     local_c, the attack-state flag
-    // Kept as a precise no-op so the caller's own argument computation — real PsxRam reads with no
-    // side effects of their own — still runs exactly where the original runs it.
-    private static void FUN_800340a8(int param_1, int param_2, int param_3, int param_4,
-        int param_5, int param_6, int param_7)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-        _ = param_4;
-        _ = param_5;
-        _ = param_6;
-        _ = param_7;
-    }
-
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/SceneGeometry.cs (1764 bytes). The call below is
+    // qualified; the stub that used to sit here would have won the binding and this file's own
+    // FUN_8004FD24 would have gone on reporting to nothing.
     // GHIDRA: FUN_8004b68c @ 0x8004B68C (VS.EXE)
     // 484 bytes, 0x8004B68C..0x8004B89F. One caller, FUN_8004b9cc @ 0x8004B9CC (ported in
     // FighterAction.cs): `else { local_10 = FUN_8004b68c(param_1); }`, the arm taken when the

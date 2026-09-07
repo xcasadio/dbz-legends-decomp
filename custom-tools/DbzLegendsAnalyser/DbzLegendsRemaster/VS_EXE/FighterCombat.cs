@@ -2024,12 +2024,12 @@ internal static class FighterCombat
             param_1 = unchecked((PsxRam.ReadU8(iVar4 + 0x7e) & 0xc0) << 0x18);
         }
 
-        FUN_80052db4(
+        SpriteDrawer.FUN_80052db4(
             PsxRam.ReadI32(iVar4 + 0x28),
-            (int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10,
+            (short)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10),
             (short)PsxRam.ReadU16(iVar4 + 0x42),
-            (int)(((uint)PsxRam.ReadU16(iVar4 + 0x44) - (uint)Scratchpad._DAT_1f8000bc) * 0x10000) >> 0x10,
-            param_1 >> 0x10,
+            (short)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x44) - (uint)Scratchpad._DAT_1f8000bc) * 0x10000) >> 0x10),
+            (ushort)(param_1 >> 0x10),
             0,
             0,
             0x200,
@@ -2042,14 +2042,12 @@ internal static class FighterCombat
             0x80,
             0x80,
             0x80,
-            // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE) -- already declared, PRIVATE, in
-            // VS_EXE_exe.cs ("the depth-projected table offset FUN_800411b4 computes every
-            // frame"). Not reachable from this file, and not readable through PsxRam either: like
-            // the rest of the 0x1F8000xx scratchpad, it is modelled as a plain C# storage cell
-            // rather than a PsxRam-backed address (see Scratchpad.cs's own header), so a raw
-            // PsxRam read here would not agree with the live value anyway. FUN_80052db4 discards
-            // every argument (BLOCKED stub, below), so the gap has no observable effect.
-            0);
+            // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE) -- the depth-projected table offset
+            // FUN_800411B4 computes every frame, declared in VS_EXE_exe.cs and now `internal`.
+            // It used to be passed as a literal 0 with a note explaining that the stub discarded
+            // every argument anyway; the drawer is real now, and this parameter is the near-plane
+            // cutoff it compares the bucket index against, so the real value goes in.
+            VS_EXE_exe.DAT_1f800128);
 
         if ((AnimVm.DAT_800b305a & 1) != 0)
         {
@@ -2098,39 +2096,10 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80052db4 @ 0x80052DB4 (VS.EXE)
-    // BLOCKED: 1404 bytes, out of this slice -- the "primitive pool" drawer
-    // VS_EXE/PrimitivePools.cs's own header note already names in passing ("FUN_80052DB4
-    // @ 0x80052DB4 and its neighbours, which walk +0x04/+0x24/+0x44 for slot 1"). UpdateAttackEventTask's
-    // only call to it above passes the attack-event workspace's own position fields (+0x28, +0x40,
-    // +0x42, +0x44, +0x74), the frame's own rotation byte pair (folded into the caller's own
-    // `param_1`), and a run of literal constants (a 0x200 scale pair, three 0x80 RGB-neutral
-    // bytes) that match a sprite-draw call's usual shape; drawing itself is out of this slice.
-    // Kept as a precise no-op so the caller's own argument computation -- real PsxRam reads with
-    // no side effects of their own -- still runs exactly where the original runs it.
-    internal static void FUN_80052db4(int param_1, int param_2, int param_3, int param_4, int param_5,
-        int param_6, int param_7, int param_8, int param_9, int param_10, int param_11, int param_12,
-        int param_13, int param_14, int param_15, int param_16, int param_17, int param_18)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-        _ = param_4;
-        _ = param_5;
-        _ = param_6;
-        _ = param_7;
-        _ = param_8;
-        _ = param_9;
-        _ = param_10;
-        _ = param_11;
-        _ = param_12;
-        _ = param_13;
-        _ = param_14;
-        _ = param_15;
-        _ = param_16;
-        _ = param_17;
-        _ = param_18;
-    }
-
+    // NO LONGER DECLARED HERE. CLOSED, in VS_EXE/SpriteDrawer.cs -- 1404 bytes and 136 incoming
+    // references, the function that puts every non-HUD sprite in this mode on the screen. The call
+    // below is qualified and its arguments carry the casts Ghidra's own prototype implies; the stub
+    // that used to sit here took eighteen plain ints and discarded them all.
     // GHIDRA: FUN_80045b70 @ 0x80045B70 (VS.EXE)
     // BLOCKED: 388 bytes, out of this slice. Ghidra's own signature is `undefined1
     // FUN_80045b70(ushort param_1, short param_2)`; UpdateAttackEventTask's two calls above pass its own
