@@ -41,6 +41,64 @@ internal static class VsBootDiagnostic
         return uint.TryParse(raw, out uint dec) ? dec : 0;
     }
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: parses DBZ_PAD_SCRIPT into a list of (frame, rawMask) holds. Format is
+    // "frame:hexmask" entries separated by commas, e.g. "300:800,520:1020,524:0" -- press R1 at
+    // frame 300, then RIGHT+TRIANGLE at 520, then release at 524. Each entry REPLACES the held mask
+    // from its frame onward, so a hold lasts until the next entry; a mask of 0 releases.
+    //
+    // WHY A SCRIPT AND NOT A SECOND PAIR OF VARIABLES. The two events a battle needs are hundreds of
+    // frames apart and neither can move. R1 has to fire near the start, because it drives
+    // RunBattleRound's round-start override at 0x80056358. An attack has to fire much later,
+    // because a fighter is not pad-driven until the battle context word at ctx+0x10 carries bit
+    // 0x100000 -- set by the round arm at 0x80056EFC (`lui v0,0x10 / or v0,a0,v0 / sw v0,0x10(s2)`)
+    // -- and phase 8 then matches the acting-slot cursors at ctx+0x14 and ctx+0x16 against the
+    // fighter's own slot index. That is measurable rather than theoretical: pad-port calls are 0 at
+    // a 500-frame budget, 4 at 550, 54 at 700 and 120 at 900, all with the same frame-300 press.
+    // A two-frame press at 300 is released two hundred frames before anything reads it.
+    //
+    // AND SOME COMMANDS NEED MORE THAN ONE ENTRY REGARDLESS OF TIMING. FighterInput.cs's
+    // MatchFacingFaceThenOppositeFace wants two DIFFERENT face-button edges one to four frames
+    // apart, which no single mask can express at any moment.
+    private static (int Frame, uint Mask)[] ParsePressScript()
+    {
+        string? raw = Environment.GetEnvironmentVariable("DBZ_PAD_SCRIPT");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Array.Empty<(int, uint)>();
+        }
+
+        string[] parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var holds = new (int Frame, uint Mask)[parts.Length];
+        int kept = 0;
+        foreach (string part in parts)
+        {
+            string[] halves = part.Split(':');
+            if (halves.Length != 2)
+            {
+                continue;
+            }
+
+            string frameText = halves[0].Trim();
+            string maskText = halves[1].Trim();
+            if (maskText.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                maskText = maskText.Substring(2);
+            }
+
+            if (int.TryParse(frameText, out int frame)
+                && uint.TryParse(maskText, System.Globalization.NumberStyles.HexNumber, null, out uint mask))
+            {
+                holds[kept] = (frame, mask);
+                kept++;
+            }
+        }
+
+        Array.Resize(ref holds, kept);
+        Array.Sort(holds, (a, b) => a.Frame.CompareTo(b.Frame));
+        return holds;
+    }
+
     internal static int Run(string[] args)
     {
         int budget = 240;
@@ -118,7 +176,29 @@ internal static class VsBootDiagnostic
         // Off by default: with neither variable set the run is exactly what it was.
         uint pressMask = ParseHexEnvironment("DBZ_PAD_PRESS_MASK");
         int pressFrame = (int)ParseHexEnvironment("DBZ_PAD_PRESS_FRAME");
-        if (pressMask != 0 && pressFrame > 0)
+        var script = ParsePressScript();
+
+        if (script.Length != 0)
+        {
+            // DBZ_PAD_SCRIPT wins over the two-variable shorthand when both are set, and the two
+            // are never combined: mixing one implicit two-frame press into an explicit script would
+            // make a run reproducible only to whoever wrote both.
+            var holds = script;
+            FrameBaton.HeadlessFrameHook = frame =>
+            {
+                for (int i = 0; i < holds.Length; i++)
+                {
+                    if (holds[i].Frame == frame)
+                    {
+                        // PressHeadless takes the pad's ACTIVE-LOW word, so a held mask is its
+                        // complement and 0xFFFFFFFF is everything released.
+                        PadInputBackend.PressHeadless(
+                            holds[i].Mask == 0 ? 0xFFFFFFFFu : ~holds[i].Mask);
+                    }
+                }
+            };
+        }
+        else if (pressMask != 0 && pressFrame > 0)
         {
             FrameBaton.HeadlessFrameHook = frame =>
             {
@@ -149,6 +229,17 @@ internal static class VsBootDiagnostic
         catch (Exception exception)
         {
             stopped = $"{exception.GetType().Name}: {exception.Message}";
+        }
+
+        if (script.Length != 0)
+        {
+            var rendered = new string[script.Length];
+            for (int i = 0; i < script.Length; i++)
+            {
+                rendered[i] = $"{script[i].Frame}:0x{script[i].Mask:X}";
+            }
+
+            Console.WriteLine($"=== script pad : {string.Join(" -> ", rendered)}");
         }
 
         Console.WriteLine(
@@ -347,11 +438,23 @@ internal static class VsBootDiagnostic
 
         if (BattleScene.DiagDispatcherCalls == 0)
         {
+            // MEASURED, AND NOT WHAT THIS MESSAGE USED TO SAY. It used to offer three suspects --
+            // the task is not created, not registered, or its list is not walked -- and all three
+            // are wrong. The scene task is born on RunBattleRound's ROUND-IS-OVER arm at
+            // 0x800563F8, and that arm opens only when CtxFlags bit 3 is raised, which needs all
+            // four conditions printed above. Exactly one of them fails: the central gauge never
+            // reaches +/-30000, because the twelve +0x15B8 contributions printed above are all
+            // zero, because AddSlotGaugeContribution is never called. So this is a CONSEQUENCE of
+            // the gauge chain, not a second independent fault, and the console would do the same.
             Console.WriteLine(
-                "  LA TACHE DE SCENE N'A JAMAIS TOURNE. Le blocage est en amont du repartiteur:");
+                "  ATTENDU DANS CET ETAT, ET PAS UN DEFAUT. La tache de scene naît sur le bras");
             Console.WriteLine(
-                "  soit la tache n'est pas creee, soit elle n'est pas enregistree aupres du");
-            Console.WriteLine("  scheduler, soit sa liste n'est pas parcourue.");
+                "  << le round est fini >> (0x800563F8), qui exige le bit 3 de CtxFlags. Des quatre");
+            Console.WriteLine(
+                "  conditions ci-dessus, seule la jauge centrale echoue. Tant que la chaine de");
+            Console.WriteLine(
+                "  jauge ne seme pas, le round ne se termine pas et cette tache n'a pas lieu");
+            Console.WriteLine("  d'exister. Chercher en amont, dans la chaine de jauge.");
         }
         else
         {
