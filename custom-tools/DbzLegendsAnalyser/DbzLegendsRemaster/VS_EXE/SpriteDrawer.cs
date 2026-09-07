@@ -46,6 +46,19 @@ internal static class SpriteDrawer
         m = { [0] = 0x1000, [4] = 0x1000, [8] = 0x1000 },
     };
 
+    // JUSTIFICATION: backend MonoGame only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Nothing in the
+    // transliterated runtime touches them. "Called" and "submitted" are different questions: a
+    // drawer that runs but whose every quad falls outside the ordering table draws nothing, and
+    // from a screenshot the two look identical.
+    internal static int DiagCalls;
+
+    internal static int DiagQuadsSubmitted;
+
+    internal static int DiagPoolFull;
+
+    internal static int DiagUnresolvedPacket;
+
     // JUSTIFICATION: C# language bridge only
     // RELATION: RotAverage4 writes its four screen-coordinate results INTO the packet, so the SDK
     // entry point takes the packet's own byte buffer plus four offsets rather than a pointer. When
@@ -72,6 +85,8 @@ internal static class SpriteDrawer
         short param_11, short param_12, sbyte param_13, sbyte param_14, byte param_15,
         byte param_16, byte param_17, int param_18)
     {
+        DiagCalls++;
+
         LibGte.MATRIX MStack_110 = new();
         LibGte.MATRIX MStack_f0 = new();
         LibGte.MATRIX MStack_d0 = new();
@@ -136,6 +151,7 @@ internal static class SpriteDrawer
                 {
                     // The pool is full. See this file's header: this return LEAKS the outer
                     // PushMatrix, and that is the original's own bug, not a transcription slip.
+                    DiagPoolFull++;
                     return 0;
                 }
 
@@ -234,6 +250,7 @@ internal static class SpriteDrawer
                 {
                     // PARTIAL: see s_unmappedPrimitive above. Unreachable while the pool lives in a
                     // modelled region.
+                    DiagUnresolvedPacket++;
                     pBuf = s_unmappedPrimitive;
                     pOff = 0;
                 }
@@ -253,6 +270,7 @@ internal static class SpriteDrawer
                 if (local_38 < iVar5 && iVar5 < 0x800)
                 {
                     LibGpu.AddPrim(iVar5 * 4 + 0x70 + VS_EXE_exe.DAT_8008d420, p);
+                    DiagQuadsSubmitted++;
                     uVar14 = uVar14 + 1;
                     PsxRam.WriteI32(PrimitivePools.g_PrimitivePoolContext + 0x44,
                         PsxRam.ReadI32(PrimitivePools.g_PrimitivePoolContext + 0x44) + 1);

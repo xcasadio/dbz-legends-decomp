@@ -288,6 +288,20 @@ internal static class VsBootDiagnostic
         Console.WriteLine(anyCommand ? string.Empty : "   AUCUN mot de commande n'a ete produit.");
 
         Console.WriteLine();
+        Console.WriteLine(
+            $"  LE DESSINEUR DE SPRITES (SpriteDrawer @ 0x80052DB4) : appels {SpriteDrawer.DiagCalls}"
+            + $"   quads soumis {SpriteDrawer.DiagQuadsSubmitted}"
+            + $"   pool plein {SpriteDrawer.DiagPoolFull}"
+            + $"   paquet non resolu {SpriteDrawer.DiagUnresolvedPacket}");
+        if (SpriteDrawer.DiagCalls != 0 && SpriteDrawer.DiagQuadsSubmitted == 0)
+        {
+            Console.WriteLine(
+                "  IL TOURNE ET NE SOUMET RIEN: chaque quad tombe hors de la table d'ordonnancement,");
+            Console.WriteLine(
+                "  ou son paquet n'atterrit dans aucune region modelisee. Les deux se voient ici.");
+        }
+
+        Console.WriteLine();
         Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");

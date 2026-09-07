@@ -84,6 +84,26 @@ internal sealed class VS_EXE_exe
     // one lookup covers them all and no file has to be listed by hand. The explicit chains follow
     // for the spans that are not RamRegion-backed, then the cross-overlay block, then the heap
     // last, exactly as SELECT_EXE_exe.ResolveAddress orders its own.
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: a RamRegion registers when the class that declares it runs its static constructor,
+    // and C# runs that lazily -- on the first access to the class, which for a task body is the
+    // first DISPATCH, not the RegisterCallback that merely takes its method group. VS_EXE's stage
+    // backdrop declares two regions (0x800B7210 and the 23x23 grid at 0x800B7484) and
+    // FUN_800414EC writes twelve halfwords per grid cell through PsxRam BEFORE any StageBackdrop
+    // method is invoked, so without this the whole grid would land nowhere and nothing would say
+    // so. Forced here, in the resolver's own class, because the resolver is what every one of those
+    // stores goes through.
+    //
+    // Any future file that declares a RamRegion and is reached only through a task callback needs
+    // its own line in ArmRegions.
+    private static readonly bool s_regionsArmed = ArmRegions();
+
+    private static bool ArmRegions()
+    {
+        StageBackdrop.EnsureRegions();
+        return true;
+    }
+
     internal static (byte[] Buffer, int Offset)? ResolveAddress(int address)
     {
         if (RamResolve(address, out byte[] buffer, out int offset))
@@ -491,7 +511,7 @@ internal sealed class VS_EXE_exe
     // the swap" shape TITLE.EXE's FUN_80037388 uses at the identical offsets.
     private static short DAT_1f80008c;
 
-    private static short DAT_1f80008e;
+    internal static short DAT_1f80008e;
 
     private static short DAT_1f800090;
 
@@ -552,9 +572,9 @@ internal sealed class VS_EXE_exe
     // second declaration over the same address, per this project's own duplicate-symbol rule --
     // compare addresses, not names, and one PSX byte gets one C# storage cell within an overlay.
     // Only vx/vy are new here; vz reuses the existing field.
-    private static int DAT_1f800094;
+    internal static int DAT_1f800094;
 
-    private static int DAT_1f800098;
+    internal static int DAT_1f800098;
 
     // GHIDRA: DAT_1f800128 @ 0x1F800128 (VS.EXE)
     // The depth-projected table offset FUN_800411b4 computes every frame; nothing else in this
@@ -1138,6 +1158,13 @@ internal sealed class VS_EXE_exe
     // table lookups just above -- so that is what is passed here.
     private static void FUN_800414ec(uint param_1)
     {
+        // JUSTIFICATION: C# language bridge only
+        // RELATION: CreateTask stores the address raw in the node at +0x04 and TaskSystem's
+        // per-list dispatch reaches only a body it has a registered delegate for. Both bodies are
+        // VS_EXE/StageBackdrop.cs's; without these two lines the stage's own backdrop and grid sit
+        // on list 1's schedule and draw nothing -- the same gap that hid the battle camera.
+        TaskSystem.RegisterCallback(Lab80041a1cAddress, StageBackdrop.LAB_80041a1c);
+        TaskSystem.RegisterCallback(Lab80041704Address, StageBackdrop.LAB_80041704);
         TaskSystem.CreateTask(Lab80041a1cAddress, 0x100, 1, 4, 0, TaskSystem.g_TaskListTail[1]);
         int iVar2 = TaskSystem.CreateTask(Lab80041704Address, 0x54, 1, 0, 0, TaskSystem.g_TaskListTail[1]);
         if (iVar2 != 0)
@@ -1202,7 +1229,7 @@ internal sealed class VS_EXE_exe
     // GHIDRA: DAT_8008d39c @ 0x8008D39C (VS.EXE)
     // Written here from param_1; also read at 0x800410A0, inside LAB_80040f78's own unpromoted body
     // -- see that task entry's own const just below -- so the read site stays undescribed here.
-    private static short DAT_8008d39c;
+    internal static short DAT_8008d39c;
 
     // GHIDRA: LAB_80040f78 @ 0x80040F78 (VS.EXE)
     // BLOCKED: a task entry point Ghidra never promoted to a function -- task id 0, list 0xd, 0xc
@@ -1223,6 +1250,8 @@ internal sealed class VS_EXE_exe
     {
         DAT_8008d3d0 = 0;
         DAT_8008d39c = param_1;
+        // Same reason as the pair above; this one is the 0x50-sprite backdrop layer on list 0xD.
+        TaskSystem.RegisterCallback(Lab80040f78Address, StageBackdrop.LAB_80040f78);
         TaskSystem.CreateTask(Lab80040f78Address, 0, 0xd, 0xc, 0, TaskSystem.g_TaskListTail[0xd]);
     }
 
