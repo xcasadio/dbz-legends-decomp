@@ -3158,6 +3158,13 @@ internal static class BattleManager
                     (int)((uint)PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0xfffffffb));
             }
 
+            // JUSTIFICATION: C# language bridge only
+            // RELATION: DiagRoundRequestEverSeen is also OR-ed at the top of the frame, and there
+            // it always read zero -- because the 0x180 bits are set and cleared INSIDE one frame
+            // (the clear is four lines below), so a once-per-frame sample at the manager's entry
+            // can never see them. Sampling here too is what makes the probe and the call counter
+            // agree; before this line they contradicted each other and the port was blameless.
+            DiagRoundRequestEverSeen |= PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest);
             if ((PsxRam.ReadI32(param_1 + BattleState.CtxRoundRequest) & 0x180) != 0)
             {
                 DiagFun80026d98Calls++;

@@ -4,10 +4,11 @@ Ce fichier est le message a coller au demarrage d'une session neuve. Il se suffi
 a lui-meme : tout ce qui suit a ete mesure, pas suppose, et chaque affirmation
 renvoie a une adresse ou a une commande reproductible.
 
-**Reecrit le 2026-09-07.** La version precedente disait que l'unique maillon
-manquant etait l'etape 9.3 du `FighterTask`. C'etait faux, et la mesure l'a montre
-en une commande : l'etape 9.3 n'etait jamais atteinte. Ce fichier raconte la vraie
-chaine, et ce qui reste.
+**Reecrit le 2026-09-07, puis mis a jour le meme jour quand la translitteration
+s'est achevee.** La version d'avant disait que l'unique maillon manquant etait
+l'etape 9.3 du `FighterTask` ; c'etait faux, et la mesure l'a montre en une
+commande. Ce fichier raconte la vraie chaine, l'etat final de la translitteration,
+et la seule question qui reste — qui n'est plus une question de code manquant.
 
 ---
 
@@ -48,11 +49,31 @@ python custom-tools/scripts/vs_port_coverage.py docs/tasks/VS_EXE_FUNCTIONS.tsv
 
 `docs/tasks/VS_EXE_FUNCTIONS.tsv` est l'inventaire Ghidra de toutes les fonctions
 de VS.EXE (adresse, nom, taille, appelants, appelees). Le script les trie en
-PORTED / STUB / ABSENT en distinguant un vrai corps d'un `_ = param;`, et exclut
-le SDK. Au dernier passage : **264 fonctions portees, 148519 octets, 90,1 %** du
-code de jeu ; 22 souches, 21 absentes (4284 octets).
+PORTED / EMPTY / STUB / ABSENT en distinguant un vrai corps d'un `_ = param;`,
+et exclut le SDK.
 
-Le script classe aussi les absentes par taille : c'est la file de travail.
+**VS.EXE EST ENTIEREMENT TRANSLITTERE.** Au dernier passage :
+
+```
+fonctions VS.EXE hors SDK   : 307   (164763 octets)
+  PORTED   :   306 fonctions   164755 octets  100.0 %
+  EMPTY    :     1 fonctions        8 octets    0.0 %
+  STUB     :     0 fonctions        0 octets    0.0 %
+  ABSENT   :     0 fonctions        0 octets    0.0 %
+  CLOS     :   307 fonctions   164763 octets  100.0 %   (PORTED + EMPTY)
+```
+
+Le seul EMPTY est `FUN_8005d1f4` @ 0x8005D1F4, dont le corps dans l'image est
+`jr ra` et rien d'autre : un corps C# vide est sa translitteration, pas une souche
+de celle-ci. Le script le VERIFIE contre `data/VS.EXE` a chaque passage — il lit
+les deux premiers mots de la fonction et demande 0x03E00008 puis 0x00000000 — au
+lieu de tenir une liste d'adresses excusees, pour que la regle ne pourrisse pas en
+alibi. Controle negatif fait : elle repond False pour le corps de 2440 octets, pour
+le thunk de 32 octets, pour un corps de 304 octets, et pour une vraie fonction dont
+on lui ment la taille a 8 octets.
+
+Ce qui n'est PAS fini pour autant : voir « CE QUI RESTE » a la fin. La
+translitteration est complete ; le comportement, non.
 
 ---
 
@@ -117,13 +138,22 @@ de fixture et est imprime a chaque run.
 bash custom-tools/scripts/vs_acceptance.sh
 ```
 
-Elle fait tout : build, les treize bancs, les cinq verificateurs de couture, et le
-temoin `--diag-select 400`. Criteres, tous les quatre a chaque etape :
+Elle fait tout : build, les treize bancs, les cinq verificateurs de couture, le
+temoin `--diag-select 400` et, depuis la fin de la translitteration, la chaine de
+round elle-meme. Criteres, tous a chaque etape :
 
 - build propre ;
 - **13/13** bancs ;
 - **5/5** verificateurs de couture ;
-- `--diag-select 400` = **49396 pixels**, inchange.
+- `--diag-select 400` = **49396 pixels**, inchange ;
+- `--diag-vs 900` avec R1 a la frame 300 : phases 2..9 a **1200** entrees chacune,
+  dessineur de sprites **15120 appels / 7198 quads**.
+
+Les deux variables d'environnement de ce dernier temoin SONT la mesure, pas un
+detail : `DBZ_PAD_PRESS_MASK=0x0800` est R1 (bit 11 du pad PSX) et la frame 300
+laisse 600 des 900 frames a l'interieur du round. Chaque compteur ci-dessus est
+lineaire en cette frame — presser a 360 donne 1080, a 420 donne 960. Changer l'un
+des deux nombres change tous les temoins.
 
 Les verificateurs, dans `custom-tools/scripts/` :
 `check_duplicate_symbols.py`, `check_overlay_handover.py`,
@@ -157,7 +187,10 @@ Les mettre dans chaque brief.
    et confronter.
 3. **`CreateTask` sans `RegisterCallback`.** La tache est creee, dispatchee dans
    aucun sens, et rien ne le dit. C'est ce qui a cache la camera de combat pendant
-   trois sessions. `check_task_registration.py` liste l'etat : VS_EXE est a 11/13.
+   trois sessions. `check_task_registration.py` liste l'etat : VS_EXE n'a plus
+   aucune entree ECHEC — chaque `CreateTask` dont le corps est porte a son
+   `RegisterCallback`. Les lignes BLOCKED restantes sont des entrees dont aucun
+   corps n'est porte dans CET overlay, et leur absence est attendue.
 4. **Largeur de chargement et signe.** `PsxRam` n'expose que `ReadU8`/`ReadU16`/
    `ReadI32` et `WriteU8`/`WriteU16`/`WriteI32` ; une lecture 16 bits signee
    s'ecrit `(short)PsxRam.ReadU16(addr)`. Et **`sltiu` n'est pas `slti`** : la
@@ -229,20 +262,83 @@ tache de cablage.
 
 ## CE QUI RESTE
 
-`vs_port_coverage.py --list ABSENT` et `--list STUB` donnent la liste exacte. Les
-gros morceaux au dernier passage :
+**Plus rien a translitterer.** Les 307 fonctions de jeu de VS.EXE ont un corps.
+Les trois dernieres etaient bloquees sur des questions, pas sur du code :
 
-- `FUN_80058338` @ 0x80058338, 2440 octets — souche dans BattleManager.cs ; sa
-  propre note explique pourquoi (deux tables de pointeurs sans travee
-  auto-referentielle a incorporer).
-- la famille des effets, autour de `0x80042054` et `0x80045130`.
-- le reste du module son, autour de `0x8006071C`.
-- deux entrees de tache encore non enregistrees : `LAB_80029200` et
-  `LAB_80026888`.
+- `BuildSlotDigitQuads` @ 0x80058338 (2440 o, ex-`FUN_80058338`) attendait de
+  savoir si ses deux tables de pointeurs — `PTR_DAT_80083fb4` et
+  `PTR_DAT_80084124` — visaient de la donnee figee ou de l'etat mutable, parce que
+  recopier des octets de l'un ou de l'autre aurait ete inventer de la semantique.
+  **La question n'avait pas a etre tranchee** : `PsxExeImage` porte deja les
+  0xE5800 octets de l'image entiere, les deux tables et leurs cibles sont dedans,
+  donc chaque lecture est un `PsxRam.ReadI32` a l'adresse que l'image lit — et si
+  une fonction ecrit ces mots a l'execution, elle ecrit LES MEMES OCTETS. Rien
+  n'est incorpore. **La lecon generale : avant de se demander s'il faut incorporer
+  une travee, verifier si elle est deja portee par l'image.**
+- `FUN_800261ec` @ 0x800261EC (304 o) etait la forme courte d'une marche que
+  `FighterAi.cs` et `FighterCombat.FUN_80025f38` avaient deja fermee instruction
+  par instruction.
+- `SpuInit` @ 0x800617E0 etait une **mauvaise etiquette de Ghidra** : 32 octets
+  dont tout le corps est `jal ProcessPadInput` avec a0 = 0. Renomme
+  `ProcessPadInputPort0` des deux cotes.
 
-Et la question ouverte que la mesure pose maintenant : la chaine de jauge
-(`AddSlotGaugeContribution`) n'est toujours jamais atteinte, parce qu'aucun mot de
-commande d'attaque (0x1C, 0x23..0x28) n'est produit. Le decodeur pad et l'IA
-tournent tous les deux ; ce qui manque est soit une entree de joueur reelle, soit
-une condition d'etat que rien de porte ne leve encore. C'est la prochaine question
-a poser au banc, pas au raisonnement.
+**La question qui reste est comportementale, et le banc la pose deja.** Au dernier
+passage (`--diag-vs 900`, R1 a la frame 300) :
+
+```
+ETAPE 9.3   pad port 1 : 120   pad port 2 : 120   IA : 480   sortie -1 : 0
+            mots de commande vus : 0x00 x813   0x02 x283   0x21 x104
+IA          entrees:480   echauffement:8   corps atteint:472
+JAUGE       UpdateFighter 1788 | racine A 0 | racine B 0 | semeur 0
+```
+
+Un piege de sonde a ete corrige en passant, et il vaut d'etre connu :
+`CtxRoundRequest cumule` affichait 0x00000000 alors que la porte 0x180 etait
+franchie. Les deux ne se contredisaient pas — les bits 0x180 sont poses ET effaces
+dans la meme frame (l'effacement est quatre lignes sous la porte), donc un
+echantillon pris une fois par frame a l'entree du manager ne pouvait pas les voir.
+**Une sonde qui echantillonne au mauvais endroit accuse le portage a tort.**
+
+Tout tourne : l'IA atteint son corps 472 fois sur 480, l'etape 9.3 route les trois
+sources, le dessineur soumet 7198 quads. Mais **aucune opcode d'attaque 0x23..0x28
+n'est produite**, donc les deux racines de la chaine de jauge — `FUN_8004ee48` et
+`FUN_8004e758` — ne sont jamais appelees et `AddSlotGaugeContribution` non plus.
+
+Ce n'est plus « il manque une fonction ». C'est une condition d'etat. Les deux
+pistes, dans cet ordre, et **a mesurer, pas a raisonner** :
+
+1. **La distance.** Les bras d'attaque de l'IA sont gates sur une distance
+   `< 0x2C1` et les combattants demarrent aux bornes de l'arene. Instrumenter la
+   distance reelle par frame avant tout le reste : si elle ne descend jamais sous
+   0x2C1, le probleme est le deplacement, pas la decision.
+2. **Une vraie entree joueur.** `DBZ_PAD_PRESS_MASK` ne presse qu'un bouton pendant
+   deux frames. Une sequence d'attaque du decodeur de `FighterInput.cs` (la boussole
+   a huit points des boutons de face) n'a jamais ete jouee au banc.
+
+Le reste du travail utile n'est plus de la translitteration :
+
+- la tache de scene n'a jamais tourne (`appels au repartiteur de scene : 0`), et le
+  diagnostic dit ou chercher : creation, enregistrement, ou parcours de liste ;
+- les 26 avertissements du build sont des globaux declares et jamais lus, chacun
+  attendant un lecteur qui est ailleurs ou nulle part ; les passer en revue une
+  fois dirait lesquels sont de vrais trous.
+
+---
+
+## LES RENOMMAGES FAITS DES DEUX COTES
+
+L'instruction permanente est : quand la preuve est decisive, renommer **dans Ghidra
+ET dans le C#**. Faits a la derniere session :
+
+| adresse | avant | apres |
+|---|---|---|
+| 0x80052DB4 | `FUN_80052db4` | `DrawSpriteGroup` |
+| 0x80045CF4 | `FUN_80045cf4` | `DistanceBetweenPositions` |
+| 0x80058338 | `FUN_80058338` | `BuildSlotDigitQuads` |
+| 0x80061800 | `FUN_80061800` | `ProcessPadInput` |
+| 0x800617E0 | `SpuInit` (faux) | `ProcessPadInputPort0` |
+
+Verifier l'accord des deux cotes est mecanique : une annotation
+`// GHIDRA: nom @ 0xADDR (VS.EXE)` dont le `nom` ne correspond plus au symbole
+Ghidra est un desaccord, et `vs_port_coverage.py` ne le voit pas — il apparie sur
+l'ADRESSE, pas sur le nom, justement pour que le renommage soit possible.
