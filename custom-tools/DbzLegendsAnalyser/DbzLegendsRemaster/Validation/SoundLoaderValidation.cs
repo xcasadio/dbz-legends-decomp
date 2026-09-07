@@ -14,12 +14,15 @@ namespace DbzLegendsRemaster.Validation;
 // that walks it. A single mis-transcribed branch would show up as the loader silently stalling or
 // silently skipping a step, months later, with nothing to point at.
 //
-// WHAT IT ASSERTS, and what it deliberately does not. It asserts the TRANSITIONS the disassembly
-// proves: which state follows which, which conditions hold a state, which side effects each step
-// leaves in the workspace. It does NOT assert that the loader completes -- it cannot, because
-// three of the machine's callees (SsVabOpenHeadSticky, SsVabTransBody, SsVabTransCompleted) are
-// unimplemented stubs returning 0 in PsxSdkMonogame.LibSnd. The stall that produces is itself
-// asserted below, as a fact about today's port rather than as a defect of this function.
+// WHAT IT ASSERTS. The TRANSITIONS the disassembly proves: which state follows which, which
+// conditions hold a state, which side effects each step leaves in the workspace.
+//
+// IT NOW ASSERTS THAT THE LOADER COMPLETES, which it could not before. Two of the machine's libsnd
+// callees (SsVabOpenHeadSticky, SsVabTransBody) are still `return default` stubs, but 0 passes
+// their `>= 0` tests, so they were never what held the machine. SsVabTransCompleted was: it
+// answered 0, state 7's "not yet" test was true for ever, and the battle loader's phase 1 -- which
+// runs this machine until it returns 8 or more -- never advanced. It now answers "complete",
+// because this port has no SPU DMA for a transfer to be in flight on.
 internal static class SoundLoaderValidation
 {
     // A workspace of the real size at an address nothing else in the port claims, so the machine
@@ -114,11 +117,19 @@ internal static class SoundLoaderValidation
 
         Check(seekWritten, "la position de seek est ecrite DANS le workspace, pas seulement en C#");
 
-        // ---- state 7 is where the port stops, asserted rather than hoped. SsVabTransCompleted is
-        // `return default` in LibSnd, so state 7's "not yet" test is true for ever. When someone
-        // implements libsnd, THIS assertion is the one that fails, and that is the signal to update
-        // it -- it marks the remaining blocker rather than wishing it away.
-        Check(FUN(0, 7) == 7, "etat 7 se tient: SsVabTransCompleted est un stub qui rend 0");
+        // ---- STATE 7 NOW COMPLETES, and this is the second time this bench has done its job by
+        // FAILING. It used to assert that state 7 returned itself for ever, with a comment saying
+        // that when someone made SsVabTransCompleted answer, THIS assertion would be the one to
+        // fail and the signal to update it. That is exactly what happened.
+        //
+        // SsVabTransCompleted now returns 1 -- there is no SPU DMA in this port, so a transfer that
+        // never starts is observably complete (LibSnd carries the full argument). State 7 therefore
+        // takes its ready path, stores the request id, and returns 8. That is what unblocked the
+        // battle loader's phase 1, which runs this machine until it returns 8 or more.
+        PsxRam.WriteU16(WorkspaceAddress + SoundState.CompletedRequestId, 0xFFFF);
+        Check(FUN(0x2A, 7) == 8, "etat 7 -> 8: SsVabTransCompleted rend termine");
+        Check(PsxRam.ReadU16(WorkspaceAddress + SoundState.CompletedRequestId) == 0x2A,
+            "etat 7 range l'id de requete avant de rendre 8");
 
         // ---- 8 is terminal and sticky: it fails the unsigned range test at the top.
         Check(FUN(0, 8) == 8, "etat 8 est terminal et se rend lui-meme");
