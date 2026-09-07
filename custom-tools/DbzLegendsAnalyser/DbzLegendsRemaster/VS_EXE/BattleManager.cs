@@ -2291,13 +2291,120 @@ internal static class BattleManager
         _ = param_2;
     }
 
+    // GHIDRA: DAT_800842b8 @ 0x800842B8 (VS.EXE) / DAT_800843b8 @ 0x800843B8 (VS.EXE)
+    // The two source tables PART TWO of both InitCentralGaugeBar and UpdateCentralGaugeBar below
+    // reads from. Checked with find-cross-references before embedding, the same discipline
+    // Dat80083e4cAddress above already follows: each symbol has exactly TWO readers in the whole
+    // overlay — InitCentralGaugeBar (once, at arming) and UpdateCentralGaugeBar (once, every
+    // frame) — and neither function, nor anything else in the overlay, ever WRITES either span. So
+    // this is baked-in `.data`, not runtime state some other not-yet-ported function populates —
+    // the objection the two functions' own earlier BLOCKED comments raised (and which is now
+    // withdrawn, not repeated: PsxRam.RamRegion is exactly the operation those comments said did
+    // not exist, and this port already uses it for a stack scratch region in four other places —
+    // see the DEVIATION below).
+    //
+    // SIZE, SETTLED: each table is 0x100 bytes (128 halfwords), not the 64-halfword pair
+    // InitCentralGaugeBar's own PART TWO used to describe. Three independent pieces of evidence
+    // agree:
+    //   1. The two symbols sit exactly 0x100 bytes apart (0x800843B8 - 0x800842B8), consistent with
+    //      DAT_800842b8 itself being one full 0x100-byte table rather than a 0x80-byte table
+    //      followed by 0x80 bytes of something else.
+    //   2. DAT_800843b8's own span ends exactly at 0x800844B8 — VS_EXE/Roster.cs's own
+    //      PTR_DAT_800844b8, a pointer variable that file already owns and declares. An
+    //      independently-owned symbol picking up immediately where this table's 0x100th byte would
+    //      fall is the same kind of boundary check PTR_DAT_80083f90's own comment above already
+    //      uses to confirm a table's true extent.
+    //   3. UpdateCentralGaugeBar's own PART TWO masks its sampling cursor into each table with
+    //      `& 0x7f` before every read (`uVar11 = uVar11 + 1 & 0x7f`, `uVar12 = uVar11 & 0x7f`) — a
+    //      cursor that ranges 0..127. That only stays inside each table's own bounds every frame if
+    //      the table actually holds 128 halfwords; a 64-halfword table would read past its own end
+    //      on more than half that range.
+    // UpdateCentralGaugeBar's own PART TWO comment ("indexed mod 0x80, i.e. two 128-entry tables")
+    // is therefore the correct one. InitCentralGaugeBar's "two 64-halfword tables" was describing
+    // something real but different: how much of each table ITS OWN copy loop reads (the first 64
+    // halfwords only, a fixed sub-range — see its own PART TWO below), not the tables' actual
+    // declared size. Both tables are declared here at their full 0x100-byte extent so both readers
+    // can index into the same bytes.
+    private const int Dat800842b8Address = unchecked((int)0x800842B8);
+    private const int Dat800843b8Address = unchecked((int)0x800843B8);
+
+    internal static readonly byte[] DAT_800842b8 = LibGpu.RamRegion(Dat800842b8Address, new byte[]
+    {
+        0xFE, 0x7F, 0xDD, 0x7F, 0xDD, 0x7F, 0xBC, 0x7F, 0xBC, 0x7F, 0x9B, 0x7F, 0x9B, 0x7F, 0x7A, 0x7F,
+        0x7A, 0x7F, 0x59, 0x7F, 0x59, 0x7F, 0x38, 0x7F, 0x38, 0x7F, 0x17, 0x7F, 0x17, 0x7F, 0xF7, 0x7E,
+        0xF6, 0x7E, 0xD6, 0x7E, 0xD5, 0x7E, 0xB5, 0x7E, 0xB4, 0x7E, 0x94, 0x7E, 0x93, 0x7E, 0x73, 0x7E,
+        0x72, 0x7E, 0x52, 0x7E, 0x51, 0x7E, 0x31, 0x7E, 0x10, 0x7E, 0x0F, 0x7E, 0xEF, 0x7D, 0xEE, 0x7D,
+        0xCE, 0x7D, 0xCD, 0x7D, 0xAD, 0x7D, 0x8C, 0x7D, 0x8B, 0x7D, 0x6B, 0x7D, 0x6A, 0x7D, 0x4A, 0x7D,
+        0x29, 0x7D, 0x08, 0x7D, 0x07, 0x7D, 0xE6, 0x7C, 0xE7, 0x7C, 0xC6, 0x7C, 0xA5, 0x7C, 0xA5, 0x7C,
+        0x84, 0x78, 0x84, 0x78, 0x84, 0x74, 0x63, 0x70, 0x63, 0x70, 0x63, 0x6C, 0x42, 0x6C, 0x42, 0x68,
+        0x42, 0x68, 0x21, 0x64, 0x21, 0x64, 0x21, 0x60, 0x00, 0x60, 0x00, 0x5C, 0x00, 0x5C, 0x00, 0x5C,
+        0x00, 0x5C, 0x00, 0x60, 0x21, 0x60, 0x21, 0x64, 0x21, 0x64, 0x42, 0x68, 0x42, 0x68, 0x42, 0x6C,
+        0x63, 0x6C, 0x63, 0x70, 0x63, 0x70, 0x84, 0x74, 0x84, 0x74, 0x84, 0x78, 0xA5, 0x7C, 0xA5, 0x7C,
+        0xA5, 0x7C, 0xC6, 0x7C, 0xE6, 0x7C, 0xE7, 0x7C, 0x08, 0x7D, 0x28, 0x7D, 0x29, 0x7D, 0x49, 0x7D,
+        0x6A, 0x7D, 0x6B, 0x7D, 0x8B, 0x7D, 0xAC, 0x7D, 0xAC, 0x7D, 0xCD, 0x7D, 0xEE, 0x7D, 0xEF, 0x7D,
+        0xEF, 0x7D, 0x10, 0x7E, 0x10, 0x7E, 0x31, 0x7E, 0x31, 0x7E, 0x52, 0x7E, 0x52, 0x7E, 0x73, 0x7E,
+        0x73, 0x7E, 0x94, 0x7E, 0x94, 0x7E, 0xB5, 0x7E, 0xB5, 0x7E, 0xD6, 0x7E, 0xF7, 0x7E, 0x17, 0x7F,
+        0x17, 0x7F, 0x38, 0x7F, 0x38, 0x7F, 0x59, 0x7F, 0x59, 0x7F, 0x7A, 0x7F, 0x7A, 0x7F, 0x9B, 0x7F,
+        0x9B, 0x7F, 0xBC, 0x7F, 0xBC, 0x7F, 0xDD, 0x7F, 0xDD, 0x7F, 0xFE, 0x7F, 0xFF, 0x7F, 0xFF, 0x7F,
+    });
+
+    internal static readonly byte[] DAT_800843b8 = LibGpu.RamRegion(Dat800843b8Address, new byte[]
+    {
+        0xFF, 0x7B, 0xDF, 0x77, 0xDF, 0x77, 0xBF, 0x73, 0xBF, 0x73, 0x9F, 0x6F, 0x9F, 0x6F, 0x7F, 0x6B,
+        0x7F, 0x6B, 0x5F, 0x67, 0x5F, 0x67, 0x3F, 0x63, 0x3F, 0x63, 0x1F, 0x5F, 0x1F, 0x5F, 0xFF, 0x5E,
+        0xDF, 0x5A, 0xDF, 0x5A, 0xBF, 0x56, 0x9F, 0x52, 0x9F, 0x52, 0x7F, 0x4E, 0x7F, 0x4E, 0x5F, 0x4A,
+        0x5F, 0x4A, 0x3F, 0x46, 0x3F, 0x46, 0x1F, 0x42, 0x1F, 0x42, 0xFF, 0x3D, 0xFF, 0x3D, 0xFF, 0x39,
+        0xDF, 0x35, 0xBF, 0x31, 0xBF, 0x31, 0x9F, 0x2D, 0x7F, 0x2D, 0x7F, 0x29, 0x5F, 0x25, 0x3F, 0x25,
+        0x3F, 0x21, 0x1F, 0x21, 0xFF, 0x1C, 0xFF, 0x18, 0xDF, 0x18, 0xBF, 0x14, 0xBF, 0x14, 0xBF, 0x14,
+        0x9E, 0x10, 0x9E, 0x10, 0x9D, 0x10, 0x7C, 0x0C, 0x7C, 0x0C, 0x7B, 0x0C, 0x5B, 0x08, 0x5A, 0x08,
+        0x5A, 0x08, 0x39, 0x04, 0x39, 0x04, 0x38, 0x04, 0x18, 0x00, 0x17, 0x00, 0x17, 0x00, 0x17, 0x00,
+        0x17, 0x00, 0x18, 0x00, 0x38, 0x04, 0x39, 0x04, 0x39, 0x04, 0x5A, 0x08, 0x5A, 0x08, 0x5B, 0x08,
+        0x7B, 0x0C, 0x7C, 0x0C, 0x7C, 0x0C, 0x9D, 0x10, 0x9D, 0x10, 0x9E, 0x10, 0xBF, 0x14, 0xBF, 0x14,
+        0xBF, 0x14, 0xDF, 0x18, 0xFF, 0x18, 0xFF, 0x1C, 0x1F, 0x21, 0x3F, 0x21, 0x3F, 0x25, 0x5F, 0x25,
+        0x7F, 0x29, 0x7F, 0x2D, 0x9F, 0x2D, 0xBF, 0x31, 0xBF, 0x31, 0xDF, 0x35, 0xFF, 0x39, 0xFF, 0x3D,
+        0xFF, 0x3D, 0x1F, 0x42, 0x1F, 0x42, 0x3F, 0x46, 0x3F, 0x46, 0x5F, 0x4A, 0x5F, 0x4A, 0x7F, 0x4E,
+        0x7F, 0x4E, 0x9F, 0x52, 0x9F, 0x52, 0xBF, 0x56, 0xBF, 0x56, 0xDF, 0x5A, 0xFF, 0x5E, 0x1F, 0x5F,
+        0x1F, 0x5F, 0x1F, 0x63, 0x3F, 0x63, 0x3F, 0x67, 0x5F, 0x67, 0x5F, 0x6B, 0x7F, 0x6B, 0x7F, 0x6F,
+        0x9F, 0x6F, 0x9F, 0x73, 0xBF, 0x73, 0xBF, 0x77, 0xDF, 0x77, 0xDF, 0x7B, 0xFF, 0x7F, 0xFF, 0x7F,
+    });
+
+    // DEVIATION: the 256-byte gauge-strip scratch buffer both functions' own PART TWO builds and
+    // hands to LoadImage_ReturnTPageOrClutId. In the original this is a STACK local — `local_128`
+    // in InitCentralGaugeBar, `local_120` in UpdateCentralGaugeBar — freshly allocated on each
+    // function's own frame. THE CLAIM THIS FILE USED TO MAKE — that PsxRam has no operation that
+    // hands out a fresh, PSX-addressable scratch region for a C# local, and that adding one would
+    // be new architecture — was false and is withdrawn, not repeated: the mechanism already exists
+    // and this port already uses it in four other places for exactly this problem (giving a stack
+    // local a PSX address so it can be handed to something that takes one): BattleScene.cs's
+    // Local18Address (0x807FFFD0), AnimCmdEffects.cs's auStack_10Address (0x807FFFE0),
+    // AnimVmInterpreter.cs's Local30Address (0x807FFFF0), and AnimCmdControl.cs's VStack80Address
+    // (0x807FFFC0). crt0 starts SP at 0x807FFFF8, so all four are genuinely stack memory on the
+    // console, and each sits at a distinct address so none can ever alias another.
+    //
+    // ONE address is declared here, at 0x807FFEC0 — ending exactly where VStack80Address begins
+    // (0x807FFEC0 + 0x100 == 0x807FFFC0), so it overlaps none of the four above — and BOTH
+    // InitCentralGaugeBar and UpdateCentralGaugeBar use it, even though on the console they are two
+    // separate functions' separate stack frames. Sharing one address between two ORIGINALLY
+    // DISTINCT stack locals is itself a deviation from the original's storage, called out here
+    // rather than left implicit, and it is safe only because: the two functions never run inside
+    // the same frame (InitCentralGaugeBar runs once, at arming, before the round starts;
+    // UpdateCentralGaugeBar runs every frame of the round that follows, and never again before the
+    // next arming), and nothing ever reads the buffer back — both functions only WRITE it, once,
+    // immediately before handing its address to LoadImage_ReturnTPageOrClutId in that same call,
+    // and that call's own return value is unused at every call site here. A second, distinct
+    // address per function was considered and rejected as an unforced two-spellings-of-one-buffer
+    // risk, given the two never interleave and nothing outlives either call.
+    private const int GaugeStripBufferAddress = unchecked((int)0x807FFEC0);
+
+    private static readonly byte[] RAM_gaugeStrip = LibGpu.RamRegion(GaugeStripBufferAddress, 0x100);
+
     // GHIDRA: UpdateCentralGaugeBar @ 0x8005C6E4 (VS.EXE)
     // 1276 bytes. Always called immediately after FUN_8005a5b0, on all four states, and it ends at
     // 0x8005CBDF — one byte below FUN_8005cbe0, the roster consumer main calls just after creating
     // this task. The three are one compilation unit. Ghidra already names the parameter `ctx`; kept
     // rather than reverted to `param_1`, since that rename is the database's own, not this port's.
     //
-    // Four parts. PART TWO is BLOCKED; the other three are closed in full.
+    // Four parts, all closed.
     //
     // PART ONE, closed: the scroll-speed follower. ctx+0x3028 and ctx+0x302a are a pair of 1..8
     // counters, one of which decays toward 1 while the other climbs toward 8, and which of the two
@@ -2313,23 +2420,21 @@ internal static class BattleManager
     // advanced by the two counters, each wrapped mod 0x80 — the "0..128 scroll index" the two-tone
     // strip PART TWO would sample from.
     //
-    // PART TWO, BLOCKED, for the SAME reason VS_EXE/BattleManager.cs's own InitCentralGaugeBar
-    // documents at its PART TWO: the original scales ctx+0x302C into a 0..128 split point
-    // (`((ctx+0x302C + 30000) * 0x80) / 60000`), samples that many halfwords from `&DAT_800842b8`
-    // starting at the ctx+0x3024 cursor and the rest from `&DAT_800843b8` starting at the ctx+0x3026
-    // cursor — both raw PSX `.data` addresses, undeclared anywhere in this port, and both indexed mod
-    // 0x80, i.e. two 128-entry tables, not the 64-halfword pair InitCentralGaugeBar's own PART TWO
-    // describes for its own copy of the same two symbols — into a 128-halfword (256-byte) STACK
-    // buffer (`local_120`), then hands that stack address to
-    // `LoadImage_ReturnTPageOrClutId(local_120, 0, 0x1ed, 0x80, 1, '\0')`. PsxRam still has no
-    // operation that hands out a fresh, PSX-addressable scratch region for a C# local, and inventing
-    // a scratch-stack allocator here would be new architecture this file has no business
-    // introducing on its own — see InitCentralGaugeBar's own PART TWO for the fuller argument, which
-    // applies unchanged. Nothing downstream of this call depends on anything computed inside it: the
-    // scale value and both loop cursors are local temporaries the decompiler happens to name `iVar8`
-    // and `uVar11` again immediately afterward for unrelated purposes, so skipping the whole segment
-    // changes no observable state. Left unperformed, exactly as InitCentralGaugeBar leaves its own
-    // copy unperformed.
+    // PART TWO, closed. The original scales ctx+0x302C into a 0..128 split point
+    // (`((ctx+0x302C + 30000) * 0x80) / 60000`, kept as `iVar8`), samples that many halfwords from
+    // `DAT_800842b8` starting at the ctx+0x3024 cursor — wrapping mod 0x80 as that cursor's own
+    // producer (PART ONE, above) already keeps it — and fills the REST of a 128-halfword (256-byte)
+    // strip from `DAT_800843b8`, starting at a second cursor derived from the same scale value and
+    // the ctx+0x3026 cursor, also wrapped mod 0x80. See the GHIDRA comment on DAT_800842b8 /
+    // DAT_800843b8 above (declared just before this function) for why each table is a 128-entry
+    // (0x100-byte) span, not the 64-halfword pair InitCentralGaugeBar's own PART TWO copies a fixed
+    // prefix of — these two functions read the same bytes two different ways, and both are
+    // reproduced as the original shapes them, not reconciled into one. The 256-byte strip itself is
+    // GaugeStripBufferAddress (0x807FFEC0) rather than a stack local — see the DEVIATION on that
+    // declaration for why one address serves both this function and InitCentralGaugeBar. The
+    // completed strip is then handed to `LoadImage_ReturnTPageOrClutId(local_120, 0, 0x1ed, 0x80, 1,
+    // '\0')`, a CLUT upload whose return value is unused at this call site, matching
+    // InitCentralGaugeBar's own upload.
     //
     // PART THREE, closed: the growth/shrink of the bar's own geometry, and the colour pulse. Both
     // are gated behind the animation VM's suspend flag, the same `(AnimVm.DAT_800b305a & 1) != 0`
@@ -2468,9 +2573,39 @@ internal static class BattleManager
         PsxRam.WriteU16(ctx + 0x3026,
             (ushort)(((short)PsxRam.ReadU16(ctx + 0x3026) + (short)PsxRam.ReadU16(ctx + 0x302a)) & 0x7f));
 
-        // PART TWO is BLOCKED here — see the comment above the function. Nothing is written for the
-        // /60000 scale, the two circular table samples, or the LoadImage_ReturnTPageOrClutId(local_120,
-        // 0, 0x1ed, 0x80, 1, 0) upload.
+        // PART TWO — the 128-halfword gauge strip. See the comment above the function.
+        {
+            uint uVar11 = PsxRam.ReadU16(ctx + 0x3024);
+            int iVar8 = ((PsxRam.ReadI32(ctx + 0x302c) + 30000) * 0x80) / 60000;
+            int iVar4 = (short)iVar8;
+            int iVar13 = 0;
+
+            if (0 < iVar4)
+            {
+                do
+                {
+                    PsxRam.WriteU16(GaugeStripBufferAddress + iVar13 * 2,
+                        PsxRam.ReadU16(Dat800842b8Address + (int)uVar11 * 2));
+                    uVar11 = (uVar11 + 1) & 0x7f;
+                    iVar13 = iVar13 + 1;
+                } while ((short)iVar13 < iVar4);
+            }
+
+            uVar11 = (uint)(iVar8 + (PsxRam.ReadU16(ctx + 0x3026) - 0x80));
+            if ((short)iVar13 < 0x80)
+            {
+                do
+                {
+                    uint uVar12 = uVar11 & 0x7f;
+                    PsxRam.WriteU16(GaugeStripBufferAddress + iVar13 * 2,
+                        PsxRam.ReadU16(Dat800843b8Address + (int)uVar12 * 2));
+                    uVar11 = uVar12 + 1;
+                    iVar13 = iVar13 + 1;
+                } while ((short)iVar13 < 0x80);
+            }
+
+            FileIo.LoadImage_ReturnTPageOrClutId(GaugeStripBufferAddress, 0, 0x1ed, 0x80, 1, 0);
+        }
 
         if ((AnimVm.DAT_800b305a & 1) != 0)
         {
@@ -2598,8 +2733,7 @@ internal static class BattleManager
 
     // GHIDRA: InitCentralGaugeBar @ 0x80059E94 (VS.EXE)
     // Second sub-initialiser state 0 runs; it sits between FUN_800594b4 and FUN_8005a104 in the
-    // address space, so the three are consecutive. 624 bytes, in three parts: two closed, one
-    // BLOCKED.
+    // address space, so the three are consecutive. 624 bytes, in three parts, all closed.
     //
     // PART ONE, closed: four POLY_FT4 packets at ctx+0x2F84, stride 0x28 — the ONLY primitive pool
     // this function's own POLY_FT4 pointer walks, so this is the central-gauge bar's own geometry,
@@ -2621,19 +2755,20 @@ internal static class BattleManager
     // (ctx+0x302C). Nothing downstream of arming is in THIS slice to confirm that reading, so it
     // stays a plausibility, not a closed fact.
     //
-    // PART TWO, BLOCKED. The original copies two 64-halfword tables — `&DAT_800842b8` and
-    // `&DAT_800843b8`, both raw PSX `.data` addresses, undeclared anywhere in this port — into a
-    // 256-byte STACK buffer (`local_128` then `local_a8`, contiguous by construction: two
-    // half-copies of one region) and hands that stack address to
+    // PART TWO, closed. The original copies the FIRST 64 halfwords of `DAT_800842b8` and the FIRST
+    // 64 halfwords of `DAT_800843b8` — a fixed prefix of each 128-halfword table, not the circular
+    // full-table sample UpdateCentralGaugeBar's own PART TWO does every frame — into a 256-byte
+    // STACK buffer (`local_128` then `local_a8`, contiguous by construction: two half-copies of one
+    // region) and hands that stack address to
     // `LoadImage_ReturnTPageOrClutId(local_128, 0, 0x1ed, 0x80, 1, '\0')` — a CLUT upload, isClut
-    // truthy per FileIo's own signature for that call. PsxRam has no operation that hands out a
-    // fresh, PSX-addressable scratch region for a C# local: every other caller of
-    // LoadImage_ReturnTPageOrClutId in this port already owns an address that resolves through
-    // PsxRam.AddressResolver — a heap block, a global, a table entry — never a bare stack local.
-    // Inventing a scratch-stack allocator here would be new architecture, and this file has no
-    // business introducing one on its own, so the two copies and the upload are left undone. The
-    // call's return value is unused at this call site in the original, so nothing later in this
-    // function depends on what the upload would have produced.
+    // truthy per FileIo's own signature for that call. See the GHIDRA comment on DAT_800842b8 /
+    // DAT_800843b8 below (declared just before UpdateCentralGaugeBar, which comes first in this
+    // file) for the cross-reference check that closes both tables and for why each is 128
+    // halfwords, not 64, despite this function reading only the first 64 of each. The 256-byte
+    // buffer itself is GaugeStripBufferAddress (0x807FFEC0) rather than a stack local — see the
+    // DEVIATION on that declaration for why one address serves both this function and
+    // UpdateCentralGaugeBar. The call's return value is unused at this call site in the original, so
+    // nothing later in this function depends on what the upload produces.
     //
     // PART THREE, closed: six trailing stores, independent of the blocked upload. ctx+0x302C is
     // BattleState.CtxCentralGauge — the same word FUN_80055f94 accumulates into and clamps
@@ -2720,9 +2855,19 @@ internal static class BattleManager
             }
         }
 
-        // PART TWO is BLOCKED here — see the comment above the function. Nothing is written for
-        // the two 64-halfword table copies or the LoadImage_ReturnTPageOrClutId(local_128, 0,
-        // 0x1ed, 0x80, 1, 0) call.
+        // PART TWO — copy the first 64 halfwords of each table into the two halves of the 256-byte
+        // strip, then upload it. See the comment above the function.
+        for (int i = 0; i < 0x40; i++)
+        {
+            PsxRam.WriteU16(GaugeStripBufferAddress + i * 2, PsxRam.ReadU16(Dat800842b8Address + i * 2));
+        }
+
+        for (int i = 0; i < 0x40; i++)
+        {
+            PsxRam.WriteU16(GaugeStripBufferAddress + 0x80 + i * 2, PsxRam.ReadU16(Dat800843b8Address + i * 2));
+        }
+
+        FileIo.LoadImage_ReturnTPageOrClutId(GaugeStripBufferAddress, 0, 0x1ed, 0x80, 1, 0);
 
         PsxRam.WriteU16(param_1 + 0x3024, 0);
         PsxRam.WriteU16(param_1 + 0x3026, 0);
