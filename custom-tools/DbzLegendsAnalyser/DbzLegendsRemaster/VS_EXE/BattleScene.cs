@@ -7,7 +7,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 
 // THE BATTLE SCENE — task list 12, and the five phases the fight actually runs through.
 //
-// WHERE IT COMES FROM. Nothing in main creates this task. FUN_80055f94 @ 0x80055F94 — the battle
+// WHERE IT COMES FROM. Nothing in main creates this task. RunBattleRound @ 0x80055F94 — the battle
 // manager's body, reached from LAB_80055e3c on list 9 — creates it at 0x800563F8 with
 //
 //     FUN_80053330(&LAB_80034eac, 0x50, 0xc, 0x7c, 0, DAT_80083bc0)
@@ -75,15 +75,15 @@ internal static class BattleScene
     // =====================================================================================
 
     // GHIDRA: LAB_80034eac @ 0x80034EAC (VS.EXE)
-    // Ghidra has no function defined here; FUN_80055f94 takes its address as CreateTask's first
+    // Ghidra has no function defined here; RunBattleRound takes its address as CreateTask's first
     // argument and the decompiler serves the body as `UndefinedFunction_80034eac`. CreateTask stores
     // the raw pointer in the node at +0x04, so the number has to exist.
     internal const int BattleSceneEntry = unchecked((int)0x80034EAC);
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: TaskSystem keeps the original PSX address in the node and turns it back into a
-    // ported method at dispatch time. FUN_80055f94 — the creator — is not in this slice, so the
-    // registration is exposed rather than performed: whoever transliterates FUN_80055f94 must call
+    // ported method at dispatch time. RunBattleRound — the creator — is not in this slice, so the
+    // registration is exposed rather than performed: whoever transliterates RunBattleRound must call
     // this immediately before its CreateTask, exactly as FighterTask.RegisterFighterTask asks of
     // FUN_800512cc. Without it list 12 walks a live node and dispatches nothing. Idempotent.
     internal static void RegisterBattleSceneTask()
@@ -308,7 +308,7 @@ internal static class BattleScene
 
     // GHIDRA: LAB_80034eac @ 0x80034EAC (VS.EXE)
     // 388 bytes, 0x80034EAC..0x8003502F — its `jr ra` is at 0x80035028 and FUN_80035030 starts on
-    // the next word. One incoming reference and it is not a call: FUN_80055f94
+    // the next word. One incoming reference and it is not a call: RunBattleRound
     // takes its address at 0x800563F8. The C# name is this port's; the Ghidra symbol above is what
     // the database holds.
     //

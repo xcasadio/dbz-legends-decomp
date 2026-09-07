@@ -12,7 +12,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // nothing but the dispatch on it:
 //
 //   ctx+0x00 == 0   FUN_80055ee0 @ 0x80055EE0   arm the match          -> writes state 1
-//   ctx+0x00 == 1   FUN_80055f94 @ 0x80055F94   the round, every frame -> stays 1
+//   ctx+0x00 == 1   RunBattleRound @ 0x80055F94   the round, every frame -> stays 1
 //   ctx+0x00 == 2   FUN_800578e0 @ 0x800578E0   the hand-back          -> writes state 3
 //   ctx+0x00 == 3   FUN_80057a40 @ 0x80057A40   idle after the match   -> terminal
 //
@@ -22,7 +22,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // WHAT THE SLICE WAS ASKED TO ESTABLISH, answered from the four bodies:
 //
-//   * WHO INCREMENTS THE CENTRAL GAUGE at +0x302C. FUN_80055f94 does, once per frame, and only it.
+//   * WHO INCREMENTS THE CENTRAL GAUGE at +0x302C. RunBattleRound does, once per frame, and only it.
 //     It sums the per-slot contributions at +0x15B8: slots 0..5 are ADDED, slots 6..11 are
 //     SUBTRACTED. The gauge is therefore a signed tug-of-war between the two teams, positive
 //     towards slots 0..5. Every contribution is zeroed again at the very end of the same frame
@@ -169,7 +169,7 @@ internal static class BattleManager
         uVar1 = PsxRam.ReadU16(PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8));
         if (uVar1 == 1)
         {
-            FUN_80055f94();
+            RunBattleRound();
         }
         else if (uVar1 < 2)
         {
@@ -229,7 +229,7 @@ internal static class BattleManager
         PsxRam.WriteI32(puVar1 + 0x10, (int)((uint)PsxRam.ReadI32(puVar1 + 0x10) | 0x8000a000));
     }
 
-    // GHIDRA: FUN_80055f94 @ 0x80055F94 (VS.EXE)
+    // GHIDRA: RunBattleRound @ 0x80055F94 (VS.EXE)
     // STATE 1 — THE ROUND. 6476 bytes, the largest function in this slice by an order of magnitude,
     // and the only one that runs every frame for the length of a match.
     //
@@ -265,7 +265,7 @@ internal static class BattleManager
     // allows. The one to LAB_800561d4 jumps INTO the sibling arm of an if/else, which C# forbids;
     // that arm is a single `iVar6 = 0` shared by all three paths, so the if/else is written as
     // if / else-if / else with the assignment repeated. Same graph, same order, no merged branch.
-    private static void FUN_80055f94()
+    private static void RunBattleRound()
     {
         bool bVar1;
         sbyte cVar2;
@@ -1608,7 +1608,7 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_8005cf78 @ 0x8005CF78 (VS.EXE)
-    // 40 bytes, ONE caller and it is FUN_80055f94 at 0x80056464, so it belongs to this slice rather
+    // 40 bytes, ONE caller and it is RunBattleRound at 0x80056464, so it belongs to this slice rather
     // than being borrowed from another. Transliterated in full rather than stubbed: it reads
     // nothing but the context it is handed, so there is no shared global to fork.
     //
@@ -1634,7 +1634,7 @@ internal static class BattleManager
     // GHIDRA: FUN_8005d1f4 @ 0x8005D1F4 (VS.EXE)
     // 8 bytes — `jr ra` and its delay slot, nothing else. THE ORIGINAL FUNCTION IS EMPTY, so this
     // empty body is the transliteration and not a stub; there is nothing here left to port. One
-    // caller, FUN_80055f94 at 0x80056778. It ends at 0x8005D1FB, one byte below LAB_8005d1fc, the
+    // caller, RunBattleRound at 0x80056778. It ends at 0x8005D1FB, one byte below LAB_8005d1fc, the
     // list-20 task entry main creates first each frame, so the two are adjacent in one compilation
     // unit.
     private static void FUN_8005d1f4()
@@ -1669,7 +1669,7 @@ internal static class BattleManager
 
     // GHIDRA: DAT_8008d458 @ 0x8008D458 (VS.EXE)
     // `sh zero,0x35c(gp)`. Zeroed when the match is armed; gates the "no slot still live" test in
-    // FUN_80055f94 and the FUN_800600b0(2) call in FUN_800578e0.
+    // RunBattleRound and the FUN_800600b0(2) call in FUN_800578e0.
     private static short DAT_8008d458;
 
     // GHIDRA: DAT_8008d3ec @ 0x8008D3EC (VS.EXE)
@@ -1756,7 +1756,7 @@ internal static class BattleManager
     // GHIDRA: LAB_80034eac @ 0x80034EAC (VS.EXE)
     // THE SCENE TASK'S ENTRY POINT — id 0x50, list 12, 0x7C bytes of workspace. NOT DECLARED HERE.
     //
-    // The label has exactly ONE reference in the whole overlay, `PARAM` from FUN_80055f94 at
+    // The label has exactly ONE reference in the whole overlay, `PARAM` from RunBattleRound at
     // 0x800563F8, which is the CreateTask argument in this file — so a private const here would
     // have been defensible. It is still wrong, because VS_EXE/BattleScene.cs transliterates the
     // body behind that address and already declares it `internal const int BattleSceneEntry`,
@@ -1823,7 +1823,7 @@ internal static class BattleManager
     // MEANINGS this slice closes -- consistent with the file header's own PARTIAL above.
     //
     // EVERY LOOP BELOW KEEPS the file's own established `iVarN = iVarN * 0x10000; ... iVarN *
-    // 0x10000 >> 0x10` idiom literally, for the same reason FUN_80055f94's own header gives: it is
+    // 0x10000 >> 0x10` idiom literally, for the same reason RunBattleRound's own header gives: it is
     // how the original's `short` induction variables survive into the object code, and the
     // truncation is what bounds them. THREE SETS OF GOTOS could not be kept as C# `goto`: two jump
     // INTO a sibling if/else arm (the SubRecordOrdinal sync at 0x8005AE38 and the numeric-readout
@@ -2262,7 +2262,7 @@ internal static class BattleManager
             // first among ties (matches SubRecordFlags bit 0x80 && bit 0x08), then the remaining
             // marked slots (bit 0x80 && !bit 0x08). Two goto targets (LAB_8005ae78, LAB_8005aee8)
             // each jump into the sibling arm of an if/else the same way LAB_800561d4 does in
-            // FUN_80055f94 above; written the same way, as if/else-if/else with the shared write
+            // RunBattleRound above; written the same way, as if/else-if/else with the shared write
             // repeated in both arms rather than merged.
             iVar5 = 0;
             puVar13 = puVar20;
@@ -3564,9 +3564,9 @@ internal static class BattleManager
     // or a sibling primitive later draws over this slot's HUD box; not asserted as closed fact.
     //
     // EVERY SHIFT BELOW IS KEPT IN ITS ORIGINAL FORM. `(int)(((uint)a - (uint)b) * 0x10000) >> 0x10`
-    // is this file's own established sign-extend-the-low-halfword idiom (see FUN_80055f94's
+    // is this file's own established sign-extend-the-low-halfword idiom (see RunBattleRound's
     // header), and the multiply-by-N-then-`>> 2`-with-a-`+3`-fixup pairs are the compiler's
-    // rounding fix-up for a negative dividend, identical in shape to FUN_80055f94's own central-
+    // rounding fix-up for a negative dividend, identical in shape to RunBattleRound's own central-
     // gauge handicap scaling. Neither is simplified to an equivalent expression, for the same
     // reason UpdateCentralGaugeBar's own header gives elsewhere in this file: the two are only
     // arithmetically identical, and the original never computes it the simpler way.
@@ -4153,7 +4153,7 @@ internal static class BattleManager
     //
     // PART THREE, closed: the growth/shrink of the bar's own geometry, and the colour pulse. Both
     // are gated behind the animation VM's suspend flag, the same `(AnimVm.DAT_800b305a & 1) != 0`
-    // gate FUN_80055f94 opens with — when it is up, this function's only remaining act is PART FOUR.
+    // gate RunBattleRound opens with — when it is up, this function's only remaining act is PART FOUR.
     //
     // The four POLY_FT4 quads InitCentralGaugeBar built at ctx+0x2f84 (stride 0x28) are quads 0..3 in
     // address order; every offset below is named against that layout (get-structure-info: y0 @ +0xA,
@@ -4923,7 +4923,7 @@ internal static class BattleManager
     // nothing later in this function depends on what the upload produces.
     //
     // PART THREE, closed: six trailing stores, independent of the blocked upload. ctx+0x302C is
-    // BattleState.CtxCentralGauge — the same word FUN_80055f94 accumulates into and clamps
+    // BattleState.CtxCentralGauge — the same word RunBattleRound accumulates into and clamps
     // elsewhere in this file — so this is the gauge's OWN zero, ahead of arming, distinct from the
     // wind-down's later reset.
     private static void InitCentralGaugeBar(int param_1)
@@ -5084,7 +5084,7 @@ internal static class BattleManager
     }
 
     // GHIDRA: FUN_8005ee5c @ 0x8005EE5C (VS.EXE)
-    // Called three times from FUN_80055f94 with (-1, -1, 0x10), (0, 0, 0x30) and (0, 0, 0x28), plus
+    // Called three times from RunBattleRound with (-1, -1, 0x10), (0, 0, 0x30) and (0, 0, 0x28), plus
     // once from ExecuteAnimStreamBatch with (0, 0, 0x30). VS_EXE/AnimVmInterpreter.cs held an
     // identical private empty stub for the same address; that duplicate is already gone (see the
     // note above) and this is the one surviving copy.

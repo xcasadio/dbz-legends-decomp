@@ -97,7 +97,7 @@ internal static class VsBootDiagnostic
             Console.WriteLine(
                 $"  tentatives de creation de la scene : {BattleManager.DiagSceneCreateAttempts}");
             Console.WriteLine();
-            Console.WriteLine("  LES QUATRE CONDITIONS QUI LEVENT LE BIT 3 (FUN_80055f94 l.117-134):");
+            Console.WriteLine("  LES QUATRE CONDITIONS QUI LEVENT LE BIT 3 (RunBattleRound l.117-134):");
             Console.WriteLine(
                 $"   1. (CtxFlags & 0x18000008) == 0        : "
                 + (BattleManager.DiagCond1Pass > 0 ? $"OUI ({BattleManager.DiagCond1Pass} frames)" : "NON"));
@@ -112,7 +112,7 @@ internal static class VsBootDiagnostic
                 + (BattleManager.DiagLastAliveCount == 0 ? "  OUI" : "  <-- NON"));
             Console.WriteLine();
             Console.WriteLine(
-                "  ET CE QUI ALIMENTE LA JAUGE (FUN_80055f94 l.96-106): les contributions +0x15B8,");
+                "  ET CE QUI ALIMENTE LA JAUGE (RunBattleRound l.96-106): les contributions +0x15B8,");
             Console.WriteLine("  equipe A (0-5) additionnee, equipe B (6-11) soustraite:");
             Console.Write("   ");
             for (int i = 0; i < 12; i++)
@@ -138,7 +138,7 @@ internal static class VsBootDiagnostic
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");
         Console.WriteLine($"   FUN_8004e758 (racine B) appelee : {FighterCombat.DiagE758Calls}");
-        Console.WriteLine($"   FUN_8004e108 (le semeur) appelee: {FighterCombat.DiagE108Calls}");
+        Console.WriteLine($"   AddSlotGaugeContribution (le semeur) appelee: {FighterCombat.DiagE108Calls}");
 
         Console.WriteLine();
         Console.WriteLine($"appels au repartiteur de scene : {BattleScene.DiagDispatcherCalls}");

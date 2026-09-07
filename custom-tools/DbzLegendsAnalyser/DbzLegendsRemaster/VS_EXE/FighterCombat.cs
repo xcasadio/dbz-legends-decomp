@@ -7,7 +7,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // (0x15B4) and CtxGaugeContribution (0x15B8), the running sum that feeds the tug-of-war gauge
 // at ctx+0x302C. This file is the home for that family that is not already in FighterTask.cs.
 //
-// WHY FUN_8004e108 IS THE PRIORITY. It is the only function anywhere in the image that writes
+// WHY AddSlotGaugeContribution IS THE PRIORITY. It is the only function anywhere in the image that writes
 // CtxGaugeContribution — the fact the workflow that asked for this file was built to establish.
 // Everything else here is either its sibling on the Ki side (FUN_8004a108/FUN_8004a518, the same
 // table-lookup shape draining/filling CtxKiGauge instead) or plumbing shared by its two ROOT
@@ -16,16 +16,16 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // THE TWO ROOTS THEMSELVES are also in this file now, at the bottom, in the order the task that
 // asked for them named them: FUN_8004ee48 (applies one attack-event record to its target, then
-// reaches FUN_8004e108 through its own +0x3c/+0x8 attacker chain) and FUN_8004e758 (the larger
+// reaches AddSlotGaugeContribution through its own +0x3c/+0x8 attacker chain) and FUN_8004e758 (the larger
 // dispatcher FighterTask.cs's own step 9.6 calls — see that function's header note for the empty
 // duplicate declaration still sitting in FighterTask.cs, which this file's real body replaces
 // but cannot remove, since FighterTask.cs is not this file's to edit).
 //
-// THE SHARED TABLE-LOOKUP SHAPE. FUN_8004e108 and FUN_8004a108 both do: pick a ROW by looking up
+// THE SHARED TABLE-LOOKUP SHAPE. AddSlotGaugeContribution and FUN_8004a108 both do: pick a ROW by looking up
 // this fighter's own slot in the battle context's CtxFighterSlots array, dereferencing the
 // pointer stored there and reading its first ushort (an indirection that resolves back to the
 // fighter's own field 0 in the ordinary case, but is reproduced exactly as written per rule 1 —
-// see FUN_8004e108's own note); pick a COLUMN from the fighter's +0x138 flags and/or +0x16A state
+// see AddSlotGaugeContribution's own note); pick a COLUMN from the fighter's +0x138 flags and/or +0x16A state
 // byte; read one byte from a fixed table at ROW*stride+COLUMN; scale it; and apply the result to
 // one of the two meters. Neither table has a Ghidra symbol — both bases were confirmed by
 // decoding the surrounding LWL/ADDIU/LW sequence by hand and cross-checking the resulting address
@@ -79,7 +79,7 @@ internal static class FighterCombat
 {
     // JUSTIFICATION: backend MonoGame only
     // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Nothing in the
-    // transliterated runtime touches them. They exist because FUN_8004e108 is the sole writer of
+    // transliterated runtime touches them. They exist because AddSlotGaugeContribution is the sole writer of
     // the gauge contribution that gates the whole battle scene, so "is it reached" is the one
     // question worth being able to answer without a screenshot.
     internal static int DiagE108Calls;
@@ -88,9 +88,9 @@ internal static class FighterCombat
 
     internal static int DiagEe48Calls;
 
-    // GHIDRA: FUN_8004e108 @ 0x8004E108 (VS.EXE)
-    // 1144 bytes. Two callers: FUN_8004e758 (`FUN_8004e108(param_1,0)`) and FUN_8004ee48
-    // (`FUN_8004e108(*(int*)(*(int*)(param_1+0x3c)+8), 1)` — a task-node +8 workspace resolved
+    // GHIDRA: AddSlotGaugeContribution @ 0x8004E108 (VS.EXE)
+    // 1144 bytes. Two callers: FUN_8004e758 (`AddSlotGaugeContribution(param_1,0)`) and FUN_8004ee48
+    // (`AddSlotGaugeContribution(*(int*)(*(int*)(param_1+0x3c)+8), 1)` — a task-node +8 workspace resolved
     // off ANOTHER node, not param_1 itself). Both callers are in this file, below.
     //
     // THE ONLY WRITER OF CtxGaugeContribution IN THE WHOLE IMAGE — the fact this whole workflow
@@ -122,7 +122,7 @@ internal static class FighterCombat
     // param_2 has two effects, both reproduced verbatim: it forces local_28 = 1 (skipping the
     // whole state switch) and it adds a fifth division (/5) after the /50 and /6 that +0x138
     // bits 4 and 0 gate. What param_2 itself represents is not established beyond that.
-    internal static void FUN_8004e108(int param_1, int param_2)
+    internal static void AddSlotGaugeContribution(int param_1, int param_2)
     {
         DiagE108Calls++;
 
@@ -216,7 +216,7 @@ internal static class FighterCombat
 
     // GHIDRA: FUN_8004e580 @ 0x8004E580 (VS.EXE)
     // 80 bytes. Two callers, FUN_8004e758 and FUN_8004ee48 (both in this file, below), both calling
-    // it unconditionally alongside their own FUN_8004e108 call. Shared cleanup: drop +0x134 bit
+    // it unconditionally alongside their own AddSlotGaugeContribution call. Shared cleanup: drop +0x134 bit
     // 0x20000000 and zero the byte at +0x224. Neither offset is named in BattleState.
     internal static void FUN_8004e580(int param_1)
     {
@@ -512,20 +512,20 @@ internal static class FighterCombat
     // directly, never an argument), not a gap, so this port exposes the one-parameter signature
     // the body actually uses.
     //
-    // KI-GAUGE DECREMENT, CLAMPED AT 0. Same shape as FUN_8004e108's CtxGaugeContribution write:
+    // KI-GAUGE DECREMENT, CLAMPED AT 0. Same shape as AddSlotGaugeContribution's CtxGaugeContribution write:
     // pick a row/column pair from a small byte table, scale, apply the +0x138-bit-4 /50 division,
     // then apply the result to CtxKiGauge (0x15B4) — here as a SUBTRACTION, floored at zero,
-    // rather than FUN_8004e108's addition into CtxGaugeContribution.
+    // rather than AddSlotGaugeContribution's addition into CtxGaugeContribution.
     //
-    //   ROW    the same indirect lookup as FUN_8004e108 (this fighter's own slot looked up in
+    //   ROW    the same indirect lookup as AddSlotGaugeContribution (this fighter's own slot looked up in
     //          ctx's CtxFighterSlots, the stored pointer dereferenced, its first ushort read).
-    //          Reproduced as written for the same reason — see FUN_8004e108's header note.
+    //          Reproduced as written for the same reason — see AddSlotGaugeContribution's header note.
     //   COLUMN local_18, 0..11, selected by +0x138 bits 0x40000/0x80000/0x80/0x20000 (8/9/10/11,
     //          tested BEFORE the state switch and skipping it outright) or by the state byte
     //          +0x16A (0x13/0x14 -> 0, 0x21 -> 1, 0x23..0x28 -> 6/7/5/3/4/2); any other state ->
     //          local_10 = 0.
     //   TABLE  base 0x80083968, stride 0xc (12) bytes per row — confirmed the same way as
-    //          FUN_8004e108's table. No Ghidra symbol names it. Row 0 read back all zero, row 1
+    //          AddSlotGaugeContribution's table. No Ghidra symbol names it. Row 0 read back all zero, row 1
     //          is {12,16,14,14,14,14,14,14,12,40,24,40}.
     //
     // Column 1 (state 0x21) additionally divides by 8 with a round-toward-zero adjustment
@@ -916,7 +916,7 @@ internal static class FighterCombat
 
     // GHIDRA: FUN_80053970 @ 0x80053970 (VS.EXE)
     // CLOSED (was BLOCKED) -- 96 bytes, 7 call sites total, two of them in THIS class
-    // (FighterSetState above, and FUN_80043598 below). AnimCmdEffects.cs carries an INDEPENDENT
+    // (FighterSetState above, and CreateAttackEventTask below). AnimCmdEffects.cs carries an INDEPENDENT
     // private stub for this SAME address, still a stub (called there from AnimCmd_EffSet's re-arm
     // path); that stub is local to that file's own class and not reachable from here, so this
     // remains FighterCombat's own copy of the body rather than a shared one -- see the sweep note
@@ -930,9 +930,9 @@ internal static class FighterCombat
     //   if (table < 0x80000000) *(int*)(param_1+8) = (int)(table + *(int*)param_1);
     //   *(ushort*)(param_1+6) = 0;
     //
-    // param_1 is a task workspace -- FighterSetState's own fighter, or FUN_80043598's own freshly
+    // param_1 is a task workspace -- FighterSetState's own fighter, or CreateAttackEventTask's own freshly
     // built attack-event record below. param_2 is a table BASE: either an absolute address (as
-    // FUN_80043598 passes it, unaffected by the `param_2 >= 0` add since *param_1 would only be
+    // CreateAttackEventTask passes it, unaffected by the `param_2 >= 0` add since *param_1 would only be
     // folded in for a relative offset) or a value ADDED to param_1's own +0 word first when
     // non-negative (as FighterSetState passes it: *(int*)(*(int*)(fighter+0x148)+0x38), a table
     // pointer, always non-negative, so the add always fires there). param_3 selects a 4-byte entry
@@ -1034,7 +1034,7 @@ internal static class FighterCombat
     // when the target's own +0x138 bits 0x40000 and 1 are BOTH clear (else this returns 1,
     // meaning "blocked") — calls FUN_8004d574(target, 0x16) and FUN_8004e580(target)
     // unconditionally, then, unless the target's own state (+0x16A) is 0x17, calls
-    // FUN_8004e108(attacker, 1) — THE gauge-contribution seed this whole workflow exists to
+    // AddSlotGaugeContribution(attacker, 1) — THE gauge-contribution seed this whole workflow exists to
     // reach — and, when the target's own +0x138 bits 0x30000000 are clear, stamps the target's
     // own +0xac/+0x22a "current task" bookkeeping pair the same way FUN_8004e758 does below.
     //
@@ -1141,7 +1141,7 @@ internal static class FighterCombat
 
         if (PsxRam.ReadU8(targetFighter + 0x16a) != 0x17)
         {
-            FUN_8004e108(PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0x3c) + 8), 1);
+            AddSlotGaugeContribution(PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0x3c) + 8), 1);
 
             if ((PsxRam.ReadI32(targetFighter + 0x138) & 0x30000000) == 0)
             {
@@ -1212,7 +1212,7 @@ internal static class FighterCombat
     // then — only when the opposing fighter's own state (+0x16A) is not 0x17 — calls
     // FUN_8004e580(opposing) and, for record types 3/4/5/6, drops the opposing fighter's own
     // +0x138 bit 0x4000. Still only when NOT blocked and state != 0x17, calls
-    // FUN_8004e108(acting,0) — the OTHER of FUN_8004e108's two callers this file's own header
+    // AddSlotGaugeContribution(acting,0) — the OTHER of AddSlotGaugeContribution's two callers this file's own header
     // note on that function already counted. Still only when not blocked, and only for record
     // types 4/5/6 with state != 0x17, sets the ACTING fighter's own +0x134 bit 0x8000000; if
     // blocked instead, drops the ACTING fighter's own +0x138 bit 0x100000.
@@ -1348,7 +1348,7 @@ internal static class FighterCombat
 
         if (local_10 == 0 && PsxRam.ReadU8(uVar4 + 0x16a) != 0x17)
         {
-            FUN_8004e108(param_1, 0);
+            AddSlotGaugeContribution(param_1, 0);
         }
 
         if (local_10 == 0)
@@ -1946,31 +1946,31 @@ internal static class FighterCombat
     // =====================================================================================
     // THE ATTACK-EVENT TASK -- the OTHER path into FUN_8004ee48 (see this file's own header note
     // on that function: its one caller was, until now, an unanalyzed stretch of code Ghidra
-    // previewed as UndefinedFunction_800429a8). FUN_80043598 CREATES the task; FUN_800429a8 IS
+    // previewed as UndefinedFunction_800429a8). CreateAttackEventTask CREATES the task; UpdateAttackEventTask IS
     // its per-frame entry; FUN_8004ee48 above is what it eventually calls to actually apply the
-    // attack. FUN_80043598's own call site closes a piece of FUN_8004ee48's own open evidence too:
+    // attack. CreateAttackEventTask's own call site closes a piece of FUN_8004ee48's own open evidence too:
     // that function's header note left its own param_1+0x3c/+0x8 "attacker" chain as "reproduced
-    // exactly as written" without saying what +0x3c holds; FUN_80043598 below stamps it with
+    // exactly as written" without saying what +0x3c holds; CreateAttackEventTask below stamps it with
     // `TaskSystem.g_CurrentTask` at CREATION time, i.e. whatever task was running the anim-stream
     // interpreter (AnimCmd_ChDanSet) that asked for this attack-event -- the attacking fighter's
     // own task, +8 of which FUN_8004ee48 already documents as "the ACTING fighter".
     //
-    // proposedNames (see this task's own report, not applied to the code): FUN_80043598 as
-    // something like CreateAttackEventTask, FUN_800429a8 as UpdateAttackEventTask -- the evidence
-    // that closes this: FUN_80043598 is AnimCmd_ChDanSet's own "clear" arm's registration call
+    // proposedNames (see this task's own report, not applied to the code): CreateAttackEventTask as
+    // something like CreateAttackEventTask, UpdateAttackEventTask as UpdateAttackEventTask -- the evidence
+    // that closes this: CreateAttackEventTask is AnimCmd_ChDanSet's own "clear" arm's registration call
     // (opcode 40, `ch_dan_set`), builds a 0xC0-byte workspace from two RESOLVED TARGETS plus a
-    // type halfword and a flag byte, and its entry (FUN_800429a8) redraws that workspace every
+    // type halfword and a flag byte, and its entry (UpdateAttackEventTask) redraws that workspace every
     // frame (FUN_80052db4) until its own +0x78 sign bit is set, at which point it hands the whole
     // workspace to FUN_8004ee48 -- THE gauge-contribution seed this whole wave exists to reach --
     // then deletes its own task (TaskSystem.DeleteTask, list 0xb).
     // =====================================================================================
 
-    // GHIDRA: FUN_800429a8 @ 0x800429A8 (VS.EXE)
-    private const int FUN_800429a8_Address = unchecked((int)0x800429A8);
+    // GHIDRA: UpdateAttackEventTask @ 0x800429A8 (VS.EXE)
+    private const int UpdateAttackEventTask_Address = unchecked((int)0x800429A8);
 
-    // GHIDRA: FUN_80043598 @ 0x80043598 (VS.EXE)
+    // GHIDRA: CreateAttackEventTask @ 0x80043598 (VS.EXE)
     // 312 bytes. One caller: AnimCmd_ChDanSet's "clear" arm in VS_EXE/AnimCmdEffects.cs
-    // (`FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);`, opcode 40's own two resolved
+    // (`CreateAttackEventTask(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);`, opcode 40's own two resolved
     // targets, word 2 sign-extended, and the flag byte).
     //
     // DUPLICATE DECLARATION, NOT FIXED HERE. AnimCmdEffects.cs's own call site above is
@@ -1982,25 +1982,25 @@ internal static class FighterCombat
     //
     // Two callees: FUN_80053330 (TaskSystem.CreateTask, already ported) and FUN_80053970 (this
     // file's own copy above, now closed). Creates the task (id 0, list 0xb, 0xC0-byte workspace,
-    // entry FUN_800429a8, inserted at g_TaskListTail[0xb]); on success, resolves the node's own +8
+    // entry UpdateAttackEventTask, inserted at g_TaskListTail[0xb]); on success, resolves the node's own +8
     // workspace and stamps it: param_1's three halfwords onto +0x40/+0x42/+0x44, param_2's first
     // two onto +0x48/+0x4a (its third, param_2[2], stays in `targetZ` and is written to +0x4c only
     // at the very end -- exactly where Ghidra's own decompilation places that store, kept literal
     // rather than moved up next to the other two), the CURRENT task (the caller's own task, i.e.
     // the ATTACKING fighter's, per this section's own header note) onto +0x3c, param_3 onto +0x7c,
-    // a fixed 0x4000000 onto +0x78 (bit 26 -- NOT the sign bit FUN_800429a8 tests before calling
+    // a fixed 0x4000000 onto +0x78 (bit 26 -- NOT the sign bit UpdateAttackEventTask tests before calling
     // FUN_8004ee48, so that call never fires on the task's first frame), and a fixed table of
     // twelve intra-workspace pointers (+0xc, +0x80, +0x84, +0x88, +0x8c, +0x90, +0x94, +0x9c,
     // +0xa0, +0xa4, +0xa8) whose targets Ghidra's own arithmetic gives directly -- no further
     // meaning asserted for what each slot is FOR, only that each points where the original points
     // it. Finally calls FUN_80053970(workspace, &PTR_DAT_800217f0, param_4) to seed +8 from that
     // table, exactly as FUN_80053970's own header above documents.
-    internal static void FUN_80043598(int param_1, int param_2, short param_3, uint param_4)
+    internal static void CreateAttackEventTask(int param_1, int param_2, short param_3, uint param_4)
     {
-        TaskSystem.RegisterCallback(FUN_800429a8_Address, FUN_800429a8);
+        TaskSystem.RegisterCallback(UpdateAttackEventTask_Address, UpdateAttackEventTask);
 
         int taskNode = TaskSystem.CreateTask(
-            FUN_800429a8_Address, 0, 0xb, 0xc0, 0, TaskSystem.g_TaskListTail[0xb]);
+            UpdateAttackEventTask_Address, 0, 0xb, 0xc0, 0, TaskSystem.g_TaskListTail[0xb]);
 
         if (taskNode != 0)
         {
@@ -2043,10 +2043,10 @@ internal static class FighterCombat
         }
     }
 
-    // GHIDRA: FUN_800429a8 @ 0x800429A8 (VS.EXE)
+    // GHIDRA: UpdateAttackEventTask @ 0x800429A8 (VS.EXE)
     // 592 bytes, 7 callees. Never called directly anywhere in the image (Ghidra's own
     // cross-reference for this function shows exactly one incoming reference, and its type is
-    // PARAM, not CALL: FUN_80043598 above takes its ADDRESS and hands it to CreateTask as the
+    // PARAM, not CALL: CreateAttackEventTask above takes its ADDRESS and hands it to CreateTask as the
     // task's entry point). This is the task's own per-frame body, dispatched purely through
     // TaskSystem's callback table -- the same mechanism FighterTask.UpdateFighter,
     // BattleScene.UpdateBattleScene and PrimitivePools.ResetPrimitivePoolCursors already use in
@@ -2082,7 +2082,7 @@ internal static class FighterCombat
     // C# requires one, not a claim about what the console actually held there.
     //
     // ONLY WHEN THE VM IS NOT PAUSED, AFTERWARD: when +0x78's own SIGN BIT is set (never true on
-    // the task's first frame -- FUN_80043598 above seeds +0x78 with 0x4000000, bit 26, not bit
+    // the task's first frame -- CreateAttackEventTask above seeds +0x78 with 0x4000000, bit 26, not bit
     // 31), calls FUN_8004ee48(workspace) above -- THE call this whole wave exists to reach. A -1
     // result leaves the record as is; a 0 result jumps straight to LAB_80042bd0 (self-deletion,
     // below), skipping the reposition block AND the trailing +0x78 sign-bit clear; any OTHER
@@ -2097,7 +2097,7 @@ internal static class FighterCombat
     // its own list. The `goto` is the original's own control flow and is kept literal: the
     // FUN_8004ee48-returned-0 path reaches this same deletion call WITHOUT running the +0x78
     // sign-bit clear or the +4 gate the fall-through path runs first.
-    private static void FUN_800429a8()
+    private static void UpdateAttackEventTask()
     {
         int param_1 = 0;
 
@@ -2194,7 +2194,7 @@ internal static class FighterCombat
     // GHIDRA: FUN_80052db4 @ 0x80052DB4 (VS.EXE)
     // BLOCKED: 1404 bytes, out of this slice -- the "primitive pool" drawer
     // VS_EXE/PrimitivePools.cs's own header note already names in passing ("FUN_80052DB4
-    // @ 0x80052DB4 and its neighbours, which walk +0x04/+0x24/+0x44 for slot 1"). FUN_800429a8's
+    // @ 0x80052DB4 and its neighbours, which walk +0x04/+0x24/+0x44 for slot 1"). UpdateAttackEventTask's
     // only call to it above passes the attack-event workspace's own position fields (+0x28, +0x40,
     // +0x42, +0x44, +0x74), the frame's own rotation byte pair (folded into the caller's own
     // `param_1`), and a run of literal constants (a 0x200 scale pair, three 0x80 RGB-neutral
@@ -2227,7 +2227,7 @@ internal static class FighterCombat
 
     // GHIDRA: FUN_80045b70 @ 0x80045B70 (VS.EXE)
     // BLOCKED: 388 bytes, out of this slice. Ghidra's own signature is `undefined1
-    // FUN_80045b70(ushort param_1, short param_2)`; FUN_800429a8's two calls above pass its own
+    // FUN_80045b70(ushort param_1, short param_2)`; UpdateAttackEventTask's two calls above pass its own
     // workspace's own +0x4c (param_1) and +0x4a (param_2) fields, both read as signed halfwords
     // (`lh`), to compute an orientation/facing byte -- a table lookup (&DAT_80082e44, then a
     // second table at an offset this slice does not resolve) this port does not chase further.
@@ -2244,7 +2244,7 @@ internal static class FighterCombat
     // FUN_800461fc(SVECTOR *param_1, ushort *param_2, VECTOR *param_3)` -- a GTE rotate/translate
     // (PushMatrix, RotMatrix, SetTransMatrix, SetRotMatrix, RotTrans, PopMatrix), the same
     // PsxSdkMonogame GTE family VS_EXE/FileIo.cs's own scratchpad note already flags for a later
-    // slice. FUN_800429a8's own call above builds param_1's three halfwords on its OWN C stack
+    // slice. UpdateAttackEventTask's own call above builds param_1's three halfwords on its OWN C stack
     // (local_18/local_16/local_14), which this port has no PSX address for -- the same gap this
     // file's own AnimCmdEffects.cs sibling already documents for AnimCmd_CheffWait's identical
     // "synthetic command built in a caller's stack frame" case. Passed here as three plain values

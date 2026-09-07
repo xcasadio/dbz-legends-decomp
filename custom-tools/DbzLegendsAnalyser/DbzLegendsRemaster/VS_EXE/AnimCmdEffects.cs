@@ -1058,7 +1058,7 @@ internal static class AnimCmdEffects
     // PARTIAL — the combat semantics belong to a later slice. What the control flow closes:
     //   clear (bit 7 of the sign-extended high byte) — resolves TWO targets out of word 1, low
     //         byte through FUN_8003f228 and high byte through FUN_8003f2b0, and if both resolve
-    //         passes them plus word 2 sign-extended and the flag byte to FUN_80043598
+    //         passes them plus word 2 sign-extended and the flag byte to CreateAttackEventTask
     //         @ 0x80043598 (312 bytes, out of slice).
     //   set   — reads the pending record at the task context's +0x30 and finalises it: clears
     //         `word2 * 0x7F` out of one g_animSharedVarTable entry, then ORs word 2 back in,
@@ -1088,7 +1088,7 @@ internal static class AnimCmdEffects
                 iVar8 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar5 >> 8), iVar8);
                 if (iVar2 != 0 && iVar8 != 0)
                 {
-                    FighterCombat.FUN_80043598(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
+                    FighterCombat.CreateAttackEventTask(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
                 }
             }
         }
@@ -1376,7 +1376,7 @@ internal static class AnimCmdEffects
         return 0;
     }
 
-    // GHIDRA: FUN_80043598 @ 0x80043598 (VS.EXE)
+    // GHIDRA: CreateAttackEventTask @ 0x80043598 (VS.EXE)
     // MOVED TO VS_EXE/FighterCombat.cs, where its real 312-byte body now lives with the rest of the
     // attack-event chain. The empty stub that used to sit here is DELETED rather than left, and the
     // deletion matters more than the move: C# binds an unqualified call to the enclosing class
