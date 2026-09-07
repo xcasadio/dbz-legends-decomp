@@ -859,19 +859,19 @@ internal static class FighterCombat
         {
             case 1:
             case 2:
-                FUN_8004d32c(param_2, 0x16, param_1);
+                FighterCombatArms.FUN_8004d32c(param_2, 0x16, param_1);
                 break;
             case 3:
-                FUN_8004d9f4(param_2, 0x16, param_1);
+                FighterCombatArms.FUN_8004d9f4(param_2, 0x16, param_1);
                 break;
             case 4:
-                FUN_8004d694(param_2, 0x19, param_1);
+                FighterCombatArms.FUN_8004d694(param_2, 0x19, param_1);
                 break;
             case 5:
-                FUN_8004d694(param_2, 0x1a, param_1);
+                FighterCombatArms.FUN_8004d694(param_2, 0x1a, param_1);
                 break;
             case 6:
-                FUN_8004d694(param_2, 0x18, param_1);
+                FighterCombatArms.FUN_8004d694(param_2, 0x18, param_1);
                 break;
         }
 
@@ -882,35 +882,19 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004d32c @ 0x8004D32C (VS.EXE)
-    // BLOCKED: 584 bytes, out of this slice. Called from FUN_8004dfc4 above as
-    // FUN_8004d32c(target, 0x16, actor) on attack-record type 1 or 2.
-    private static void FUN_8004d32c(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterCombatArms.cs, which holds the four
+    // attack-resolution arms this file used to stub. Call sites below reach it by qualified
+    // name; declaring the same address twice is what makes an empty stub beat a real body.
 
     // GHIDRA: FUN_8004d9f4 @ 0x8004D9F4 (VS.EXE)
-    // BLOCKED: 1180 bytes, out of this slice. Called from FUN_8004dfc4 above as
-    // FUN_8004d9f4(target, 0x16, actor) on attack-record type 3.
-    private static void FUN_8004d9f4(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterCombatArms.cs, which holds the four
+    // attack-resolution arms this file used to stub. Call sites below reach it by qualified
+    // name; declaring the same address twice is what makes an empty stub beat a real body.
 
     // GHIDRA: FUN_8004d694 @ 0x8004D694 (VS.EXE)
-    // BLOCKED: 864 bytes, out of this slice. Called from FUN_8004dfc4 above as
-    // FUN_8004d694(target, opcode, actor) on attack-record type 4, 5 or 6 (opcode 0x19/0x1a/0x18
-    // respectively).
-    private static void FUN_8004d694(int param_1, int param_2, int param_3)
-    {
-        _ = param_1;
-        _ = param_2;
-        _ = param_3;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterCombatArms.cs, which holds the four
+    // attack-resolution arms this file used to stub. Call sites below reach it by qualified
+    // name; declaring the same address twice is what makes an empty stub beat a real body.
 
     // GHIDRA: FighterSetState @ 0x80047C64 (VS.EXE)
     // Already named and partly documented in the Ghidra database itself: the decompiler comment
@@ -988,21 +972,9 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004d574 @ 0x8004D574 (VS.EXE)
-    // BLOCKED: 288 bytes, out of this slice. One caller, FUN_8004ee48 below. Ghidra's OWN
-    // analysis of this function's body settles a two-parameter signature —
-    // `void FUN_8004d574(int param_1, ushort param_2)` — that reads neither parameter for
-    // anything the body keeps; its real work runs off two globals (DAT_8008d160/DAT_8008d164,
-    // both out of this slice) and a call to FUN_8005ef20, none of it analyzed here. The CALL
-    // SITE inside FUN_8004ee48 renders with five arguments in Ghidra's decompilation of that
-    // caller (`FUN_8004d574(iVar7,0x16,param_3,uVar9,uVar3)`) — an artifact of the caller's own
-    // side (see FUN_8004ee48's header note on its own unread param_3), not evidence of a wider
-    // callee signature: the three trailing values never reach a parameter this function's body
-    // reads. Called the way the console's own two real arguments call it: (target, 0x16).
-    private static void FUN_8004d574(int param_1, ushort param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-    }
+    // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterCombatArms.cs, which holds the four
+    // attack-resolution arms this file used to stub. Call sites below reach it by qualified
+    // name; declaring the same address twice is what makes an empty stub beat a real body.
 
     // GHIDRA: FUN_8004ee48 @ 0x8004EE48 (VS.EXE)
     // 1292 bytes. Declared nowhere else in the port. One caller: the call itself sits at
@@ -1018,7 +990,7 @@ internal static class FighterCombat
     // already in the register); and param_3, though it IS forwarded to one call
     // (`FUN_8004d574(iVar7,0x16,param_3,uVar9,uVar3)` in Ghidra's own rendering of that call
     // site), is forwarded to a parameter slot FUN_8004d574's OWN analyzed signature
-    // (`void FUN_8004d574(int, ushort)`) never reads — see that function's header note. So
+    // (`void FighterCombatArms.FUN_8004d574(int, ushort)`) never reads — see that function's header note. So
     // param_3's value can never affect behavior either. This port exposes the signature the body
     // and its one caller actually use: a single parameter.
     //
@@ -1054,7 +1026,7 @@ internal static class FighterCombat
     // target fighter, copies the record's own +0x50/+0x54 word pair onto the target's +0xc0/+0xc4
     // (the SAME two source words as the task-node copy above, a second destination), and — only
     // when the target's own +0x138 bits 0x40000 and 1 are BOTH clear (else this returns 1,
-    // meaning "blocked") — calls FUN_8004d574(target, 0x16) and FUN_8004e580(target)
+    // meaning "blocked") — calls FighterCombatArms.FUN_8004d574(target, 0x16) and FUN_8004e580(target)
     // unconditionally, then, unless the target's own state (+0x16A) is 0x17, calls
     // AddSlotGaugeContribution(attacker, 1) — THE gauge-contribution seed this whole workflow exists to
     // reach — and, when the target's own +0x138 bits 0x30000000 are clear, stamps the target's
@@ -1158,7 +1130,7 @@ internal static class FighterCombat
             return 1;
         }
 
-        FUN_8004d574(targetFighter, 0x16);
+        FighterCombatArms.FUN_8004d574(targetFighter, 0x16);
         FUN_8004e580(targetFighter);
 
         if (PsxRam.ReadU8(targetFighter + 0x16a) != 0x17)
@@ -2166,7 +2138,7 @@ internal static class FighterCombat
     // (`lh`), to compute an orientation/facing byte -- a table lookup (&DAT_80082e44, then a
     // second table at an offset this slice does not resolve) this port does not chase further.
     // Kept as a precise no-op returning 0.
-    private static byte FUN_80045b70(short param_1, short param_2)
+    internal static byte FUN_80045b70(short param_1, short param_2)
     {
         _ = param_1;
         _ = param_2;

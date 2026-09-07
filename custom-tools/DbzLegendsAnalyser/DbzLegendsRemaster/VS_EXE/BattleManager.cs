@@ -5183,7 +5183,7 @@ internal static class BattleManager
     // GHIDRA: FUN_8005ef20 @ 0x8005EF20 (VS.EXE)
     // BLOCKED: 328 bytes. Called once, with (0, 0), immediately after FUN_8005ee5c on the
     // round-is-over path.
-    private static void FUN_8005ef20(int param_1, int param_2)
+    internal static void FUN_8005ef20(int param_1, int param_2)
     {
         _ = param_1;
         _ = param_2;

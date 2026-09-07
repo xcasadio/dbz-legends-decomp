@@ -1429,7 +1429,7 @@ internal static class AnimCmdMesh
     // The GTE FLAG this function threads through to DAT_800b30f4 is LibGte.RotTrans's own
     // already-documented limitation (its FLAG register is not modelled and is always written as 0
     // in this port) -- inherited here, not re-analysed.
-    private static void ComputeYawPitchToTarget(int param_1, int param_2, int param_3)
+    internal static void ComputeYawPitchToTarget(int param_1, int param_2, int param_3)
     {
         int local_18 = (short)PsxRam.ReadU16(param_2) - (short)PsxRam.ReadU16(param_1);
         int local_14 = local_18 < 0 ? -local_18 : local_18;
