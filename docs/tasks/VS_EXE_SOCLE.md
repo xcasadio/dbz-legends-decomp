@@ -276,6 +276,67 @@ La structure est grande (au-dela de `0x2c14` shorts, soit plus de 22 Ko), donc
 `BattleState.cs` doit declarer **ce que cette fonction touche**, pas la structure
 entiere, et le dire.
 
+## L'ECRAN BLEU: ce n'etait pas `FUN_8005a5b0`
+
+Le portage tenait **deux verrous independants** sur la scene de combat, et ce
+document les nommait tous les deux. C'est le second qui tenait l'AFFICHAGE, et le
+premier suspect n'etait pas le bon.
+
+La phase 1 du chargeur (`BattleScene`) force l'etat a 8 seulement quand l'id de
+scene depasse `0x3F`; sinon elle fait tourner `SoundCdLoadStep` et **sort tant
+que le resultat est inferieur a 8**. L'etat 7 de cette machine est exactement
+`if (SsVabTransCompleted(0) == 0) return state;`. `SsVabTransCompleted` etait
+`return default` dans `LibSnd`, donc 0, donc l'etat 7 se rendait lui-meme
+indefiniment: la tache de scene n'etait jamais creee et le fond du draw-env
+restait seul a l'ecran.
+
+**Un `return default` tenait toute la scene de combat fermee.**
+
+C'etait aussi le SEUL stub libsnd qui bloquait: `SsVabOpenHeadSticky` et
+`SsVabTransBody` rendent 0 eux aussi, mais 0 passe leurs tests `>= 0`, donc les
+etats 5 et 6 marchaient deja.
+
+La correction est la regle 14, et c'est le raisonnement deja valide pour le
+lecteur CD: la console interroge un materiel qui doit physiquement arriver
+quelque part, le desktop lit une donnee deja presente. Il n'y a aucun transfert
+DMA en vol, donc un transfert qui ne demarre jamais et n'a rien a faire est
+**observablement termine**. `PARTIAL` assume et ecrit sur place: ca declare le
+transfert fait, ca n'en effectue pas un. Rien ne sera audible avant que libsnd
+existe; ce qui change, c'est que la logique du jeu avance au lieu de tourner en
+rond.
+
+**`--validate-sound-loader` a fait son travail en ECHOUANT, pour la deuxieme
+fois.** Son assertion sur l'etat 7 portait un commentaire disant que celui qui
+ferait repondre `SsVabTransCompleted` verrait cette assertion-la casser, et que
+ce serait le signal. C'est exactement ce qui s'est produit, sur le meme
+changement.
+
+## `FUN_8005a5b0` EST FAITE
+
+8500 octets, 1078 lignes decompilees, une vingtaine de blocs, revue adverse
+**CONFIRMED**.
+
+Elle a ete prise **socle d'abord**, l'ordre que ce document prescrivait, et c'est
+ce qui l'a rendue faisable: trois tranches de reconnaissance en parallele ont
+cartographie les blocs et chaque offset avec sa largeur de chargement avant
+qu'une seule ligne ne soit ecrite.
+
+**La decouverte structurelle** ferme une question que trois fonctions se
+posaient sans pouvoir y repondre: `ctx + 0x20` est la base de douze
+sous-enregistrements de `0x1C0` octets, et `0x20 + 12 x 0x1C0 = 0x1520` tombe
+exactement sur `CtxFighterSlots`. Le tableau remplit tout le trou, sans reste.
+C'est le tableau sur lequel `FUN_80057a7c`, `FUN_80058120` et `FUN_80058338`
+travaillent, chacun le decrivant de l'interieur sans savoir ou il commence.
+
+**Et une cinquieme fois la meme erreur.** `CtxState` portait la note « AUCUN des
+quatre corps n'y ecrit 2 ». L'ecrivain existe: `FUN_8005a5b0`, a `0x8005AE04`,
+derriere un balayage complet d'equipe — donc rare, donc invisible a l'inspection
+des quatre corps. Encore une affirmation sur le code *lu*, ecrite comme une
+affirmation sur le *jeu*.
+
+Reste deux appelees en souche, pour des raisons deja consignees: `FUN_80026d98`
+(chaine de cinq fonctions manquantes) et `FUN_80058338` (deja refusee).
+
 ## OU EN EST VS.EXE, en chiffres et non en impression
 
 C'est le resultat le plus utile de cette session, et il change la maniere de
