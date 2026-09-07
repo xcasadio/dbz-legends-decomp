@@ -10,7 +10,12 @@ three buckets:
            body is not a stub;
   STUB     an annotation introduces a method whose body is only `_ = param;` and
            an optional constant return -- the port's BLOCKED placeholder shape;
-  ABSENT   no annotation in the port declares that address at all.
+  ABSENT   no annotation in the port declares that address at all;
+  EMPTY    the port's body is stub-shaped AND so is the ORIGINAL's -- the function
+           in the image is `jr ra` and nothing else, so an empty C# body is the
+           faithful transliteration and not a hole. Counted with PORTED. This is
+           checked against `data/VS.EXE` on every run, never taken on trust from a
+           list of addresses, so it cannot rot into an excuse.
 
 Usage:  python vs_port_coverage.py <inventory.tsv> [--list BUCKET] [--top N]
 
@@ -87,6 +92,36 @@ def scan_port():
     return found
 
 
+# THE PSX-EXE GEOMETRY. VS.EXE loads at 0x80020000 and its 0x800-byte header sits in
+# front of the text, so an address maps to a file offset by subtracting the load
+# address and adding the header. Confirmed against the header's own taddr/tsize words
+# rather than assumed.
+IMAGE = Path(__file__).resolve().parents[2] / "data" / "VS.EXE"
+LOAD_ADDRESS = 0x80020000
+HEADER_SIZE = 0x800
+
+
+def original_is_empty(address, size):
+    """True when the function in the image does nothing at all.
+
+    MIPS `jr ra` is 0x03E00008 and `nop` is 0x00000000. A function whose whole body is
+    those two words returns without touching a register, so a C# method with an empty
+    body is not a stub of it -- it IS it. Anything longer, or anything with a different
+    first instruction, is a real body and stays classified as a stub.
+    """
+    if size > 8 or not IMAGE.exists():
+        return False
+    offset = address - LOAD_ADDRESS + HEADER_SIZE
+    blob = IMAGE.read_bytes()
+    if offset < 0 or offset + size > len(blob):
+        return False
+    words = [
+        int.from_bytes(blob[offset + i : offset + i + 4], "little")
+        for i in range(0, size, 4)
+    ]
+    return words[:2] == [0x03E00008, 0x00000000]
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -111,6 +146,8 @@ def main():
             continue
         address, name, size, callers, callees = parts[0].lower(), parts[1], int(parts[2]), int(parts[3]), int(parts[4])
         kind = found.get(address, ("ABSENT", "", 0, ""))[0]
+        if kind == "STUB" and original_is_empty(int(address, 16), size):
+            kind = "EMPTY"
         rows.append((address, name, size, callers, callees, kind))
 
     # THE SDK BOUNDARY. Rule 13 of the port contract says the PSX SDK is not game
@@ -122,7 +159,7 @@ def main():
     SDK_BASE = 0x800632C4
     rows = [r for r in rows if int(r[0], 16) < SDK_BASE]
 
-    buckets = {"PORTED": [], "STUB": [], "ABSENT": []}
+    buckets = {"PORTED": [], "EMPTY": [], "STUB": [], "ABSENT": []}
     for row in rows:
         buckets[row[5]].append(row)
 
@@ -136,11 +173,17 @@ def main():
     total_size = sum(r[2] for r in rows)
     print(f"fonctions VS.EXE hors SDK   : {len(rows)}   ({total_size} octets)")
     print("  (le SDK PSX, >= 0x800632C4, est exclu : rule 13, il vit dans PsxSdkMonogame)")
-    for kind in ("PORTED", "STUB", "ABSENT"):
+    for kind in ("PORTED", "EMPTY", "STUB", "ABSENT"):
         group = buckets[kind]
         size = sum(r[2] for r in group)
         pct = 100.0 * size / total_size if total_size else 0.0
         print(f"  {kind:8s} : {len(group):5d} fonctions  {size:7d} octets  {pct:5.1f} %")
+
+    closed = buckets["PORTED"] + buckets["EMPTY"]
+    closed_size = sum(r[2] for r in closed)
+    closed_pct = 100.0 * closed_size / total_size if total_size else 0.0
+    print(f"  {'CLOS':8s} : {len(closed):5d} fonctions  {closed_size:7d} octets  {closed_pct:5.1f} %"
+          "   (PORTED + EMPTY)")
 
     print()
     print(f"LES {top} PLUS GROSSES ABSENTES (adresse, nom, octets, appelants, appelees) :")

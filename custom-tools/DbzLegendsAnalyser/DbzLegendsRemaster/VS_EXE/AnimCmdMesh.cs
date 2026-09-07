@@ -1513,7 +1513,7 @@ internal static class AnimCmdMesh
         PsxRam.WriteU16(param_3 + 2 * 2, (ushort)(lVar1 & 0xfff));
     }
 
-    // GHIDRA: FUN_80045cf4 @ 0x80045CF4 (VS.EXE)
+    // GHIDRA: DistanceBetweenPositions @ 0x80045CF4 (VS.EXE)
     // 400 bytes, one callee (libgte's SquareRoot0). SIX callers, and they are why it lives here
     // rather than in any one of them: four inside RunBattleCameraTask @ 0x80027670, one inside the
     // CPU controller FUN_80023890, and one at 0x80054DE0. It is placed beside
@@ -1534,7 +1534,7 @@ internal static class AnimCmdMesh
     // RELATION: the two parameters are PSX addresses rather than managed arrays, because four of the
     // six call sites pass `fighter + 0x114` -- an address inside a PsxRam workspace -- and the other
     // two pass a caller stack local that RunBattleCameraTask gives a synthetic address of.
-    internal static int FUN_80045cf4(int param_1, int param_2)
+    internal static int DistanceBetweenPositions(int param_1, int param_2)
     {
         int local_18 = (short)PsxRam.ReadU16(param_2) - (short)PsxRam.ReadU16(param_1);
         if (local_18 < 0)

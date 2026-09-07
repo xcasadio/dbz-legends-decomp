@@ -24,11 +24,11 @@ namespace DbzLegendsRemaster.VS_EXE;
 // note on the function itself.
 //
 // THE TWO SUBMISSION CALLS SHARE ONE CALLEE. FUN_800477ec and FUN_80047a24 both end in a call to
-// FUN_80052db4 @ 0x80052DB4, the "primitive pool" drawer VS_EXE/PrimitivePools.cs names in passing
+// DrawSpriteGroup @ 0x80052DB4, the "primitive pool" drawer VS_EXE/PrimitivePools.cs names in passing
 // and FighterCombat.cs already carries as a precise 18-parameter no-op stub. Its real prototype,
 // from Ghidra's own callee-side analysis, is
 //
-//   int FUN_80052db4(int *param_1, short param_2, short param_3, short param_4, ushort param_5,
+//   int DrawSpriteGroup(int *param_1, short param_2, short param_3, short param_4, ushort param_5,
 //                    undefined2 param_6, undefined2 param_7, int param_8, int param_9,
 //                    int param_10, short param_11, short param_12, char param_13, char param_14,
 //                    undefined1 param_15, undefined1 param_16, undefined1 param_17, int param_18);
@@ -59,7 +59,7 @@ internal static class FighterMotion
     // FighterTask.cs's own early-out functions plus the main body's 0x8005112c. Ported in full.
     //
     // ONE CALL, EIGHTEEN ARGUMENTS, AND ONE DEAD STORE. Ghidra's decompilation of this function
-    // prints NINETEEN arguments to FUN_80052db4, the last being `*(uint *)(param_1 + 0x134) & 0x1f`.
+    // prints NINETEEN arguments to DrawSpriteGroup, the last being `*(uint *)(param_1 + 0x134) & 0x1f`.
     // That is a decompiler artefact and it was checked against the raw instructions rather than
     // believed. The argument marshalling runs 0x80047934..0x800479F4 and writes exactly fourteen
     // stack slots, sp+0x10 through sp+0x44, plus a0..a3 — eighteen arguments, the last being
@@ -92,13 +92,13 @@ internal static class FighterMotion
     // they are kept separate anyway, because collapsing repeated loads is the kind of tidying rule
     // 1 and rule 7 forbid.
     //
-    // BLOCKED: the return value. The original stores FUN_80052db4's result into +0x13c
+    // BLOCKED: the return value. The original stores DrawSpriteGroup's result into +0x13c
     // (0x80047A00 `lw v1,0x68(s8)` / 0x80047A08 `sw v0,0x13c(v1)`) — a primitive/handle the drawer
-    // hands back. FighterCombat.FUN_80052db4 is a no-op stub that returns `void`, so there is no
+    // hands back. FighterCombat.DrawSpriteGroup is a no-op stub that returns `void`, so there is no
     // handle to store and 0 is written instead. That is not a fabricated value: the workspace is
     // zeroed from +0x114 up by FUN_800512cc, so +0x13c is already 0 on every frame this port has
     // ever run, and the one reader of the field — FighterTask.FUN_80047b10's `0 < +0x13c` gate —
-    // therefore behaves exactly as it does today. When FUN_80052db4 is really ported it must
+    // therefore behaves exactly as it does today. When DrawSpriteGroup is really ported it must
     // return its int and this store must carry it.
     internal static void FUN_800477ec(int param_1, int param_2)
     {
@@ -133,7 +133,7 @@ internal static class FighterMotion
         // CLOSED: 0x80052DB4 is VS_EXE/SpriteDrawer.cs's own body now, and it RETURNS the ordering
         // -table bucket it used. The store into +0x13C below carries that value instead of the 0 the
         // stub forced.
-        int drawResult = SpriteDrawer.FUN_80052db4(
+        int drawResult = SpriteDrawer.DrawSpriteGroup(
             PsxRam.ReadI32(param_1 + 0x98),
             (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
             (short)PsxRam.ReadU16(param_2 + 2),
@@ -161,7 +161,7 @@ internal static class FighterMotion
     // after it and with the same two arguments. Ported in full.
     //
     // Straight-line: no local, no branch, one call, no return value used. The whole body is the
-    // marshalling of eighteen arguments to FUN_80052db4 — verified store by store,
+    // marshalling of eighteen arguments to DrawSpriteGroup — verified store by store,
     // 0x80047A88 `sw a0,0x10(sp)` through 0x80047AE0 `sw a0,0x44(sp)`, then a0..a3 at
     // 0x80047AE4..0x80047AEC. This is the call site that fixes the callee's real arity at eighteen.
     //
@@ -174,7 +174,7 @@ internal static class FighterMotion
     // under the fighter. The name that suggests is not written into the code: the evidence closes
     // the ARGUMENTS, not the meaning.
     //
-    // FUN_80052db4 returns an int here too and this caller discards it (no `sw` after the `jal`),
+    // DrawSpriteGroup returns an int here too and this caller discards it (no `sw` after the `jal`),
     // so the void stub costs this function nothing.
     internal static void FUN_80047a24(int param_1, int param_2)
     {
@@ -182,7 +182,7 @@ internal static class FighterMotion
         // back. Every caller still passes the fighter. Kept in the signature for that reason.
         _ = param_1;
 
-        SpriteDrawer.FUN_80052db4(
+        SpriteDrawer.DrawSpriteGroup(
             unchecked((int)0x8007F7B8),
             (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
             0,

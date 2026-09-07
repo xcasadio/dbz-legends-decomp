@@ -45,7 +45,7 @@ internal static class PrimitivePools
     // This is the g_PrimitivePoolContext of TITLE.EXE @ 0x800835F8; the C# name comes from there,
     // the Ghidra symbol is still raw. Written by exactly one instruction in the program — 0x80060E9C,
     // the tail of CreatePrimitivePools — and read 28 times, all of them from the sprite path
-    // (FUN_80052DB4 @ 0x80052DB4 and its neighbours, which walk +0x04 / +0x24 / +0x44 for slot 1).
+    // (DrawSpriteGroup @ 0x80052DB4 and its neighbours, which walk +0x04 / +0x24 / +0x44 for slot 1).
     internal static int g_PrimitivePoolContext;
 
     // GHIDRA: LAB_80060cdc @ 0x80060CDC (VS.EXE)

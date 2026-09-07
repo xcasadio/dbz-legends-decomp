@@ -1862,7 +1862,7 @@ internal static class FighterCombat
     // that closes this: CreateAttackEventTask is AnimCmd_ChDanSet's own "clear" arm's registration call
     // (opcode 40, `ch_dan_set`), builds a 0xC0-byte workspace from two RESOLVED TARGETS plus a
     // type halfword and a flag byte, and its entry (UpdateAttackEventTask) redraws that workspace every
-    // frame (FUN_80052db4) until its own +0x78 sign bit is set, at which point it hands the whole
+    // frame (DrawSpriteGroup) until its own +0x78 sign bit is set, at which point it hands the whole
     // workspace to FUN_8004ee48 -- THE gauge-contribution seed this whole wave exists to reach --
     // then deletes its own task (TaskSystem.DeleteTask, list 0xb).
     // =====================================================================================
@@ -1962,7 +1962,7 @@ internal static class FighterCombat
     // decompilation renders it twice); and folds the freshly recomputed +0x7e's own top two bits
     // into `param_1` for the draw call below.
     //
-    // EVERY FRAME REGARDLESS: draws the workspace via FUN_80052db4 (BLOCKED below -- a "primitive
+    // EVERY FRAME REGARDLESS: draws the workspace via DrawSpriteGroup (BLOCKED below -- a "primitive
     // pool" call PrimitivePools.cs's own header note already names in passing), passing +0x28, a
     // sign-extended position delta computed from +0x40 against the live camera-offset scratchpad
     // triple (Scratchpad._DAT_1f8000b4/_bc -- the same idiom BattleManager.cs's own
@@ -1978,7 +1978,7 @@ internal static class FighterCombat
     // genuine uninitialized register content, not a value any caller supplies. It is read in
     // exactly one place (the draw call's own 5th argument, `param_1 >> 0x10`, and only when the
     // anim VM is globally paused so the block that would otherwise overwrite it never runs), and
-    // FUN_80052db4 is itself a BLOCKED stub that discards every argument, so the value can never be
+    // DrawSpriteGroup is itself a BLOCKED stub that discards every argument, so the value can never be
     // observed downstream. Modelled as a local starting at 0 -- the same DEVIATION posture this
     // file already takes for FUN_8004d0fc's own uninitialized local: a defined value only because
     // C# requires one, not a claim about what the console actually held there.
@@ -2020,7 +2020,7 @@ internal static class FighterCombat
             param_1 = unchecked((PsxRam.ReadU8(iVar4 + 0x7e) & 0xc0) << 0x18);
         }
 
-        SpriteDrawer.FUN_80052db4(
+        SpriteDrawer.DrawSpriteGroup(
             PsxRam.ReadI32(iVar4 + 0x28),
             (short)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10),
             (short)PsxRam.ReadU16(iVar4 + 0x42),

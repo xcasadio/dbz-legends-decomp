@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -322,17 +322,95 @@ internal static class FighterAction
 
     // GHIDRA: FUN_800261ec @ 0x800261EC (VS.EXE)
     // BLOCKED: 304 bytes, out of this slice. Called from FUN_8004b9cc above as
-    // FUN_800261ec(fighter) when +0x138 bits 0x30000000 are both clear. Its own body opens by
-    // re-deriving the same task-node-fighter chain FUN_8004b9cc already reads
-    // (`*(int*)(*(int*)(param_1+0xac)+8)`) and comparing it against param_1 itself — a real
-    // command-slot decision this port does not carry out. The stub returns -1, which is
-    // FUN_8004b9cc's OWN "no slot" sentinel, so a caller sees the same "re-stamp current state"
-    // outcome the original takes on plenty of its own early-out paths, not a fabricated slot
-    // number.
+    // FUN_800261ec(fighter) when +0x138 bits 0x30000000 are both clear. 304 bytes, one caller.
+    //
+    // WHAT IT IS: the SHORT form of the archetype walk FighterAi.FUN_80023890 does in full. That
+    // function reads all nine bytes of the twelve-byte row and resolves nine leaf pointers; this
+    // one reads only BYTE [8] and resolves only the ninth, then offsets into it by the current
+    // move class and hands the result to the same FighterAi.FUN_8002631c roll. So nothing about
+    // the tables had to be established here -- FighterAi.cs and FighterCombat.FUN_80025f38 had
+    // already closed the same three levels, instruction by instruction, and this is the third
+    // reader of them.
+    //
+    // THE THREE EARLY EXITS, all returning -1: the opponent derived from the task node is param_1
+    // itself, or either fighter carries +0x138 bit 26. -1 is FUN_8004b9cc's own "no slot"
+    // sentinel, which is why the previous BLOCKED stub could return it and stay honest.
+    //
+    // THE WALK. When +0x22C bits 6 and 7 are both clear:
+    //   the byte at +0x22D indexes PTR_DAT_800807a4 @ 0x800807A4 (pointer-strided, `sll #2`),
+    //   BYTE [8] of the twelve-byte row that lands on indexes PTR_DAT_800802c4 @ 0x800802C4,
+    //   whose six entries are 0x8008012C, 0x80080150, ... 0x800801E0 -- rising by 0x24, six rows
+    //   of six bytes each, which is what the offsets below step through.
+    // Otherwise the row is one of two fixed alternatives, PTR_DAT_80080a7c and PTR_DAT_80080a58,
+    // selected by bit 6. Both hold 0x800809C0, so the branch that appears to choose between them
+    // chooses the same row twice -- reproduced as written rather than collapsed, because the two
+    // pointers are two distinct words in the image and only their CURRENT contents coincide.
+    //
+    // THE SWITCH on the byte at +0x16B is the six-way move class: 0x23 -> +0x18, 0x25 -> +0x12,
+    // 0x26 -> +6, 0x27 -> +0xC, 0x28 -> +0, and EVERYTHING ELSE -> +0x1E. Case 0x24 is not a
+    // separate arm: Ghidra names the default block `switchD_800262d8_caseD_24` because the jump
+    // table's own 0x24 entry points at 0x80026300, the same instruction the out-of-range branch at
+    // 0x800262BC reaches. One arm, two ways in.
     private static int FUN_800261ec(int param_1)
     {
-        _ = param_1;
-        return -1;
+        int iVar2 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0xac) + 8);
+        if (param_1 == iVar2)
+        {
+            return -1;
+        }
+
+        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x4000000) != 0)
+        {
+            return -1;
+        }
+
+        if (((uint)PsxRam.ReadI32(iVar2 + 0x138) & 0x4000000) != 0)
+        {
+            return -1;
+        }
+
+        uint puVar3;
+        if ((PsxRam.ReadU8(param_1 + 0x22c) & 0xc0) == 0)
+        {
+            int pbVar6 = PsxRam.ReadI32(unchecked((int)0x800807a4) + PsxRam.ReadU8(param_1 + 0x22d) * 4);
+            puVar3 = (uint)PsxRam.ReadI32(unchecked((int)0x800802c4) + PsxRam.ReadU8(pbVar6 + 8) * 4);
+        }
+        else
+        {
+            puVar3 = (uint)PsxRam.ReadI32(unchecked((int)0x80080a7c));
+            if ((PsxRam.ReadU8(param_1 + 0x22c) & 0x40) != 0)
+            {
+                puVar3 = (uint)PsxRam.ReadI32(unchecked((int)0x80080a58));
+            }
+        }
+
+        switch (PsxRam.ReadU8(param_1 + 0x16b))
+        {
+            case 0x23:
+                puVar3 += 0x18;
+                break;
+
+            case 0x25:
+                puVar3 += 0x12;
+                break;
+
+            case 0x26:
+                puVar3 += 6;
+                break;
+
+            case 0x27:
+                puVar3 += 0xc;
+                break;
+
+            case 0x28:
+                break;
+
+            default:
+                puVar3 += 0x1e;
+                break;
+        }
+
+        return FighterAi.FUN_8002631c(param_1, puVar3);
     }
 
     // GHIDRA: FUN_8004b68c @ 0x8004B68C (VS.EXE)

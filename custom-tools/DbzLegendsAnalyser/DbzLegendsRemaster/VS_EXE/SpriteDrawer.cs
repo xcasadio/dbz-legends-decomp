@@ -1,10 +1,10 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
 // THE SPRITE DRAWER — one function, 136 incoming references, and until now an empty stub.
 //
-// FUN_80052DB4 is how VS.EXE puts anything on the screen that is not the battle HUD. Its five
+// DrawSpriteGroup is how VS.EXE puts anything on the screen that is not the battle HUD. Its five
 // callers between them account for every sprite in the mode: FUN_80022AB0 (7 call sites),
 // FUN_80023314 (6), FighterMotion.FUN_800477EC and FUN_80047A24 (the fighter's own body and its
 // shadow), and FighterCombat.UpdateAttackEventTask. Ghidra counts 136 references to the address in
@@ -19,7 +19,10 @@ namespace DbzLegendsRemaster.VS_EXE;
 //     rotation the GTE already holds, and RotAverage4 the four corners into the packet;
 //   * AddPrim it into the ordering table at `0x800 - otz + param_10`, if that lands inside the
 //     table.
-// The return is that bucket index for the LAST quad added, or -1.
+// The return is `0x800 - otz` for the LAST quad added, or -1. That is NOT the bucket AddPrim
+// used: the bucket is `0x800 - otz + param_10` (built into $a0 at 0x80053284), while the
+// returned value is $s2, set one instruction earlier at 0x80053280 without the bias. The
+// two differ by param_10 whenever a caller passes a non-zero depth offset.
 //
 // THIS IS THE RELINKED TWIN of TITLE.EXE's DrawSpriteGroup @ 0x80048F88, which
 // TITLE_EXE/SpriteRenderer.cs already ports. The two decompile to the same shape and the same
@@ -37,7 +40,7 @@ internal static class SpriteDrawer
 {
     // GHIDRA: DAT_80084c84 @ 0x80084C84 (VS.EXE)
     // A MATRIX in initialised .data, read back from the image and IDENTITY: m = 0x1000, 0, 0, 0,
-    // 0x1000, 0, 0, 0, 0x1000 with t = 0, 0, 0. FUN_80052DB4 is the only reader, and it loads it
+    // 0x1000, 0, 0, 0, 0x1000 with t = 0, 0, 0. DrawSpriteGroup is the only reader, and it loads it
     // into BOTH the rotation and the translation register when the caller has NOT asked for the
     // raw-coordinate path -- which is how the sprite's own transform starts from a clean slate
     // rather than from whatever the previous drawer left in the GTE.
@@ -67,7 +70,7 @@ internal static class SpriteDrawer
     // TITLE_EXE/SpriteRenderer.cs's own s_unmappedPrimitive.
     private static readonly byte[] s_unmappedPrimitive = new byte[0x28];
 
-    // GHIDRA: FUN_80052db4 @ 0x80052DB4 (VS.EXE)
+    // GHIDRA: DrawSpriteGroup @ 0x80052DB4 (VS.EXE)
     // 1404 bytes, twelve callees, all of them libgte or libgpu. MOVED HERE from FighterCombat.cs,
     // which carried it as an eighteen-parameter empty stub; that file no longer declares the
     // address and its one call site is qualified.
@@ -80,7 +83,7 @@ internal static class SpriteDrawer
     // param_5 IS A FLAG WORD AND AN ANGLE AT ONCE: bits 0..11 are the Z rotation handed to
     // RotMatrix, bit 13 selects raw coordinates over a GTE transform, and bits 14 and 15 are the
     // horizontal and vertical flips, each contributing half a turn (0x800) to its own axis.
-    internal static int FUN_80052db4(int param_1, short param_2, short param_3, short param_4,
+    internal static int DrawSpriteGroup(int param_1, short param_2, short param_3, short param_4,
         ushort param_5, short param_6, short param_7, int param_8, int param_9, int param_10,
         short param_11, short param_12, sbyte param_13, sbyte param_14, byte param_15,
         byte param_16, byte param_17, int param_18)

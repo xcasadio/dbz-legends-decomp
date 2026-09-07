@@ -169,7 +169,7 @@ internal static class BattleCamera
     // JUSTIFICATION: PSX hardware adaptation only
     // RELATION: this function's own stack frame, given a real PSX address because three of its
     // locals are passed BY ADDRESS to functions this port models as taking PSX addresses --
-    // AnimCmdMesh.ComputeYawPitchToTarget and AnimCmdMesh.FUN_80045cf4 read triples through a
+    // AnimCmdMesh.ComputeYawPitchToTarget and AnimCmdMesh.DistanceBetweenPositions read triples through a
     // pointer, and AnimCmdControl.FUN_80047550 takes both an angle triple and a VECTOR that way.
     //
     // 0x807FFD70 + 0x110 = 0x807FFE80, which is exactly where FighterCombatArms.cs's own frames
@@ -203,7 +203,7 @@ internal static class BattleCamera
 
     // GHIDRA: RunBattleCameraTask @ 0x80027670 (VS.EXE)
     // 6600 bytes, 830 decompiled lines, the largest function in the overlay that this port had not
-    // touched. Three callees, all already ported: AnimCmdMesh.FUN_80045cf4 (four call sites),
+    // touched. Three callees, all already ported: AnimCmdMesh.DistanceBetweenPositions (four call sites),
     // AnimCmdControl.FUN_80047550 (two) and AnimCmdMesh.ComputeYawPitchToTarget (one).
     //
     // DEVIATION: `unaff_s4` IS A REGISTER THE ORIGINAL READS WITHOUT ALWAYS WRITING. Ghidra names it
@@ -497,7 +497,7 @@ internal static class BattleCamera
             iVar6 = PsxRam.ReadI32(PsxRam.ReadI32(iVar15 + BattleState.FighterTaskNode) + 8);
         }
 
-        ushort uVar5 = (ushort)AnimCmdMesh.FUN_80045cf4(iVar15 + 0x114, iVar6 + 0x114);
+        ushort uVar5 = (ushort)AnimCmdMesh.DistanceBetweenPositions(iVar15 + 0x114, iVar6 + 0x114);
         AnimCmdMesh.ComputeYawPitchToTarget(iVar15 + 0x114, iVar6 + 0x114, Local108Address);
         PsxRam.WriteU16(Local108Address + 2, (ushort)(PsxRam.ReadU16(Local108Address + 2) & 0xfff));
 
@@ -800,7 +800,7 @@ internal static class BattleCamera
                     } while (uVar16 < 0xc);
 
                     // The two triples and the two four-halfword arrays go into the frame region,
-                    // because FUN_80045cf4 reads them through a pointer.
+                    // because DistanceBetweenPositions reads them through a pointer.
                     PsxRam.WriteU16(Local100Address, (ushort)local_100);
                     PsxRam.WriteU16(Local100Address + 2, (ushort)local_fe);
                     PsxRam.WriteU16(Local100Address + 4, (ushort)local_fc);
@@ -821,8 +821,8 @@ internal static class BattleCamera
                     PsxRam.WriteI32(VectorAddress + 4, vectorVy);
                     PsxRam.WriteI32(VectorAddress + 8, vectorVz);
 
-                    uVar16 = (uint)AnimCmdMesh.FUN_80045cf4(Local100Address, LocalF8Address);
-                    iVar12 = AnimCmdMesh.FUN_80045cf4(LocalF0Address, LocalE8Address);
+                    uVar16 = (uint)AnimCmdMesh.DistanceBetweenPositions(Local100Address, LocalF8Address);
+                    iVar12 = AnimCmdMesh.DistanceBetweenPositions(LocalF0Address, LocalE8Address);
                     unaff_s4 = 4;
                     iVar9 = (iVar12 << 0x10) >> 0x10;
                     int iVar6d = vectorVy;
@@ -1108,7 +1108,7 @@ internal static class BattleCamera
                     PsxRam.WriteU16(LocalE8Address, PsxRam.ReadU16(iVar6 + 0x114));
                     PsxRam.WriteU16(LocalE8Address + 2, 0);
                     PsxRam.WriteU16(LocalE8Address + 4, PsxRam.ReadU16(iVar6 + 0x118));
-                    vectorX = (short)AnimCmdMesh.FUN_80045cf4(LocalF0Address, LocalE8Address);
+                    vectorX = (short)AnimCmdMesh.DistanceBetweenPositions(LocalF0Address, LocalE8Address);
 
                     iVar9 = (short)DAT_8008d10e;
                     int vy1 = (iVar9 - (short)PsxRam.ReadU16(iVar6 + 0x116)) / 2;

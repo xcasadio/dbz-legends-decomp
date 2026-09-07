@@ -544,7 +544,7 @@ internal sealed class VS_EXE_exe
     //
     // WHAT THEY ARE, and now the reading SVECTOR_1f800020's own note above declined to borrow from
     // TITLE.EXE is earned: 0x1F800020/28/30/38 ARE the four corners of a sprite quad, because
-    // FUN_80052DB4 hands exactly those four to RotAverage4 and fills them from the record's own
+    // DrawSpriteGroup hands exactly those four to RotAverage4 and fills them from the record's own
     // width and height. TITLE_EXE/GteScratch.cs keeps the same four at the same offsets for the
     // same reason -- the two overlays are relinked twins of one source file.
     //

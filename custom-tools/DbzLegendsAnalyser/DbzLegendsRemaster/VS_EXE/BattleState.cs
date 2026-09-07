@@ -79,7 +79,7 @@ internal static class BattleState
     //
     // THIS IS THE BASE THREE OTHER FUNCTIONS WERE MISSING. BattleManager's note on FUN_80057a7c
     // says its param_1 "is a per-slot sub-record the caller reaches by an offset the still-blocked
-    // caller doesn't expose"; FUN_80058120 works on the same record; FUN_80058338's own note
+    // caller doesn't expose"; FUN_80058120 works on the same record; BuildSlotDigitQuads's own note
     // independently derives `ctx + slot * 0x1C0 + 0x20` for the numeric readout it draws. All three
     // were describing this array from the inside without being able to name where it starts.
     internal const int CtxSlotSubRecords = 0x20;
@@ -95,7 +95,7 @@ internal static class BattleState
     //   +0x14  a halfword written three ways in one call: the literal 5 for slots 0..5 and 9 for
     //          slots 6..11, then overwritten with a sequential 0,1,2 (restarting at 6 for the
     //          second team) for at most three slots per team, acting slot first.
-    //   +0x20  the numeric-readout sub-record FUN_80058338 splits into digits.
+    //   +0x20  the numeric-readout sub-record BuildSlotDigitQuads splits into digits.
     internal const int SubRecordFlags = 0x00;
 
     internal const int SubRecordOrdinal = 0x14;

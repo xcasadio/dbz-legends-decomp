@@ -6,7 +6,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // create every match and that, until now, dispatched to nothing:
 //
 //   LAB_80040F78  list 0xd, id 0, 0xc bytes of context. Draws 0x50 sprites out of the 12-byte
-//                 table at DAT_80082750 through SpriteDrawer.FUN_80052db4.
+//                 table at DAT_80082750 through SpriteDrawer.DrawSpriteGroup.
 //   LAB_80041704  list 1, id 0x54, no context. A one-line thunk to FUN_80041724, the 23 x 23
 //                 depth-shaded ground grid at DAT_800B7484.
 //   LAB_80041A1C  list 1, id 0x100, 4 bytes of context. A two-state task: state 0 builds the eight
@@ -180,11 +180,11 @@ internal static class StageBackdrop
     private static readonly byte[] RAM_800b7484 = LibGpu.RamRegion(Dat800b7484Address, 0x17 * 0x17 * 0x48);
 
     // GHIDRA: DAT_80082720 @ 0x80082720, DAT_80082738 @ 0x80082738 (VS.EXE)
-    // Two sprite-group records in .data, in the layout SpriteDrawer.FUN_80052db4 consumes: a count
+    // Two sprite-group records in .data, in the layout SpriteDrawer.DrawSpriteGroup consumes: a count
     // word (1 in both) followed by one entry. Read back from the image, the two differ only in
     // their tpage/uv block, so they are the same sprite drawn from two different texture pages --
     // which is what the DAT_8008d39c == 2 || == 6 test below selects between. Passed as raw
-    // addresses: FUN_80052db4 takes an int and reads the record through PsxRam, and .data resolves
+    // addresses: DrawSpriteGroup takes an int and reads the record through PsxRam, and .data resolves
     // through PsxExeImage.
     private const int Dat80082720Address = unchecked((int)0x80082720);
     private const int Dat80082738Address = unchecked((int)0x80082738);
@@ -278,7 +278,7 @@ internal static class StageBackdrop
                 // index FUN_80040f30 latched; VS_EXE_exe.cs owns it and it must become internal.
                 int puVar4 = (bVar1 || sVar2 == 6) ? Dat80082738Address : Dat80082720Address;
 
-                SpriteDrawer.FUN_80052db4(
+                SpriteDrawer.DrawSpriteGroup(
                     puVar4,
                     (short)(PsxRam.ReadU16(iVar5 + 4) - (Scratchpad._DAT_1f8000b4 & 0xffff)),
                     (short)iVar3,
@@ -320,7 +320,7 @@ internal static class StageBackdrop
     //
     // THE BUCKET TEST IS ASYMMETRIC, and this is the original's. The lower bound is checked against
     // `iVar7 + 0x840` and the upper against `iVar7 + 0x800`: 0x40 buckets of slack on the near side
-    // only. SpriteDrawer.FUN_80052db4's own test uses one offset for both ends. Not reconciled.
+    // only. SpriteDrawer.DrawSpriteGroup's own test uses one offset for both ends. Not reconciled.
     //
     // THE ON-SCREEN TEST IS A BOUNDING TEST ON THE PROJECTED VERTICES, not a clip: if ANY of the
     // four projected x/y pairs is inside (x < 0x208, y < 0x1b8) the cell is drawn. The comparisons

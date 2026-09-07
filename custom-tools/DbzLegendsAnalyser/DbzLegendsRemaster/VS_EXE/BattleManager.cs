@@ -1854,7 +1854,7 @@ internal static class BattleManager
     //   9. Two small per-slot counters (subrecord+0xE, subrecord+0x16) driving local_b8's dirty bits.
     //  10. THE NUMERIC-READOUT TARGET STATE MACHINE at subrecord+0x24 -- an eleven-tier hold/advance
     //      sequence tracking CtxSlotRecords+0xA.
-    //  11. The twelve-slot HUD sub-loop: FUN_80057a7c, FUN_80058120 (twice) and FUN_80058338.
+    //  11. The twelve-slot HUD sub-loop: FUN_80057a7c, FUN_80058120 (twice) and BuildSlotDigitQuads.
     //  12. THE PER-SLOT PRIMITIVE SUBMISSION -- runs on every path, suspended VM included.
     //  13. Suspended-VM early exit: submit the tally icon's own primitives and return.
     //  14. Walk the published cursor at ctx+0x1A onto the next alive+marked slot.
@@ -1867,7 +1867,7 @@ internal static class BattleManager
     //      interpolation through the newly embedded DAT_80084234 table.
     //  20. THE FINAL SUBMISSION: ten primitives at ctx+0x2DCC, an eleventh when CtxTallyValue > 9.
     //
-    // WHAT IS STILL NOT CLOSED. FUN_80058338 stays its own BLOCKED stub -- its own header explains
+    // WHAT IS STILL NOT CLOSED. BuildSlotDigitQuads stays its own BLOCKED stub -- its own header explains
     // why (two pointer tables with no self-referential span to embed against). FUN_80026d98 is
     // declared below as a stub for the same reason its own comment gives: its own dependency chain
     // (FUN_80027340 and four functions past it) is unported. Most of the eighteen CtxFlags bits and
@@ -2858,7 +2858,7 @@ internal static class BattleManager
 
             // 0x8005BA88 -- the twelve-slot HUD/portrait sub-loop: FUN_80057a7c and the two
             // FUN_80058120 calls receive the per-slot sub-record itself (puVar13, walking
-            // CtxSlotSubRecords same as puVar20 below), FUN_80058338 the raw context plus the slot
+            // CtxSlotSubRecords same as puVar20 below), BuildSlotDigitQuads the raw context plus the slot
             // index (it does its own `ctx + slot*0x1C0 + 0x20` indexing, per its own header). Then
             // subrecord+0x10's low 5 bits count down by one, the same field Block 7's threshold reset
             // seeds to `value*0x20+0x1e`.
@@ -2870,7 +2870,7 @@ internal static class BattleManager
                 FUN_80057a7c(puVar13, (short)iVar5);
                 FUN_80058120(puVar13, 0);
                 FUN_80058120(puVar13, 1);
-                FUN_80058338(param_1, (short)iVar5);
+                BuildSlotDigitQuads(param_1, (short)iVar5);
                 puVar13 = puVar13 + 0x1c0;
                 if ((PsxRam.ReadU16(puVar11) & 0x1f) != 0)
                 {
@@ -3563,7 +3563,7 @@ internal static class BattleManager
 
     // GHIDRA: PTR_DAT_80083f90 @ 0x80083F90 (VS.EXE) — same shape as PTR_DAT_80083edc, targets
     // Dat80083f00Address + row * 0x10. Its own table ends at 0x80083FB4, exactly where
-    // FUN_80058338's own BLOCKED comment's PTR_DAT_80083fb4 begins — adjacent, unrelated tables,
+    // BuildSlotDigitQuads's own BLOCKED comment's PTR_DAT_80083fb4 begins — adjacent, unrelated tables,
     // and the boundary is itself the check that this table's own extent is exactly nine rows.
     private const int Dat80083f90Address = unchecked((int)0x80083F90);
 
@@ -3612,7 +3612,7 @@ internal static class BattleManager
     // is BattleManager.DAT_8008d320 (the ctx address) plus BattleState.CtxSlotRecordStride times
     // the slot plus BattleState.CtxTargetIndex — this slot's own current TARGET — and the value it
     // reads there indexes straight into VS_EXE/Roster.cs's own portrait coordinate table. So the
-    // tail is a portrait-icon lookup keyed on the CURRENT TARGET, plausibly the icon FUN_80058338
+    // tail is a portrait-icon lookup keyed on the CURRENT TARGET, plausibly the icon BuildSlotDigitQuads
     // or a sibling primitive later draws over this slot's HUD box; not asserted as closed fact.
     //
     // EVERY SHIFT BELOW IS KEPT IN ITS ORIGINAL FORM. `(int)(((uint)a - (uint)b) * 0x10000) >> 0x10`
@@ -4022,40 +4022,340 @@ internal static class BattleManager
         PsxRam.WriteU16(iVar8 + 0x1a, (ushort)sVar5);
     }
 
-    // GHIDRA: FUN_80058338 @ 0x80058338 (VS.EXE)
-    // BLOCKED: 2440 bytes, one caller — RunBattleManagerFrame (BLOCKED above, at 0x8005BA1C) — called once
-    // per slot with the RAW battle context (not the per-slot record FUN_80057a7c/FUN_80058120
-    // share): `param_1 = param_1 + param_2 * 0x1c0 + 0x20;` is the function's own first statement,
-    // indexing straight off ctx at a 0x1C0-byte stride this slice has not seen named anywhere else.
+    // GHIDRA: BuildSlotDigitQuads @ 0x80058338 (VS.EXE)
+    // 2440 bytes, one caller -- RunBattleManagerFrame at 0x8005BA1C -- called once per slot with
+    // the RAW battle context: `param_1 = param_1 + param_2 * 0x1c0 + 0x20;` is the function's own
+    // first statement, indexing straight off ctx at a 0x1C0-byte stride.
     //
-    // WHAT IT DOES, on the evidence of the shape alone: it splits TWO fields of that per-slot
-    // sub-record (at +0x0A and +0x26) into tens and ones by dividing by 10, then for each digit
-    // looks up a glyph-position row through one of two pointer tables — PTR_DAT_80083fb4 when the
-    // tens digit is zero, PTR_DAT_80084124 otherwise — and lays out four short values from that row
-    // into the digit's own on-screen box (a leading-zero-suppressed two-digit numeric readout,
-    // plausibly a per-slot HP or KI number given the /10 split and the repeated `* '\x18'`, a 24-
-    // pixel glyph-cell width). That reading is not closed to fact; it is stated only to spare a
-    // later slice re-deriving the shape.
+    // WHAT IT DOES. It lays out TWO two-digit numeric readouts, one per field, into four sprite
+    // quads apiece. Each field (at +0x26 and +0x0A) is split into tens and ones by a signed
+    // division by 10; each digit picks a four-short glyph row through one of two pointer tables --
+    // PTR_DAT_80083fb4 when the TENS digit is zero, PTR_DAT_80084124 otherwise, which is the
+    // leading-zero suppression -- and the row's four shorts are scaled by the distance between
+    // +0x38 and +0x50 and written as the quad's corner coordinates. The `* 0x18` that appears four
+    // times is the glyph cell: 24 texture units wide, so a digit's u0 is digit*0x18 and its u1 is
+    // digit*0x18 + 0x18. The 0xE0/0xFF pairs are the v coordinates of the two texture rows.
     //
-    // WHY IT IS BLOCKED, unlike its two siblings above. FUN_80057a7c's two per-character tables sit
-    // in one contiguous, self-referential 824-byte span (0x80083E4C..0x80083FB4) with exactly one
-    // reference each — closed and embedded above. These two pointer tables do NOT: checked with
-    // find-cross-references, PTR_DAT_80083fb4's own first entry is DAT_8008d188 and
-    // PTR_DAT_80084124's is DAT_80084014 — neither sits inside the other table's own span, and
-    // 0x8008D188 in particular falls in the same gp-relative small-data region this very file's own
-    // scalar globals occupy (DAT_8008d15c through DAT_8008d494 all sit within a few hundred bytes
-    // of it), which on every other piece of evidence in this port is MUTABLE RUNTIME STATE, not a
-    // baked-in glyph table. Ghidra gives no other reference to either pointer table's own contents
-    // anywhere in the overlay, so there is no cross-check available the way Roster.cs's own table
-    // gave FUN_80057a7c's tail one. Embedding raw bytes here on the strength of two addresses
-    // alone, without knowing whether the target is static or a runtime record some other
-    // not-yet-ported function populates, is precisely the invented semantics rule 10 forbids. Left
-    // unperformed; param_1/param_2 are kept so the (still BLOCKED) caller's call site needs no
-    // change when this closes.
-    private static void FUN_80058338(int param_1, short param_2)
+    // WHY IT WAS BLOCKED, AND WHAT UNBLOCKED IT. The objection recorded here for three sessions was
+    // that PTR_DAT_80083fb4's first entry is DAT_8008d188, in the gp-relative small-data region
+    // this file's own scalars occupy, so embedding bytes for it might have been embedding MUTABLE
+    // RUNTIME STATE. That objection dissolves rather than being answered: nothing is embedded. Both
+    // tables and both of their targets sit inside VS.EXE's own image extent (0x80020000 + 0xE5800
+    // = 0x80105800), which PsxExeImage already backs byte-for-byte, so every read below is a plain
+    // PsxRam read at the address the image reads -- and if some not-yet-ported function does write
+    // those words at runtime, it writes THE SAME BYTES this reads. The static/mutable question
+    // never had to be settled to transliterate faithfully; it only had to be settled to COPY the
+    // bytes, which is what the earlier plan wanted to do.
+    //
+    // THE SIGNED WORK, settled from the instructions rather than from Ghidra's rendering:
+    //   * the four field reads are `lhu` followed by `sll 16 / sra 16` (0x80058370, 0x8005838C),
+    //     so they are SIGNED shorts; every glyph-row read is a bare `lh`.
+    //   * `/ 10` is `mult` by 0x66666667 + `sra 2` + sign correction (0x800583A8) and `/ 0x60` is
+    //     `mult` by 0x2AAAAAAB + `sra 4` (0x8005871C): both SIGNED divisions, which C# `/` is.
+    //   * `iVar11 = (short)field * 4` is `sll 16 / sra 14` (0x80058404), a sign-extension folded
+    //     into the scale, not a shift of an unsigned value.
+    //   * Ghidra prints the two glyph offsets as a char multiply. The image does NOT truncate
+    //     before multiplying (0x80058658: `sll v0,v1,1; addu v0,v0,v1; sll v0,v0,3` on the full
+    //     word) -- it multiplies in 32 bits and stores the low byte with `sb`. Written that way
+    //     here; the two agree for every digit but not for a field above 1270.
+    //
+    // THE SWAP. `sVar12` is 0 or 4, and only for slots above 5 whose tens digit is non-zero. The
+    // first digit of a pair reads glyph-row entries [sVar12 + 0..3] and the second reads
+    // [4..7 - sVar12], so a non-zero sVar12 exchanges the two halves of the eight-short row. That
+    // is the mirroring of the right-hand player's readout; kept as index arithmetic, not collapsed.
+    private static void BuildSlotDigitQuads(int param_1, short param_2)
     {
-        _ = param_1;
-        _ = param_2;
+        int cVar1;
+        int uVar2;
+        int uVar3;
+        short sVar4;
+        short sVar5;
+        short sVar6;
+        short sVar7;
+        int iVar8;
+        int iVar9;
+        int psVar10;
+        int iVar11;
+        short sVar12;
+
+        param_1 = param_1 + param_2 * 0x1c0 + 0x20;
+        sVar12 = 0;
+        uVar2 = (short)PsxRam.ReadU16(param_1 + 10) / 10;
+        uVar3 = (short)PsxRam.ReadU16(param_1 + 0x26) / 10;
+        if (5 < param_2)
+        {
+            sVar12 = (short)(((uVar2 & 0xffff) != 0 ? 1 : 0) << 2);
+        }
+
+        iVar11 = (short)PsxRam.ReadU16(param_1 + 0x2a) * 4;
+        if ((uVar3 & 0xffff) == 0)
+        {
+            iVar11 = PsxRam.ReadI32(unchecked((int)0x80083fb4) + iVar11);
+        }
+        else
+        {
+            iVar11 = PsxRam.ReadI32(unchecked((int)0x80084124) + iVar11);
+        }
+
+        cVar1 = ((short)PsxRam.ReadU16(param_1 + 0x26) % 10) * 0x18;
+        PsxRam.WriteU8(param_1 + 0x114, (byte)cVar1);
+        PsxRam.WriteU8(param_1 + 0x104, (byte)cVar1);
+        PsxRam.WriteU8(param_1 + 0x10d, 0xe0);
+        PsxRam.WriteU8(param_1 + 0x105, 0xe0);
+        PsxRam.WriteU8(param_1 + 0x11d, 0xff);
+        PsxRam.WriteU8(param_1 + 0x115, 0xff);
+        psVar10 = sVar12 * 2 + iVar11;
+        PsxRam.WriteU8(param_1 + 0x11c, (byte)(cVar1 + 0x18));
+        PsxRam.WriteU8(param_1 + 0x10c, (byte)(cVar1 + 0x18));
+        iVar8 = (short)PsxRam.ReadU16(param_1 + 0x38) - (short)PsxRam.ReadU16(param_1 + 0x50);
+        if (iVar8 < 0)
+        {
+            iVar8 = -iVar8;
+        }
+
+        iVar9 = (short)iVar8;
+        sVar7 = (short)PsxRam.ReadU16(psVar10 + 6);
+        if (iVar9 < 0x50)
+        {
+            sVar6 = (short)((short)PsxRam.ReadU16(psVar10 + 2) * iVar9 / 0x60);
+        }
+        else
+        {
+            sVar6 = (short)((short)((short)PsxRam.ReadU16(psVar10 + 2) * iVar9 / 0x60) + 7);
+        }
+
+        sVar4 = (short)((short)PsxRam.ReadU16(psVar10 + 4) * iVar9 / 0x60);
+        sVar5 = (short)((short)PsxRam.ReadU16(psVar10) * iVar9 / 0x60);
+        if ((short)PsxRam.ReadU16(param_1 + 0x50) < (short)PsxRam.ReadU16(param_1 + 0x38))
+        {
+            sVar4 = (short)(((short)PsxRam.ReadU16(param_1 + 0x40) - sVar4) - sVar5);
+            PsxRam.WriteU16(param_1 + 0x110, (ushort)sVar4);
+            PsxRam.WriteU16(param_1 + 0x100, (ushort)sVar4);
+            sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) - sVar5);
+            PsxRam.WriteU16(param_1 + 0x118, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x108, (ushort)sVar5);
+        }
+        else
+        {
+            sVar5 = (short)(sVar5 + (short)PsxRam.ReadU16(param_1 + 0x40));
+            sVar4 = (short)(sVar4 + sVar5);
+            PsxRam.WriteU16(param_1 + 0x110, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x100, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x118, (ushort)sVar4);
+            PsxRam.WriteU16(param_1 + 0x108, (ushort)sVar4);
+        }
+
+        sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x3a) - sVar6);
+        PsxRam.WriteU16(param_1 + 0x10a, (ushort)sVar5);
+        PsxRam.WriteU16(param_1 + 0x102, (ushort)sVar5);
+        sVar6 = (short)(((short)(sVar7 * iVar9 / 0x60) + (short)PsxRam.ReadU16(param_1 + 0x3a)) - sVar6);
+        PsxRam.WriteU16(param_1 + 0x11a, (ushort)sVar6);
+        PsxRam.WriteU16(param_1 + 0x112, (ushort)sVar6);
+        if ((short)uVar3 == 0)
+        {
+            PsxRam.WriteU8(param_1 + 0x13c, 0);
+            PsxRam.WriteU8(param_1 + 300, 0);
+            PsxRam.WriteU8(param_1 + 0x144, 0);
+            PsxRam.WriteU8(param_1 + 0x134, 0);
+            PsxRam.WriteU8(param_1 + 0x135, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x12d, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x145, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x13d, 0xe0);
+            PsxRam.WriteU16(param_1 + 0x142, 0);
+            PsxRam.WriteU16(param_1 + 0x13a, 0);
+            PsxRam.WriteU16(param_1 + 0x132, 0);
+            PsxRam.WriteU16(param_1 + 0x12a, 0);
+            PsxRam.WriteU16(param_1 + 0x140, 0);
+            PsxRam.WriteU16(param_1 + 0x130, 0);
+            PsxRam.WriteU16(param_1 + 0x138, 0);
+            PsxRam.WriteU16(param_1 + 0x128, 0);
+        }
+        else
+        {
+            cVar1 = uVar3 * 0x18;
+            PsxRam.WriteU8(param_1 + 0x13c, (byte)cVar1);
+            PsxRam.WriteU8(param_1 + 300, (byte)cVar1);
+            PsxRam.WriteU8(param_1 + 0x135, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x12d, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x145, 0xff);
+            PsxRam.WriteU8(param_1 + 0x13d, 0xff);
+            iVar9 = sVar12;
+            PsxRam.WriteU8(param_1 + 0x144, (byte)(cVar1 + 0x18));
+            PsxRam.WriteU8(param_1 + 0x134, (byte)(cVar1 + 0x18));
+            iVar8 = (short)iVar8;
+            sVar7 = (short)PsxRam.ReadU16((7 - iVar9) * 2 + iVar11);
+            if (iVar8 < 0x50)
+            {
+                sVar6 = (short)((short)PsxRam.ReadU16((5 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            }
+            else
+            {
+                sVar6 = (short)((short)((short)PsxRam.ReadU16((5 - iVar9) * 2 + iVar11) * iVar8 / 0x60) + 7);
+            }
+
+            sVar4 = (short)((short)PsxRam.ReadU16((6 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            sVar5 = (short)((short)PsxRam.ReadU16((4 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            if ((short)PsxRam.ReadU16(param_1 + 0x50) < (short)PsxRam.ReadU16(param_1 + 0x38))
+            {
+                sVar4 = (short)(((short)PsxRam.ReadU16(param_1 + 0x40) - sVar4) - sVar5);
+                PsxRam.WriteU16(param_1 + 0x138, (ushort)sVar4);
+                PsxRam.WriteU16(param_1 + 0x128, (ushort)sVar4);
+                sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) - sVar5);
+                PsxRam.WriteU16(param_1 + 0x140, (ushort)sVar5);
+                PsxRam.WriteU16(param_1 + 0x130, (ushort)sVar5);
+            }
+            else
+            {
+                sVar5 = (short)(sVar5 + (short)PsxRam.ReadU16(param_1 + 0x40));
+                sVar4 = (short)(sVar4 + sVar5);
+                PsxRam.WriteU16(param_1 + 0x138, (ushort)sVar5);
+                PsxRam.WriteU16(param_1 + 0x128, (ushort)sVar5);
+                PsxRam.WriteU16(param_1 + 0x140, (ushort)sVar4);
+                PsxRam.WriteU16(param_1 + 0x130, (ushort)sVar4);
+            }
+
+            sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x3a) - sVar6);
+            PsxRam.WriteU16(param_1 + 0x132, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x12a, (ushort)sVar5);
+            sVar6 = (short)(((short)(sVar7 * iVar8 / 0x60) + (short)PsxRam.ReadU16(param_1 + 0x3a)) - sVar6);
+            PsxRam.WriteU16(param_1 + 0x142, (ushort)sVar6);
+            PsxRam.WriteU16(param_1 + 0x13a, (ushort)sVar6);
+        }
+
+        iVar11 = (short)PsxRam.ReadU16(param_1 + 0x2c) * 4;
+        if ((uVar2 & 0xffff) == 0)
+        {
+            iVar11 = PsxRam.ReadI32(unchecked((int)0x80083fb4) + iVar11);
+        }
+        else
+        {
+            iVar11 = PsxRam.ReadI32(unchecked((int)0x80084124) + iVar11);
+        }
+
+        cVar1 = ((short)PsxRam.ReadU16(param_1 + 10) % 10) * 0x18;
+        PsxRam.WriteU8(param_1 + 0x164, (byte)cVar1);
+        PsxRam.WriteU8(param_1 + 0x154, (byte)cVar1);
+        PsxRam.WriteU8(param_1 + 0x15d, 0xe0);
+        PsxRam.WriteU8(param_1 + 0x155, 0xe0);
+        PsxRam.WriteU8(param_1 + 0x16d, 0xff);
+        PsxRam.WriteU8(param_1 + 0x165, 0xff);
+        psVar10 = sVar12 * 2 + iVar11;
+        PsxRam.WriteU8(param_1 + 0x16c, (byte)(cVar1 + 0x18));
+        PsxRam.WriteU8(param_1 + 0x15c, (byte)(cVar1 + 0x18));
+        iVar8 = (short)PsxRam.ReadU16(param_1 + 0x38) - (short)PsxRam.ReadU16(param_1 + 0x50);
+        if (iVar8 < 0)
+        {
+            iVar8 = -iVar8;
+        }
+
+        iVar9 = (short)iVar8;
+        sVar7 = (short)PsxRam.ReadU16(psVar10 + 6);
+        if (iVar9 < 0x50)
+        {
+            sVar6 = (short)((short)PsxRam.ReadU16(psVar10 + 2) * iVar9 / 0x60);
+        }
+        else
+        {
+            sVar6 = (short)((short)((short)PsxRam.ReadU16(psVar10 + 2) * iVar9 / 0x60) + 7);
+        }
+
+        sVar4 = (short)((short)PsxRam.ReadU16(psVar10 + 4) * iVar9 / 0x60);
+        sVar5 = (short)((short)PsxRam.ReadU16(psVar10) * iVar9 / 0x60);
+        if ((short)PsxRam.ReadU16(param_1 + 0x50) < (short)PsxRam.ReadU16(param_1 + 0x38))
+        {
+            sVar4 = (short)(((short)PsxRam.ReadU16(param_1 + 0x40) - sVar4) - sVar5);
+            PsxRam.WriteU16(param_1 + 0x160, (ushort)sVar4);
+            PsxRam.WriteU16(param_1 + 0x150, (ushort)sVar4);
+            sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) - sVar5);
+            PsxRam.WriteU16(param_1 + 0x168, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x158, (ushort)sVar5);
+        }
+        else
+        {
+            sVar5 = (short)(sVar5 + (short)PsxRam.ReadU16(param_1 + 0x40));
+            sVar4 = (short)(sVar4 + sVar5);
+            PsxRam.WriteU16(param_1 + 0x160, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x150, (ushort)sVar5);
+            PsxRam.WriteU16(param_1 + 0x168, (ushort)sVar4);
+            PsxRam.WriteU16(param_1 + 0x158, (ushort)sVar4);
+        }
+
+        sVar5 = (short)((short)PsxRam.ReadU16(param_1 + 0x3a) - sVar6);
+        PsxRam.WriteU16(param_1 + 0x15a, (ushort)sVar5);
+        PsxRam.WriteU16(param_1 + 0x152, (ushort)sVar5);
+        sVar6 = (short)(((short)(sVar7 * iVar9 / 0x60) + (short)PsxRam.ReadU16(param_1 + 0x3a)) - sVar6);
+        PsxRam.WriteU16(param_1 + 0x16a, (ushort)sVar6);
+        PsxRam.WriteU16(param_1 + 0x162, (ushort)sVar6);
+        if ((short)uVar2 == 0)
+        {
+            PsxRam.WriteU8(param_1 + 0x18c, 0);
+            PsxRam.WriteU8(param_1 + 0x17c, 0);
+            PsxRam.WriteU8(param_1 + 0x194, 0);
+            PsxRam.WriteU8(param_1 + 0x184, 0);
+            PsxRam.WriteU8(param_1 + 0x185, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x17d, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x195, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x18d, 0xe0);
+            PsxRam.WriteU16(param_1 + 0x192, 0);
+            PsxRam.WriteU16(param_1 + 0x18a, 0);
+            PsxRam.WriteU16(param_1 + 0x182, 0);
+            PsxRam.WriteU16(param_1 + 0x17a, 0);
+            PsxRam.WriteU16(param_1 + 400, 0);
+            PsxRam.WriteU16(param_1 + 0x180, 0);
+            PsxRam.WriteU16(param_1 + 0x188, 0);
+            PsxRam.WriteU16(param_1 + 0x178, 0);
+        }
+        else
+        {
+            cVar1 = uVar2 * 0x18;
+            PsxRam.WriteU8(param_1 + 0x18c, (byte)cVar1);
+            PsxRam.WriteU8(param_1 + 0x17c, (byte)cVar1);
+            PsxRam.WriteU8(param_1 + 0x185, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x17d, 0xe0);
+            PsxRam.WriteU8(param_1 + 0x195, 0xff);
+            PsxRam.WriteU8(param_1 + 0x18d, 0xff);
+            iVar9 = sVar12;
+            PsxRam.WriteU8(param_1 + 0x194, (byte)(cVar1 + 0x18));
+            PsxRam.WriteU8(param_1 + 0x184, (byte)(cVar1 + 0x18));
+            iVar8 = (short)iVar8;
+            sVar12 = (short)PsxRam.ReadU16((7 - iVar9) * 2 + iVar11);
+            if (iVar8 < 0x50)
+            {
+                sVar7 = (short)((short)PsxRam.ReadU16((5 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            }
+            else
+            {
+                sVar7 = (short)((short)((short)PsxRam.ReadU16((5 - iVar9) * 2 + iVar11) * iVar8 / 0x60) + 7);
+            }
+
+            sVar5 = (short)((short)PsxRam.ReadU16((6 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            sVar6 = (short)((short)PsxRam.ReadU16((4 - iVar9) * 2 + iVar11) * iVar8 / 0x60);
+            if ((short)PsxRam.ReadU16(param_1 + 0x50) < (short)PsxRam.ReadU16(param_1 + 0x38))
+            {
+                sVar5 = (short)(((short)PsxRam.ReadU16(param_1 + 0x40) - sVar5) - sVar6);
+                PsxRam.WriteU16(param_1 + 0x188, (ushort)sVar5);
+                PsxRam.WriteU16(param_1 + 0x178, (ushort)sVar5);
+                sVar6 = (short)((short)PsxRam.ReadU16(param_1 + 0x40) - sVar6);
+                PsxRam.WriteU16(param_1 + 400, (ushort)sVar6);
+                PsxRam.WriteU16(param_1 + 0x180, (ushort)sVar6);
+            }
+            else
+            {
+                sVar6 = (short)(sVar6 + (short)PsxRam.ReadU16(param_1 + 0x40));
+                sVar5 = (short)(sVar5 + sVar6);
+                PsxRam.WriteU16(param_1 + 0x188, (ushort)sVar6);
+                PsxRam.WriteU16(param_1 + 0x178, (ushort)sVar6);
+                PsxRam.WriteU16(param_1 + 400, (ushort)sVar5);
+                PsxRam.WriteU16(param_1 + 0x180, (ushort)sVar5);
+            }
+
+            sVar6 = (short)((short)PsxRam.ReadU16(param_1 + 0x3a) - sVar7);
+            PsxRam.WriteU16(param_1 + 0x182, (ushort)sVar6);
+            PsxRam.WriteU16(param_1 + 0x17a, (ushort)sVar6);
+            sVar7 = (short)(((short)(sVar12 * iVar8 / 0x60) + (short)PsxRam.ReadU16(param_1 + 0x3a)) - sVar7);
+            PsxRam.WriteU16(param_1 + 0x192, (ushort)sVar7);
+            PsxRam.WriteU16(param_1 + 0x18a, (ushort)sVar7);
+        }
     }
 
     // GHIDRA: DAT_800842b8 @ 0x800842B8 (VS.EXE) / DAT_800843b8 @ 0x800843B8 (VS.EXE)

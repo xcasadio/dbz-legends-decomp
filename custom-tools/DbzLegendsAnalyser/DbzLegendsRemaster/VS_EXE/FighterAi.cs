@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 using static PsxSdkMonogame.LibEtc;
 
 namespace DbzLegendsRemaster.VS_EXE;
@@ -62,7 +62,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // one by-value pass of it. Nothing is dropped and nothing is invented: a C# struct pass copies the
 // same twelve words the loop copies, in the same place in the instruction stream.
 //
-// OWNERSHIP. FUN_80045CF4 lives in AnimCmdMesh.cs and rand() in PsxSdkMonogame; both are called by
+// OWNERSHIP. DistanceBetweenPositions lives in AnimCmdMesh.cs and rand() in PsxSdkMonogame; both are called by
 // qualified name rather than redeclared. PadInput.DAT_8008d518 is likewise this port's single
 // storage for 0x8008D518 and is reached through PadInput, not re-declared.
 //
@@ -93,7 +93,7 @@ internal static class FighterAi
     //   local_44_4 -> in_stack_00000028        local_44_9 -> in_stack_0000003c
     private struct StackArgs
     {
-        // sp+0x10. Low half: the distance AnimCmdMesh.FUN_80045cf4 returns between the two
+        // sp+0x10. Low half: the distance AnimCmdMesh.DistanceBetweenPositions returns between the two
         // fighters' position triples. High half: the acting fighter's Ki gauge divided by 100.
         public uint local_4c;
 
@@ -297,7 +297,7 @@ internal static class FighterAi
         // the second assignment three statements later. Nothing reads it in between.
         local_88.local_4c =
             (local_88.local_4c & 0xffff0000u)
-            | (uint)(ushort)AnimCmdMesh.FUN_80045cf4(
+            | (uint)(ushort)AnimCmdMesh.DistanceBetweenPositions(
                 param_1 + BattleState.FighterZeroedFrom114,
                 local_58 + BattleState.FighterZeroedFrom114);
 
@@ -1737,7 +1737,8 @@ internal static class FighterAi
 
     // GHIDRA: FUN_8002631c @ 0x8002631C (VS.EXE)
     // 264 bytes. Seven callers: the six in FUN_80023890's decoder-2 0x23/0x25/0x26/0x27/0x28/other
-    // ladder, and one at 0x80026304 inside FUN_800261EC, which is NOT in this port.
+    // ladder, and one at 0x80026304 inside FUN_800261EC, now closed in VS_EXE/FighterAction.cs --
+    // which is why this method is `internal` rather than `private`.
     //
     // A five-way cumulative roll over param_2[0..4] returning 0x28 / 0x26 / 0x27 / 0x25 / 0x23 /
     // 0x24 — the SAME six attack opcodes FighterInput.cs's decoders produce. param_1 is accepted
@@ -1746,7 +1747,7 @@ internal static class FighterAi
     // param_2[0] is read SIGNED (`char *`) and [1]..[4] unsigned, and every accumulation is
     // re-truncated to a signed byte by the `* 0x1000000 >> 0x18` pair. Reproduced literally: a run
     // that passes 127 wraps negative, and that wrap is the original's behaviour.
-    private static int FUN_8002631c(int param_1, uint param_2)
+    internal static int FUN_8002631c(int param_1, uint param_2)
     {
         int iVar1;
         int uVar2;

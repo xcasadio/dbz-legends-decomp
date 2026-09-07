@@ -81,7 +81,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // unresolved read with 0 and drops an unresolved write, so records 5 and 6 will save as zero-tails
 // rather than crash. Growing that region is SharedHighRam.cs's owner's call.
 //
-// OWNERSHIP AND CROSS-CALLS. SpriteDrawer.FUN_80052db4 (the sprite drawer) and
+// OWNERSHIP AND CROSS-CALLS. SpriteDrawer.DrawSpriteGroup (the sprite drawer) and
 // PadInput.g_PadNewlyPressed (DAT_8008d43c) are called and read by qualified name and NOT
 // redeclared. VS_EXE_exe's DAT_8008d420 is `private`, so its address is read through PsxRam
 // exactly as AnimCmdAppearance.cs already does for the same word; both files want it `internal`.
@@ -1007,7 +1007,7 @@ internal static class MemoryCard
     // THE RETURN VALUE IS THE ORDERING-TABLE INDEX. The original does `addu s3,v0,zero` immediately
     // after the `jal` (read byte for byte at 0x80022C34-0x80022C38), and the tail then computes
     // `s3 * 4 + 0x70 + DAT_8008d420` as AddPrim's bucket, so the drawer's answer picks the depth the
-    // dimming quad is submitted at. SpriteDrawer.FUN_80052db4 is a real implementation returning
+    // dimming quad is submitted at. SpriteDrawer.DrawSpriteGroup is a real implementation returning
     // int, so that value is carried through here rather than lost.
     //
     // The parameter types are SpriteDrawer's, which are Ghidra's: param_2..param_4 short, param_5
@@ -1016,7 +1016,7 @@ internal static class MemoryCard
     // the console.
     private static int CallFun80052db4(int descriptorPointer)
     {
-        return SpriteDrawer.FUN_80052db4(
+        return SpriteDrawer.DrawSpriteGroup(
             descriptorPointer,
             0,
             0,
@@ -1070,7 +1070,7 @@ internal static class MemoryCard
     //
     // TWO PROPERTIES OF THE ORIGINAL, REPRODUCED AND NOT CORRECTED (rule 12):
     //   * `unaff_s3` — the ordering-table index the tail feeds to AddPrim — is only ever assigned by
-    //     a FUN_80052db4 call. States 0, 1, 5, 7, 8 and 10 return or continue without making one, so
+    //     a DrawSpriteGroup call. States 0, 1, 5, 7, 8 and 10 return or continue without making one, so
     //     on the console the tail submits the quad at whatever bucket the previous pass computed,
     //     and on the very first pass at whatever s3 held on entry. C# forbids reading an unassigned
     //     local, so it is initialised to 0 here; that is a DEVIATION and it is the only place this

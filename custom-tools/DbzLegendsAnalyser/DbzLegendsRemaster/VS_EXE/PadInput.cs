@@ -1,4 +1,4 @@
-﻿using static PsxSdkMonogame.LibEtc;
+using static PsxSdkMonogame.LibEtc;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -178,5 +178,27 @@ internal static class PadInput
         DiagRawEverSeen |= DAT_8008d518[0];
         DiagEdgeEverSeen |= g_PadNewlyPressed[0];
         DiagRemappedEverSeen |= DAT_8008d3b8;
+    }
+
+    // GHIDRA: ProcessPadInputPort0 @ 0x800617E0 (VS.EXE)
+    // 32 bytes, and GHIDRA CALLED IT `SpuInit` -- a name from libspu that this address is not. The
+    // whole body is a prologue, `jal 0x80061800` with `a0 = 0`, and an epilogue:
+    //
+    //   0x800617E0  addiu sp,sp,-24        0x800617EC  addu  a0,zero,zero   (the delay slot)
+    //   0x800617E4  sw    ra,16(sp)        0x800617F0  lw    ra,16(sp)
+    //   0x800617E8  jal   0x80061800       0x800617F4  addiu sp,sp,24
+    //                                      0x800617F8  jr    ra
+    //
+    // 0x80061800 is ProcessPadInput above, so this is the no-argument wrapper that reads PORT 0.
+    // Renamed in Ghidra to match (the SpuInit label is gone from the project), which is why the
+    // annotation above no longer says SpuInit: the two now agree.
+    //
+    // NOTHING IN VS.EXE CALLS IT. find-cross-references gives zero callers -- main reaches
+    // ProcessPadInput directly at 0x8006251C with its own `a0 = 0`. Transliterated anyway because
+    // it is a real function inside the overlay and leaving it out would have been the only hole in
+    // the module; it costs one call and no state.
+    private static void ProcessPadInputPort0()
+    {
+        ProcessPadInput(0);
     }
 }

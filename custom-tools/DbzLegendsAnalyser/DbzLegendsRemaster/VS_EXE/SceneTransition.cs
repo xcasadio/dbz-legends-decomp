@@ -18,7 +18,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   LAB_80026888  list 0xb, id 0, no per-node workspace, created by VS_EXE_exe.FUN_80026a68 at
 //                 boot. A thirty-slot effect drawer over VS_EXE_exe's own DAT_8008D610 block: one
 //                 0x24-byte record per slot, each with its own countdown, and each live slot is
-//                 handed to SpriteDrawer.FUN_80052db4 once per frame until its countdown goes
+//                 handed to SpriteDrawer.DrawSpriteGroup once per frame until its countdown goes
 //                 negative, at which point the slot is retired and a byte at +0x227 of the record's
 //                 owner is decremented.
 //
@@ -41,7 +41,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // FUN_80031f70, FUN_80031fe0, FUN_800304f0, FUN_80030548, FUN_8002c424, FUN_8002c478) that the
 // still-unported SUB-overlay entry points drive. Two more from the brief are NOT here and their
 // absence is a decision, not an omission -- see the BLOCKED notes at the end of the file for
-// FUN_80058338 and FUN_800261ec, and see FUN_80051758's note for why it is not here at all.
+// BuildSlotDigitQuads and FUN_800261ec, and see FUN_80051758's note for why it is not here at all.
 internal static class SceneTransition
 {
     // ================================================================================================
@@ -585,7 +585,7 @@ internal static class SceneTransition
                     ushort uVar1c = PsxRam.ReadU16(piVar3 + 0x1c);
                     ushort uVar1e = PsxRam.ReadU16(piVar3 + 0x1e);
 
-                    SpriteDrawer.FUN_80052db4(
+                    SpriteDrawer.DrawSpriteGroup(
                         PsxRam.ReadI32(piVar3 + 0x10),
                         (short)(PsxRam.ReadU16(piVar3 + 8) - (ushort)Scratchpad._DAT_1f8000b4),
                         (short)PsxRam.ReadU16(piVar3 + 0xa),
@@ -1327,7 +1327,7 @@ internal static class SceneTransition
     // NOT PORTED, and why
     // ================================================================================================
 
-    // GHIDRA: FUN_80058338 @ 0x80058338 (VS.EXE), 2440 bytes
+    // GHIDRA: BuildSlotDigitQuads @ 0x80058338 (VS.EXE), 2440 bytes
     // NOT WRITTEN HERE, and not because of the tables. VS_EXE/BattleManager.cs ALREADY DECLARES this
     // address, as a two-parameter BLOCKED stub with its own long note. Writing a second body over
     // the same address in this file would be precisely defect class 1 -- one address declared in two
@@ -1353,14 +1353,14 @@ internal static class SceneTransition
     //   evidence available here, and the objection is unchanged from BattleManager's own note.
     //
     // WHAT WOULD CLOSE IT, smallest step first: find the WRITER of 0x8008D188..(0x8008D188 + 8 * n).
-    // Ghidra's find-cross-references on the pointer table itself gives nothing beyond FUN_80058338,
+    // Ghidra's find-cross-references on the pointer table itself gives nothing beyond BuildSlotDigitQuads,
     // but the targets are addressable through gp and a gp-relative store will not show as a
     // reference to the symbol. The search that would settle it is a scan of the overlay's
     // instructions for `sb`/`sh`/`sw` with base gp and an offset in 0x8C..0x8C + 8 * n -- decoded
     // from data/VS.EXE directly (load 0x80020000, header 0x800) rather than asked of Ghidra. If
     // nothing writes them, the span is .bss that is only ever read, the eight-byte rows are constant
     // zero, and the function closes; if something does write them, the port needs that writer first
-    // and FUN_80058338 stays blocked until it exists. Either way the answer is one scan away, and it
+    // and BuildSlotDigitQuads stays blocked until it exists. Either way the answer is one scan away, and it
     // is a scan this slice did not run because the function is not this slice's to write.
 
     // GHIDRA: FUN_800261ec @ 0x800261EC (VS.EXE), 304 bytes

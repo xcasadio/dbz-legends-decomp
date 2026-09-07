@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -1124,6 +1124,10 @@ internal static class SoundEffects
             LibCd.CdControlB(0x02, TocEntryAsParam((int)((uint)param_2 << 0x10) >> 0x10), DAT_8008d2b4);
             LibCd.CdSync(0, DAT_8008d2b4);
             BattleScene.DAT_8008d340 = BattleScene.DAT_8008d340 | 2;
+            // The `(short)` is the IMAGE's own sign-extension, not a narrowing choice made here:
+            // 0x8006065C is `sll v0,s1,16` / `sra v0,v0,16` / `or v0,v0,v1`, and the second arm at
+            // 0x800606E0 is the same three instructions. The compiler warns CS0675 about OR-ing a
+            // sign-extended operand; that warning is the transliteration being right, not wrong.
             DAT_8008d2a0 = (short)param_1 | DAT_8008d2a0;
         }
         else
