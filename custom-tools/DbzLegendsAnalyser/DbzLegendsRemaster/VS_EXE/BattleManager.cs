@@ -1,4 +1,4 @@
-using PsxSdkMonogame;
+﻿using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -1487,7 +1487,7 @@ internal static class BattleManager
 
         if ((BattleScene.DAT_8008d340 & 0xc) != 0)
         {
-            BattleScene.FUN_8005f704(0, 0);
+            SoundDriver.FUN_8005f704(0, 0);
             iVar3 = iVar3 + 1;
         }
 

@@ -59,6 +59,10 @@ else if (args.Length == 1 && args[0] == "--validate-gte-rotavg")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.GteRotAverageValidation.Run();
 }
+else if (args.Length == 1 && args[0] == "--validate-sound-loader")
+{
+	System.Environment.ExitCode = DbzLegendsRemaster.Validation.SoundLoaderValidation.Run();
+}
 else if (args.Length == 1 && args[0] == "--validate-tasks")
 {
 	System.Environment.ExitCode = DbzLegendsRemaster.Validation.TaskSystemValidation.Run();

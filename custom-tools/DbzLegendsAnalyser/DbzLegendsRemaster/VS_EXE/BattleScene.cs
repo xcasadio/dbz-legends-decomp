@@ -425,7 +425,7 @@ internal static class BattleScene
 
         if ((DAT_8008d340 & 0xc) != 0)
         {
-            uVar2 = FUN_8005f704((short)PsxRam.ReadI32(piVar15 + 0x74), 0);
+            uVar2 = SoundDriver.FUN_8005f704((short)PsxRam.ReadI32(piVar15 + 0x74), 0);
             PsxRam.WriteU16(piVar15 + 0x78, uVar2);
         }
 
@@ -787,7 +787,7 @@ internal static class BattleScene
                         PsxRam.WriteU16(iVar4 + 0x78, 8);
                     }
 
-                    sVar1 = (short)FUN_8005f704((short)PsxRam.ReadU16(iVar4 + 0x74),
+                    sVar1 = (short)SoundDriver.FUN_8005f704((short)PsxRam.ReadU16(iVar4 + 0x74),
                         (short)PsxRam.ReadU16(iVar4 + 0x78));
                     PsxRam.WriteU16(iVar4 + 0x78, (ushort)sVar1);
                     if (sVar1 < 8)
@@ -1948,15 +1948,6 @@ internal static class BattleScene
         return 0;
     }
 
-    // GHIDRA: FUN_8005f704 @ 0x8005F704 (VS.EXE)
-    // BLOCKED: given (scene id, sub-step) and returns the next sub-step. It is the loader's own
-    // step machine and it is what walks phase 1's +0x78 up to 8.
-    internal static ushort FUN_8005f704(int param_1, int param_2)
-    {
-        _ = param_1;
-        _ = param_2;
-        return 0;
-    }
 
     // GHIDRA: FUN_8005ed28 @ 0x8005ED28 (VS.EXE)
     // BLOCKED: camera mode only. Called by phase 1 once the loader reaches 8, and by phase 4.
