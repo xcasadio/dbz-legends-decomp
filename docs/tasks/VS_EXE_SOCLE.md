@@ -337,6 +337,66 @@ affirmation sur le *jeu*.
 Reste deux appelees en souche, pour des raisons deja consignees: `FUN_80026d98`
 (chaine de cinq fonctions manquantes) et `FUN_80058338` (deja refusee).
 
+## LA CHAINE COMPLETE DE L'ECRAN BLEU, mesuree maillon par maillon
+
+Le symptome — ecran de chargement puis fond du draw-env — a survecu a deux
+corrections visees a l'aveugle. La sonde `--diag-vs` a tranche, et la chaine est
+maintenant fermee de bout en bout:
+
+1. **La tache de scene ne tourne jamais.** Zero appel a son repartiteur en 240
+   frames. Le manager, lui, tourne (etat 0 une fois, etat 1 ensuite).
+2. Elle est creee derriere `else if ((CtxFlags & 4) == 0)`, un bras qu'on
+   n'atteint **que si le bit 3 de `CtxFlags` est leve**.
+3. **Le setter du bit 3 est `FUN_80055f94` elle-meme**, ligne 134
+   (`lw v0,0x10(s2)` / `ori v0,v0,0x8` / `sw v0,0x10(s2)` @ `0x8005633C`).
+   Ghidra l'imprime `*(uint *)(ctx + 8) | 8`, ce qui ressemble a l'offset 8
+   jusqu'a ce qu'on remarque que `ctx` est un `short *`: en demi-mots, `ctx + 8`
+   **est** l'octet `0x10`. C'est pour cela qu'une recherche sur `"+ 0x10) | 8"`
+   ne donnait rien.
+4. Quatre conditions le gardent. La sonde les rapporte separement, et **une
+   seule echoue**: la jauge `ctx+0x302C` doit valoir ±30000, elle vaut 0.
+5. La jauge est la somme courante des douze contributions `+0x15B8`, equipe A
+   additionnee, equipe B soustraite, clampee (lignes 96-106).
+6. **Les douze contributions sont nulles** — mesurees, et nulles, pas en train de
+   s'annuler. La ligne 90 dit pourquoi: `FUN_80055f94` ne fait que les DOSER,
+   `contribution = (contribution * 5|6|8) >> 2`. Elle n'en seme jamais aucune.
+7. **Le semeur est `FUN_8004e108` @ `0x8004E108`**, 1144 octets, seul ecrivain de
+   ce champ dans toute l'image:
+
+   ```c
+   *(short *)(*(int *)(fighter + 0xF0)            // FighterBattleContext
+            + *(byte *)(fighter + 0x173) * 0x14   // FighterSlotIndex * CtxSlotRecordStride
+            + 0x15B8) += ...                       // CtxGaugeContribution
+   ```
+
+   Les deux offsets de combattant sont **deja nommes** dans `BattleState.cs`, ce
+   qui rend l'identification ferme plutot qu'une coincidence arithmetique.
+
+Ni `FUN_8005a5b0` manquante, ni un stub libsnd. Les deux corrections restent
+justes en elles-memes; elles ne visaient simplement pas ca.
+
+## LA FERMETURE TRANSITIVE, et pourquoi le chiffre precedent etait trop bas
+
+La note plus bas annonce « 47 fonctions, 26,2 Ko ». **C'etait un seul niveau de
+profondeur.** La fermeture transitive complete, calculee depuis les 29 souches
+restantes plus la chaine de la jauge, donne:
+
+| | |
+|---|---|
+| fonctions dans la fermeture (souche ou absente) | **131** |
+| dont **feuilles** — ecrivables aujourd'hui | **58** |
+| dont non-feuilles, en attente d'une vague | 73 |
+
+Les feuilles vont de 64 a 2440 octets, ~30 Ko en tout. C'est la bonne facon de
+travailler la suite: **par vagues, feuilles d'abord**, chaque vague en debloquant
+la suivante.
+
+Et une branche entiere de cette fermeture est **hors translitteration**: tout le
+sous-arbre `FUN_8006b4a0` / `FUN_8006b88c` / `FUN_8006bdd8` et leurs feuilles
+(`FUN_8006759c`, `FUN_80067cb0`, `FUN_80067a7c`, `FUN_800683d8`) ne touche que
+des tables fantomes de voix SPU, jamais l'etat de jeu. Regle 13: ces fonctions
+appartiennent a `PsxSdkMonogame`, pas a `VS_EXE`.
+
 ## OU EN EST VS.EXE, en chiffres et non en impression
 
 C'est le resultat le plus utile de cette session, et il change la maniere de
