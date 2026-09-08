@@ -1,4 +1,4 @@
-﻿using PsxSdkMonogame;
+using PsxSdkMonogame;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
@@ -1072,8 +1072,20 @@ internal static class AnimCmdEffects
     // PARTIAL: the target index is `word1 & 0xff` and the indirection index `flags & 0x3f`, both
     // wider than the sixteen entries g_animSharedVarTable is sized at. The byte region this file
     // models lets an over-range index alias into the next global, which is what the console does.
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. This opcode is the
+    // ONLY caller of FighterCombat.CreateAttackEventTask, which is the only producer of the event
+    // task whose +0x78 going negative is the only gate on FUN_8004ee48, the gauge root that the
+    // bench calls "racine A". So "is opcode 40 ever played" is the whole question one level up.
+    internal static int DiagChDanSetCalls;
+
+    internal static int DiagChDanSetClearArm;
+
+    internal static int DiagChDanSetResolved;
+
     internal static int AnimCmd_ChDanSet(int streamPtr)
     {
+        DiagChDanSetCalls++;
         uint uVar1 = unchecked((uint)(unchecked((int)((uint)PsxRam.ReadU16(streamPtr) << 0x10)) >> 0x18));
         int iVar8 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
 
@@ -1084,10 +1096,12 @@ internal static class AnimCmdEffects
 
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
+                DiagChDanSetClearArm++;
                 int iVar2 = AnimCmdTransform.FUN_8003f228((uint)(uVar5 & 0xff), iVar8);
                 iVar8 = AnimCmdTransform.FUN_8003f2b0((uint)(uVar5 >> 8), iVar8);
                 if (iVar2 != 0 && iVar8 != 0)
                 {
+                    DiagChDanSetResolved++;
                     FighterCombat.CreateAttackEventTask(iVar2, iVar8, (short)uVar6, uVar1 & 0xff);
                 }
             }

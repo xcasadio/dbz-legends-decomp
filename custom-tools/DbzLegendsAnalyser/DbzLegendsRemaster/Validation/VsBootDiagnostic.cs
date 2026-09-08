@@ -443,6 +443,16 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine();
         Console.WriteLine("  LA CHAINE DE LA JAUGE, maillon par maillon:");
+        Console.WriteLine(
+            $"   AnimCmd_ChDanSet (opcode 40) jouee : {AnimCmdEffects.DiagChDanSetCalls}"
+            + $"   bras clear : {AnimCmdEffects.DiagChDanSetClearArm}"
+            + $"   cibles resolues : {AnimCmdEffects.DiagChDanSetResolved}");
+        Console.WriteLine(
+            $"   CreateAttackEventTask appelee : {FighterCombat.DiagCreateAttackEventCalls}"
+            + $"   UpdateAttackEventTask appelee : {FighterCombat.DiagUpdateAttackEventCalls}");
+        Console.WriteLine(
+            $"   +0x78 de l evenement, cumule : 0x{FighterCombat.DiagAttackEvent78EverSeen:X8}"
+            + $"   frames ou il etait NEGATIF (la porte de la racine A) : {FighterCombat.DiagAttackEventNegative}");
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");
         Console.WriteLine($"   FUN_8004e758 (racine B) appelee : {FighterCombat.DiagE758Calls}");

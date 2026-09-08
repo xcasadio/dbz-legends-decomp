@@ -1916,8 +1916,25 @@ internal static class FighterCombat
     // meaning asserted for what each slot is FOR, only that each points where the original points
     // it. Finally calls FUN_80053970(workspace, &PTR_DAT_800217f0, param_4) to seed +8 from that
     // table, exactly as FUN_80053970's own header above documents.
+    // JUSTIFICATION: C# language bridge only
+    // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. FUN_8004ee48 --
+    // the gauge root the bench calls "racine A" -- has exactly ONE caller, UpdateAttackEventTask at
+    // 0x800429A8, and it is gated on the event record's +0x78 being NEGATIVE. That is a completely
+    // different path from the +0x134 bit 31 that gates FUN_8004e758, and it is the one an attack
+    // actually travels: an attack animation registers an event task, the task runs each frame, and
+    // when its +0x78 goes negative the hit resolves and seeds the gauge. These four counters say
+    // which of those three steps is missing.
+    internal static int DiagCreateAttackEventCalls;
+
+    internal static int DiagUpdateAttackEventCalls;
+
+    internal static int DiagAttackEventNegative;
+
+    internal static uint DiagAttackEvent78EverSeen;
+
     internal static void CreateAttackEventTask(int param_1, int param_2, short param_3, uint param_4)
     {
+        DiagCreateAttackEventCalls++;
         TaskSystem.RegisterCallback(UpdateAttackEventTask_Address, UpdateAttackEventTask);
 
         int taskNode = TaskSystem.CreateTask(
@@ -2023,6 +2040,13 @@ internal static class FighterCombat
         int param_1 = 0;
 
         int iVar4 = PsxRam.ReadI32(TaskSystem.g_CurrentTask + 8);
+
+        DiagUpdateAttackEventCalls++;
+        DiagAttackEvent78EverSeen |= (uint)PsxRam.ReadI32(iVar4 + 0x78);
+        if (PsxRam.ReadI32(iVar4 + 0x78) < 0)
+        {
+            DiagAttackEventNegative++;
+        }
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {

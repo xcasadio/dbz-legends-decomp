@@ -360,35 +360,73 @@ apparait 112 fois** — une valeur que ce portage n'avait jamais produite — et
 `FUN_8004a97c` s'execute **5 fois avec l'opcode 0x26**. La sequence d'action est
 amorcee pour la premiere fois.
 
-**LE MAILLON SUIVANT, ET IL EST NET.** La jauge ne seme toujours pas, et la porte
-n'est plus dans `+0x138` :
+**LA CHAINE COMPLETE VERS LA JAUGE, TRACEE JUSQU AU BOUT.** Elle a DEUX racines et
+elles ne partagent aucune porte. Une version precedente de ce fichier n'en voyait
+qu'une et en tirait une conclusion trop forte ; voici les deux, chacune mesuree.
+
+**Racine B, `FUN_8004e758`** — ses QUATRE sites d'appel (l'etape 9.6 de
+`FighterTask.cs`, et deux sites plus un dans `FUN_80050824`) sont derriere **la
+meme** porte : `+0x134 & 0x80000000`. Or ce bit n'est jamais pose. La preuve est
+statique et complete :
+
+- 31 instructions `sw rt,0x134(rs)` dans l'image ; **3 sont des sauvegardes de
+  pile** (`sw ...,308($sp)` dans des prologues) et ne concernent aucun combattant.
+- Des 28 restantes : **2** ecrivent `$zero` ; **19** sont des
+  lectures-modifications-ecritures du MEME mot (`lw ...,0x134` puis `and` avec un
+  masque) — elles preservent le bit 31, elles ne peuvent pas le creer ; **7** sont
+  des `or` dont les masques sont 0x02000000, 0x20000000, 0x08000000 et 0x04000000,
+  **aucun n'atteint le bit 31** ; la derniere preserve les 24 bits hauts et n'ecrit
+  qu'un octet bas.
+- Et aucune ecriture etroite ne l'atteint non plus : **zero** `sb` sur +0x137,
+  **zero** `sh` sur +0x136, **zero** `swl`/`swr` chevauchant 0x134..0x137.
+
+Donc la racine B est du code mort dans ce build. **Cette conclusion prouve trop si
+on s'arrete la** — un jeu commercialise dont la jauge ne peut pas se remplir n'a
+pas de sens — et c'est justement ce qui a fait chercher l'autre racine.
+
+**Racine A, `FUN_8004ee48` — c'est le vrai chemin.** Elle n'a qu'UN appelant,
+`UpdateAttackEventTask` @ 0x800429A8, garde par `*(int*)(record + 0x78) < 0`, ce
+qui n'a **rien a voir** avec `+0x134`. La chaine complete, chaque maillon compte
+par une sonde :
 
 ```
-+0x134 cumules : 0x00000000   bit 31 (porte de la racine de jauge, etape 9.6) : JAMAIS VU
+AnimCmd_ChDanSet (opcode 40 de la VM d animation) jouee : 0   <-- LE FRONT
+  -> CreateAttackEventTask appelee : 0
+  -> UpdateAttackEventTask appelee : 0
+  -> +0x78 negatif : 0
+  -> FUN_8004ee48 (racine A) : 0
+  -> AddSlotGaugeContribution (le semeur) : 0
+  -> jauge centrale jamais a +/-30000 -> le round ne finit pas
+  -> la tache de scene n a pas lieu d exister
 ```
 
-L'etape 9.6 (`FighterTask.cs`) n'appelle `FighterCombat.FUN_8004e758` que si
-`+0x134` bit 31 est pose. Sur 1788 cycles d'`UpdateFighter`, **le mot entier reste
-a zero** : ce n'est pas « le bit n'est pas pose », c'est « le mot n'est jamais
-ecrit ». Cote statique, aucun des 31 sites `sw rt,0x134(rs)` de l'image n'a de
-`lui rt,0x8000` a portee, et le portage ne contient qu'un effacement de ce bit
-(`SceneTransition.cs:1321`, masque 0x7fffffff) et aucun poseur.
+`AnimCmd_ChDanSet` (`AnimCmdEffects.cs`) est le SEUL appelant de
+`CreateAttackEventTask`, qui est le SEUL producteur de la tache d'evenement dont le
+`+0x78` negatif est la SEULE porte de la racine A. Tout tient a une question :
+**l'interpreteur d'animation ne joue jamais l'opcode 40.**
 
 **A FAIRE ENSUITE, dans cet ordre :**
 
-1. Examiner les 31 sites `sw rt,0x134(rs)` un par un. Le balayage automatique ne
-   cherchait qu'un `lui 0x8000` a six instructions ; une valeur portant le bit 31
-   peut arriver autrement (copie d'un autre mot, `swl`/`swr`, base deja decalee).
-   Tant que ce n'est pas fait, « rien ne pose ce bit » est une mesure de CE
-   scenario, pas un absolu.
-2. Si le bit est bien mort, remonter d'un cran : ce que `FUN_8004a97c(0x26)` fait
-   ensuite, frame par frame, jusqu'a voir ou la sequence d'attaque s'interrompt.
-   Cinq executions sur 112 commandes, c'est peu : la coincidence exigee entre
-   « le routeur laisse passer » et « la commande vaut 0x26 » merite d'etre
-   comprise avant d'en tirer autre chose.
-3. `MatchFacingFaceThenOppositeFace` veut deux fronts de boutons de face
-   DIFFERENTS espaces de 1 a 4 frames, pour produire 0x28. Le script d'appui sait
-   maintenant l'exprimer ; personne ne l'a encore essaye.
+1. Le combattant atteint bien l'etat 0x26 (mesure : `FUN_8004a97c` s'execute 5 fois
+   avec cet opcode). **La question est de savoir si atteindre l'etat 0x26 change
+   reellement le flux d'animation joue.** Sonder l'interpreteur : quel flux tourne,
+   pour quel etat, et le flux d'attaque du personnage contient-il l'opcode 40.
+2. C'est une question de DONNEES autant que de code : les flux viennent des CH_BIN.
+   `docs/structure-ch-bin-files.md` decrit le format. Si le flux d'attaque n'est
+   jamais charge, le probleme est en amont du VM.
+3. Cinq executions de `FUN_8004a97c` sur 112 commandes 0x26, c'est peu : la
+   coincidence exigee entre << le routeur laisse passer >> et << la commande vaut
+   0x26 >> merite d'etre comprise. Un appui plus dense, ou tenu, changerait
+   peut-etre le compte.
+4. `MatchFacingFaceThenOppositeFace` veut deux fronts de boutons de face DIFFERENTS
+   espaces de 1 a 4 frames, pour produire 0x28. Le script d'appui sait l'exprimer ;
+   personne ne l'a essaye.
+
+**UNE LECON DE METHODE, deux fois payee cette session.** Deux chaines ecrites ici
+etaient fausses parce qu'elles avaient ete DEDUITES d'un mot de drapeaux cumule au
+lieu d'etre COMPTEES : `FUN_8004b098` tourne mille fois et non zero, et la commande
+0x2A est morte (rien ne pose le bit 0x100000 d'un `+0x138`). Un OR cumule dit qu'un
+bit a ete vu, jamais combien de fois ni ou. **Compter avant de conclure.**
 
 ---
 
