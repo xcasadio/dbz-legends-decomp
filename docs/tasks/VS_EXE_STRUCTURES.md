@@ -121,6 +121,46 @@ int FUN_800261ec(FighterRecord *fighter)
 Ghidra a typé `pFVar2` en `FighterRecord *` tout seul — ce qui **corrobore** que le
 `+8` d'un nœud de tâche est un pointeur de combattant, au lieu de le supposer.
 
+## LE PIEGE DES UNITES, PAYE DEUX FOIS
+
+Un decalage imprime par le decompilateur n a de sens qu avec **l unite du pointeur qui
+le porte**. Ghidra type volontiers un pointeur d enregistrement en `undefined2 *`, et
+alors tout ce qu il imprime est en DEMI-MOTS :
+
+- `FUN_80053330` (CreateTask) ecrit `*(puVar2 + 6) = param_5` : ce n est pas +6, c est
+  **+0x0C**. Toute la disposition du noeud tombe une fois les decalages doubles, et
+  l allocation `taille + 0x18` confirme la taille d en-tete independamment.
+- `RunBattleManagerFrame` lit `*(uint *)(ctx + 0x16b0)` : ce n est pas 0x16B0, c est
+  **0x2D60**. J avais bati la queue de BattleContext dessus et signale au passage une
+  collision qui n existait pas. L instruction tranche : 0x8005BFF4 est
+  `addu $a0,$s2,$zero`, donc le `ctx` du callee EST `$s2`, et le chargement voisin est
+  `lw $a1,0x2d60($s2)`. `CtxRoundRequest = 0x2D60` du portage avait raison.
+
+`struct_fields.py` ne peut pas se tromper la-dessus : il lit les instructions, en
+octets. **Quand les deux divergent, c est le decompilateur qu il faut convertir.**
+
+## LIRE UN TYPE CHEZ SON CREATEUR, PAS CHEZ SES CONSOMMATEURS
+
+Deux noms que j avais poses depuis un consommateur ont ete refutes par le createur :
+
+- `AttackEventRecord` +0x3C. Je l avais nomme `attackerTaskNode`, puis renomme
+  `attackerContext` en raisonnant que `*(cible + 8) = attaquant` ecraserait le champ
+  contexte du scheduler. `CreateAttackEventTask` @ 0x80043598 refute le raisonnement
+  en une ligne : `*(travail + 0x3C) = DAT_8008d16c`, et DAT_8008d16c est
+  g_CurrentTask. C EST un noeud. Nom d origine retabli.
+- La meme fonction donne la TAILLE de l enregistrement sans la deduire :
+  `CreateTask(UpdateAttackEventTask, 0, 0xb, 0xC0, 0, ...)`. 0xC0, et la carte derivee
+  s arretait a 0xBD -- premiere confirmation independante d une taille ici.
+
+D ou la regle : **chercher d abord la fonction qui CREE l enregistrement.** Elle donne
+la taille, l initialisation, et le type de chaque champ qu elle remplit ; un
+consommateur ne donne que ce qu il lit.
+
+La chaine imbriquee que cela etablit :
+`((FighterRecord *)attackerTaskNode->context)->slotIndex`, soit `+8` puis `+0x173` --
+une structure qui en contient une autre, le pont etant le champ contexte que
+CreateTask range dans le noeud.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les
