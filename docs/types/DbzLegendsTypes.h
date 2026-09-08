@@ -1,12 +1,16 @@
 /* DbzLegendsTypes -- les enregistrements de VS.EXE, derives de data/VS.EXE.
  *
- * GENERE. Ne pas editer a la main : regenerer avec custom-tools/scripts/struct_fields.py
- * (voir docs/tasks/VS_EXE_STRUCTURES.md pour la methode et les controles).
+ * LA SOURCE DE VERITE EST L ARCHIVE GHIDRA DbzLegendsTypes (.gdt). Ce fichier en est
+ * le MIROIR TEXTE, tenu a jour parce qu une archive .gdt est binaire et qu un git diff
+ * dessus ne dit rien ; ici, un champ qui change se voit.
  *
- * A IMPORTER DANS L ARCHIVE DbzLegendsTypes, pas dans le programme :
- *   Ghidra : Window > Data Type Manager > (icone archive) > New File Archive...
- *            nommer DbzLegendsTypes, puis clic droit dessus > Parse C Source...
- *            et donner ce fichier.
+ * GENERE pour les structures derivees (struct_fields.py --emit-c), ECRIT A LA MAIN pour
+ * les syntheses que l outil ne fait pas (les tableaux du contexte, le noeud lu chez
+ * CreateTask). Voir docs/tasks/VS_EXE_STRUCTURES.md pour la methode et les controles.
+ *
+ * Un type deja source depuis l archive se met a jour par parse-c-structure sous son
+ * nom ; un type nouveau ne peut etre cree que dans le programme, puis deplace dans
+ * l archive a la main.
  */
 
 struct FighterRecord {
@@ -14,16 +18,16 @@ struct FighterRecord {
     ushort   animFrameCounter;
     ushort   field_6;
     undefined1 pad_8[16];
-    undefined4 field_18;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_18;
     undefined1 pad_1c[68];
-    undefined4 field_60;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_60;
     undefined1 pad_64[28];
     int      field_80;
     int      field_84;
     undefined1 pad_88[4];
     int      field_8c;
     undefined1 pad_90[4];
-    undefined4 field_94;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_94;
     int      field_98;
     undefined1 pad_9c[8];
     int      field_a4;
@@ -31,22 +35,22 @@ struct FighterRecord {
     undefined1 pad_a9[1];
     byte     field_aa;
     undefined1 pad_ab[1];
-    int      currentTaskNode;
+    struct TaskNode *currentTaskNode;
     undefined1 pad_b0[2];
-    ushort   field_b2;  /* lu en signe ET en non signe */
+    ushort   field_b2;
     undefined1 pad_b4[20];
-    undefined2 field_c8;  /* seulement ecrit: le signe n est pas etabli */
-    undefined2 field_ca;  /* seulement ecrit: le signe n est pas etabli */
-    undefined2 field_cc;  /* seulement ecrit: le signe n est pas etabli */
+    undefined2 field_c8;
+    undefined2 field_ca;
+    undefined2 field_cc;
     undefined1 pad_ce[14];
-    undefined4 field_dc;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_dc;
     undefined1 pad_e0[12];
-    undefined4 field_ec;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_ec;
     int      field_f0;
     int      field_f4;
     undefined1 pad_f8[28];
-    uint     field_114;  /* aussi lu 2 bytes wide */
-    uint     field_118;  /* aussi lu 2 bytes wide */
+    uint     field_114;
+    uint     field_118;
     undefined1 pad_11c[2];
     ushort   field_11e;
     undefined1 pad_120[4];
@@ -56,9 +60,9 @@ struct FighterRecord {
     uint     field_130;
     int      flagsB;
     int      flagsA;
-    undefined4 field_13c;  /* seulement ecrit: le signe n est pas etabli */
+    undefined4 field_13c;
     int      field_140;
-    undefined4 characterData;  /* seulement ecrit: le signe n est pas etabli */
+    void     *characterData;
     int      field_148;
     undefined1 pad_14c[4];
     byte     field_150;
@@ -68,18 +72,18 @@ struct FighterRecord {
     ushort   field_156;
     ushort   field_158;
     ushort   field_15a;
-    undefined2 field_15c;  /* seulement ecrit: le signe n est pas etabli */
-    ushort   field_15e;  /* lu en signe ET en non signe */
+    undefined2 field_15c;
+    ushort   field_15e;
     short    field_160;
-    ushort   field_162;  /* lu en signe ET en non signe */
+    ushort   field_162;
     undefined1 pad_164[6];
     byte     stateOpcode;
     byte     moveClass;
     undefined1 pad_16c[1];
-    undefined1 field_16d;  /* seulement ecrit: le signe n est pas etabli */
+    undefined1 field_16d;
     undefined1 pad_16e[2];
-    undefined1 field_170;  /* seulement ecrit: le signe n est pas etabli */
-    undefined1 field_171;  /* seulement ecrit: le signe n est pas etabli */
+    undefined1 field_170;
+    undefined1 field_171;
     undefined1 pad_172[1];
     byte     slotIndex;
     undefined1 pad_174[12];
@@ -90,22 +94,22 @@ struct FighterRecord {
     int      field_1d0;
     undefined1 pad_1d4[76];
     int      field_220;
-    byte     field_224;  /* lu en signe ET en non signe */
-    byte     field_225;  /* lu en signe ET en non signe */
+    byte     field_224;
+    byte     field_225;
     byte     field_226;
     undefined1 pad_227[1];
     byte     field_228;
     byte     field_229;
-    ushort   field_22a;  /* lu en signe ET en non signe */
+    ushort   field_22a;
     byte     inputFlags;
     byte     archetypeIndex;
     undefined1 pad_22e[3];
     byte     field_231;
     byte     field_232;
     byte     field_233;
-    ushort   field_234;  /* lu en signe ET en non signe */
-    ushort   field_236;  /* lu en signe ET en non signe */
-    ushort   field_238;  /* lu en signe ET en non signe */
+    ushort   field_234;
+    ushort   field_236;
+    ushort   field_238;
 };
 
 /* L ENREGISTREMENT D EVENEMENT D ATTAQUE, lu chez son createur.
@@ -251,7 +255,7 @@ struct BattleContext {
     short    actingSlotTeamB;           /* 6..11  */
     undefined1 pad_18[8];
     undefined1 slotDisplay[12][448];    /* 0x0020, foulee 0x1C0 : BuildSlotDigitQuads */
-    int      fighterSlot[12];           /* 0x1520, espaces de travail de tache combattant */
+    struct TaskNode *fighterSlot[12];   /* 0x1520, un noeud par creneau ; ->context = FighterRecord */
     ushort   slotPose[12][4];           /* 0x1550, foulee 8, trois demi-mots utilises */
     ushort   slotRecord[12][10];        /* 0x15B0, foulee 0x14, le +0 porte les drapeaux */
     undefined1 pad_16a0[5824];

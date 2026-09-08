@@ -60,27 +60,30 @@ déborder sur la suivante, ce qui a fait entrer l'enregistrement d'événement
 (0x3c, 0x50–0x5f, 0x6c, 0x70, 0x78) dans la carte du combattant. Le corps se borne
 au **prochain bloc `// GHIDRA:`**.
 
-## OU LES TYPES DOIVENT ALLER
+## OU LES TYPES VONT, ET COMMENT ILS Y ARRIVENT
 
 **Dans l ARCHIVE `DbzLegendsTypes`, pas dans une categorie du programme.** Une
-categorie vit dans le gestionnaire de types du programme et ne se partage pas ; une
-archive est un fichier `.gdt` que VS.EXE, TITLE.EXE et SELECT.EXE peuvent ouvrir
-ensemble, ce qui est exactement ce qu on veut pour des enregistrements communs.
+categorie ne se partage pas ; une archive `.gdt` est ouverte par VS.EXE, TITLE.EXE et
+SELECT.EXE ensemble, ce qui est ce qu on veut pour des enregistrements communs.
 
-**ReVa ne sait pas creer d archive.** `parse-c-structure` n ecrit que dans le
-gestionnaire du PROGRAMME, avec un chemin de categorie ; il n y a aucun outil
-`create-archive`, et le scripting PyGhidra n est pas disponible dans cette instance
-(« Ghidra was not started with PyGhidra »). L archive se cree donc a la main, une
-fois :
+**Ce que ReVa sait faire, mesure et non suppose :**
 
-1. `Window > Data Type Manager`, icone d archive, `New File Archive...`,
-   la nommer **DbzLegendsTypes** ;
-2. clic droit sur l archive > `Parse C Source...` et lui donner
-   `docs/types/DbzLegendsTypes.h` ;
-3. les types deviennent alors applicables depuis n importe quel programme du projet.
+- **Mettre a jour un type deja source depuis l archive** : `parse-c-structure` sous
+  le meme nom repond « Successfully modified structure », `sourceArchiveName` reste
+  `DbzLegendsTypes`, meme id. C est la voie normale pour tout type existant.
+- **Creer un type nouveau** : impossible dans l archive (`parse-c-structure` et
+  `parse-c-header` n acceptent qu un `programPath` + une categorie ; pas d outil
+  `create-archive` ; PyGhidra absent de cette instance). Le type nait dans le
+  PROGRAMME, a la categorie `/` pour que le chemin corresponde, et l auteur le
+  DEPLACE dans l archive a la main. Une fois deplace, il se met a jour comme
+  ci-dessus.
 
-`docs/types/DbzLegendsTypes.h` est **genere** — ne pas l editer a la main, le
-regenerer avec l outil.
+**Le miroir texte.** `docs/types/DbzLegendsTypes.h` n est plus un vehicule
+d import : c est le MIROIR relisible de l archive, parce qu un `.gdt` est binaire et
+qu un `git diff` dessus ne montre rien. Il est regenere par l outil pour les
+structures derivees et ecrit a la main pour les syntheses (les tableaux du contexte,
+le noeud lu chez CreateTask). **Quand l archive change, le miroir suit** ; le jour ou
+les deux divergent, c est l archive qui a raison.
 
 ## CE QUI EST DANS GHIDRA
 
