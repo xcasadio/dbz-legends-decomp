@@ -13,11 +13,35 @@
  * l archive a la main.
  */
 
+/* L EN-TETE DE LECTEUR DE FLUX D ANIMATION, partage par tout espace de travail qui joue
+ * un flux. Prouve par ses deux fonctions et par qui les appelle :
+ *
+ *   BindAnimStream (0x80053970) : frame = 0, field_6 = 0, streamPtr = table[index]
+ *       (+ streamBase quand l entree est relative, c est-a-dire < 0x80000000)
+ *   StepAnimStream (0x800539D0) : frame += 1, puis parcourt le flux depuis streamPtr par
+ *       entrees [debut, fin, longueur | opcode] et distribue chaque opcode dont la fenetre
+ *       contient frame via PTR_LAB_80083C10 -- LA TABLE DE 51 OPCODES que check_vs_dispatch.py
+ *       verifie. Au terminateur 0xFFFF : si fin <= frame, frame = 0 (boucle) ; si field_6 == 0,
+ *       field_6 = 1.
+ *
+ * ET LES DEUX RECOIVENT DES COMBATTANTS AUSSI BIEN QUE DES EVENEMENTS : ActivateFighterInSlot
+ * fait `BindAnimStream(fighter, *(fighter->characterBank + 0x38), 0); StepAnimStream(fighter)`,
+ * et l etape 9.5 d UpdateFighter (FUN_80047688) rappelle StepAnimStream(fighter) chaque frame.
+ * C est pourquoi FighterRecord et AttackEventRecord commencent par la meme structure -- et
+ * pourquoi le +0x04 du combattant, que le portage appelait animFrameCounter, EST la frame.
+ *
+ * +0x0C n en fait pas partie : l evenement y range ses liaisons de VM, le combattant autre
+ * chose ; aucun des deux lecteurs ne le touche. */
+struct AnimStreamHeader {
+    int      streamBase;            /* +0x00 : ajoute aux pointeurs de flux relatifs */
+    ushort   frame;                 /* +0x04 : incremente par StepAnimStream, 0 = flux boucle/fini */
+    ushort   field_6;               /* +0x06 : 0 a la liaison, 1 apres le premier terminateur */
+    ushort   *streamPtr;            /* +0x08 : le curseur dans le flux */
+};
+
 struct FighterRecord {
-    int      field_0;
-    ushort   animFrameCounter;
-    ushort   field_6;
-    undefined1 pad_8[16];
+    struct AnimStreamHeader anim;   /* +0x00..+0x0B, voir ci-dessus */
+    undefined1 pad_c[12];
     undefined4 field_18;
     undefined1 pad_1c[68];
     undefined4 field_60;
@@ -62,8 +86,8 @@ struct FighterRecord {
     int      flagsA;
     undefined4 field_13c;
     int      field_140;
-    void     *characterData;
-    int      field_148;
+    void     *characterData;        /* +0x144 : ActivateFighterInSlot en est le seul ecrivain non nul */
+    void     *characterBank;        /* +0x148 : sa +0x38 est la table de flux passee a BindAnimStream */
     undefined1 pad_14c[4];
     byte     field_150;
     byte     field_151;
@@ -151,39 +175,36 @@ struct FighterRecord {
  * `FUN_80053970(travail, &PTR_DAT_800217F0, drapeaux)`, la relie a la VM d animation.
  */
 struct AttackEventRecord {
-    undefined1 pad_0[4];
-    ushort   field_4;
-    undefined1 pad_6[6];
-    void     *vmBindings;           /* +0x0C -> &binding_80, pose par CreateAttackEventTask */
-    undefined1 pad_10[24];
-    void     *field_28;             /* +0x28, premier argument de DrawSpriteGroup */
+    struct AnimStreamHeader anim;   /* +0x00..+0x0B : BindAnimStream(record, g_AttackEffectStreams, streamIndex) */
+    void     *vmBindings;           /* +0x0C -> &binding_80 */
+    undefined4 field_10;            /* +0x10 : la premiere variable liee (binding_80) */
+    undefined1 pad_14[20];
+    void     *spriteGroup;          /* +0x28 : premier argument de DrawSpriteGroup */
     undefined1 pad_2c[16];
     struct TaskNode *attackerTaskNode;  /* +0x3C = g_CurrentTask a la creation */
-    ushort   field_40;              /* +0x40..+0x44 : x, y (signe), z passes a DrawSpriteGroup */
-    short    field_42;
-    ushort   field_44;
-    undefined1 pad_46[2];
-    undefined2 field_48;            /* +0x48..+0x4C : recopies de la seconde cible a la creation */
-    ushort   field_4a;              /*   lus en signe par FUN_80045b70, en non signe ailleurs */
-    ushort   field_4c;
-    undefined1 pad_4e[2];
-    uint     field_50;
-    uint     field_54;
-    uint     field_58;
+    SVECTOR  pos;                   /* +0x40 : recopie du 1er argument de CreateAttackEventTask ;
+                                       x et z moins la camera (DAT_1f8000b4/bc) vont a DrawSpriteGroup */
+    SVECTOR  rot;                   /* +0x48 : recopie du 2e argument ; vy et vz sont RE-TIRES au
+                                       hasard de +/-0x600 et masques & 0xFFF apres un coup -- des
+                                       angles PSX sur 12 bits ; passes a RotateVectorByAngles */
+    uint     field_50;              /* +0x50/+0x54 : une paire recopiee chez la cible (+0xC0/+0xC4 */
+    uint     field_54;              /*   du combattant, +0x2C/+0x30 de son espace de travail)     */
+    uint     field_58;              /* +0x58/+0x5C : l autre paire, vers +0x34/+0x38 de la cible  */
     uint     field_5c;
-    undefined1 pad_60[12];
+    int      velocity[3];           /* +0x60 : RotateVectorByAngles((speed,0,0), &rot, velocity) --
+                                       12 octets, le 4e long d un VECTOR serait eventType */
     uint     eventType;             /* +0x6C, >>8 == 0x80 : la forme cible alternative */
-    struct TaskNode *targetTaskNode;    /* +0x70, rempli par la VM via vmBindings */
-    int      field_74;              /* +0x74, l argument de profondeur de DrawSpriteGroup */
-    int      eventFlags;            /* +0x78, initialise a 0x4000000 ; negatif ouvre le coup */
-    ushort   field_7c;              /* +0x7C = le type passe a CreateAttackEventTask */
-    byte     field_7e;              /* +0x7E : un angle sur 6 bits (& 0x3f), 2 bits de drapeaux */
+    struct TaskNode *targetTaskNode;    /* +0x70, rempli par la VM via binding_9c */
+    int      drawDepth;             /* +0x74 : l argument de profondeur de DrawSpriteGroup */
+    int      eventFlags;            /* +0x78 : 0x4000000 a la creation, |= 2 chaque frame, bit 31 = coup a resoudre */
+    short    speed;                 /* +0x7C : le 3e argument de CreateAttackEventTask ; c est le vx tourne */
+    byte     spriteCell;            /* +0x7E = LookupSpriteCell(rot.vz, rot.vy) : 6 bits de cellule, 2 de miroir */
     undefined1 pad_7f[1];
-    void     *binding_80;           /* +0x80..+0xA8 : dix pointeurs DANS l enregistrement, poses */
-    void     *binding_84;           /*   par CreateAttackEventTask -- +0x10, +0x40, +0x48, +0x60, */
-    void     *binding_88;           /*   +0x78, +0x7E, puis +0x70, +0x50, +0x58, +0x7C -- et lies */
-    void     *binding_8c;           /*   a la VM d animation par FUN_80053970(&PTR_DAT_800217F0). */
-    void     *binding_90;           /*   +0x98 N EST PAS ECRIT : ce n est pas un tableau de onze. */
+    void     *binding_80;           /* +0x80..+0xA8 : dix pointeurs DANS l enregistrement -- +0x10, */
+    void     *binding_84;           /*   +0x40, +0x48, +0x60, +0x78, +0x7E, puis +0x70, +0x50,  */
+    void     *binding_88;           /*   +0x58, +0x7C -- les variables que la VM d animation lit  */
+    void     *binding_8c;           /*   et ecrit. +0x98 N EST PAS ECRIT : pas un tableau de onze. */
+    void     *binding_90;
     void     *binding_94;
     undefined1 pad_98[4];
     void     *binding_9c;
@@ -191,7 +212,7 @@ struct AttackEventRecord {
     void     *binding_a4;
     void     *binding_a8;
     undefined1 pad_ac[16];
-    byte     field_bc;
+    byte     field_bc;              /* +0xBC : == 3 teste avec les bits 0x6000000 de flagsB de la cible */
     undefined1 pad_bd[3];
 };
 
@@ -240,6 +261,7 @@ extern ushort           g_CurrentTaskListIndex; /* 0x8008D170 */
 extern struct TaskNode *g_TaskListHead[21];     /* 0x80083B3C, le noeud dont prev == 0 */
 extern struct TaskNode *g_TaskListTail[21];     /* 0x80083B90, le noeud dont next == 0 */
 extern short            g_TaskListCount[21];    /* 0x80083BE4 */
+extern ushort          *g_AttackEffectStreams[20]; /* 0x800217F0 : indexee par le 4e argument de CreateAttackEventTask */
 
 /* LE CONTEXTE DE COMBAT, ET IL PAVE DE BOUT EN BOUT.
  *

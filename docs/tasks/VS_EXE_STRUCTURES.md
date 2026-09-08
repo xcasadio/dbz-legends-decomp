@@ -189,6 +189,54 @@ nul, la tache tourne a chaque frame ; negatif, elle tourne puis il est increment
 a -1 le noeud est libere. C est ecrit dans le miroir, pas dans un nom : `param5`
 reste `param5` tant qu un seul appelant n a pas ete relu avec cette grille.
 
+## NOMMER LES CHAMPS : CE QUI PASSE PAR EUX, PAS CE QU ILS CONTIENNENT
+
+Un nom de champ n est decisif que quand une FONCTION lui donne un role. Pour
+`AttackEventRecord`, trois fonctions l ont fait, et aucune n etait un consommateur :
+
+- `RotateVectorByAngles` (0x800461FC, ex-FUN_800461fc) : `RotMatrix(angles)` puis
+  `RotTrans(in, out)` -- elle TOURNE un vecteur par trois angles d Euler. Son appel
+  dans UpdateAttackEventTask est `((speed, 0, 0), &+0x48, +0x60)`. Donc +0x7C est une
+  VITESSE (le vx tourne), +0x48..+0x4C une ROTATION (des angles 12 bits, ce que
+  confirme le `& 0xFFF` apres le tirage aleatoire de +/-0x600), +0x60 un VECTEUR
+  VITESSE de trois longs -- le quatrieme long d un VECTOR serait eventType, donc
+  `int velocity[3]` et pas `VECTOR`.
+- `LookupSpriteCell` (0x80045B70, ex-FUN_80045b70) : quantifie deux angles
+  relatifs a la camera (DAT_1f80007c/7e) en seize secteurs et indexe une table.
+  Son resultat va dans +0x7E, masque `& 0x3F`, et ses bits `0xC0` partent a
+  DrawSpriteGroup : une CELLULE DE SPRITE, six bits de direction, deux de miroir.
+- `DrawSpriteGroup` recoit +0x28 en premier argument et +0x74 en dixieme : le
+  GROUPE DE SPRITES et la PROFONDEUR de dessin.
+
+Et le createur donne les types des arguments : `CreateAttackEventTask` recopie
+trois demi-mots de chacun de ses deux premiers parametres dans +0x40 et +0x48, deux
+SVECTOR ; son troisieme est la vitesse, son quatrieme l index dans
+`g_AttackEffectStreams` (0x800217F0, vingt pointeurs de flux -- la table se termine
+exactement la ou le premier flux commence, 0x80021840).
+
+## UN PREFIXE PARTAGE : L EN-TETE DE LECTEUR DE FLUX D ANIMATION
+
+Les 0x0C premiers octets de `AttackEventRecord` ET de `FighterRecord` sont la meme
+structure, `AnimStreamHeader` -- base, frame, drapeau, curseur de flux. Preuve :
+
+- `BindAnimStream` (0x80053970) ecrit +0x04 = 0, +0x06 = 0, +0x08 = table[index]
+  (+ base quand l entree est relative) ;
+- `StepAnimStream` (0x800539D0) incremente +0x04, parcourt le flux depuis +0x08 par
+  entrees `[debut, fin, longueur | opcode]` et distribue chaque opcode dont la fenetre
+  contient la frame via `PTR_LAB_80083C10` -- la table de 51 opcodes que
+  `check_vs_dispatch.py` verifie deja ;
+- et les DEUX recoivent des combattants : `ActivateFighterInSlot` fait
+  `BindAnimStream(fighter, *(fighter->+0x148 + 0x38), 0); StepAnimStream(fighter)`,
+  l etape 9.5 d UpdateFighter (FUN_80047688) rappelle `StepAnimStream(fighter)` a
+  chaque frame.
+
+Ce que le portage appelait `animFrameCounter` au +0x04 du combattant EST la frame de
+ce lecteur. Et +0x148 du combattant pointe la banque de personnage dont le +0x38 est
+sa table de flux : `characterBank`.
+
++0x0C n en fait pas partie -- l evenement y range ses liaisons de VM, et aucun des
+deux lecteurs ne le touche.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les
