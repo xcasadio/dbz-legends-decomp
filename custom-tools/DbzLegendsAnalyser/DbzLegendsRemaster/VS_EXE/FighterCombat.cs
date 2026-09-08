@@ -997,17 +997,23 @@ internal static class FighterCombat
     // carved into a named, analyzed function (it previews under the placeholder name
     // UndefinedFunction_800429a8) — out of this slice either way.
     //
-    // GHIDRA DECLARES FOUR PARAMETERS FOR THIS FUNCTION (param_1..param_4, the last `uint`), BUT
-    // ONLY ONE IS REAL. The one call site passes exactly ONE argument, so param_2/param_3/param_4
-    // are never genuine caller-supplied values: param_2 is never read anywhere in this body
-    // (checked line by line); param_4 only feeds an LWL/LWR unaligned-load pair (see the
-    // block-copy note below — the ISA makes that pair's result independent of whatever was
-    // already in the register); and param_3, though it IS forwarded to one call
-    // (`FUN_8004d574(iVar7,0x16,param_3,uVar9,uVar3)` in Ghidra's own rendering of that call
-    // site), is forwarded to a parameter slot FUN_8004d574's OWN analyzed signature
-    // (`void FighterCombatArms.FUN_8004d574(int, ushort)`) never reads — see that function's header note. So
-    // param_3's value can never affect behavior either. This port exposes the signature the body
-    // and its one caller actually use: a single parameter.
+    // FOUR PARAMETERS, AND THE CALL SITE REALLY PASSES FOUR. An earlier version of this header
+    // claimed "the one call site passes exactly ONE argument" and built a one-parameter signature
+    // on it. THAT CLAIM WAS FALSE: 0x80042ADC is
+    // `FUN_8004ee48(iVar8,iVar4,iVar5,uVar7)`, and the last three are the same screen-space values
+    // UpdateAttackEventTask has just handed DrawSpriteGroup -- x, y and the depth delta, which is
+    // to say THE POSITION OF THE HIT. Getting that wrong is how this function's role stayed
+    // unclear for a whole session, so the signature now matches the image and the caller passes
+    // all four.
+    //
+    // THREE OF THEM ARE NEVER READ, and that is a statement about REGISTERS, not about arguments.
+    // A first-use scan over the whole body (0x8004EE48..0x8004F363: for each instruction, does it
+    // read $a1/$a2/$a3 before anything has written them) reports that only $a0 is ever consumed as
+    // an incoming value. Ghidra prints `FUN_8004d574(iVar7,0x16,param_3,uVar9,uVar3)` further down
+    // because this body never touches $a2, so the caller's third argument is still sitting there
+    // when that call happens -- but the same scan over FUN_8004d574 (0x8004D574..0x8004D693) shows
+    // it consumes only $a0 and $a1, so the residual value reaches nothing. The three parameters are
+    // therefore discarded here explicitly rather than dropped from the signature.
     //
     // APPLIES ONE ATTACK-EVENT RECORD (param_1 itself — a standalone record with its own +0x3c/
     // +0x50../+0x6c/+0x70/+0x78/+0xbc fields, not a fighter workspace) TO ITS TARGET. param_1+0x70
@@ -1055,9 +1061,16 @@ internal static class FighterCombat
     // this engine's structures happening to be aligned. The matching SWL/SWR pairs on the write
     // side reduce the same way. Checked instruction by instruction against the disassembly, not
     // assumed.
-    internal static int FUN_8004ee48(int param_1)
+    internal static int FUN_8004ee48(int param_1, int param_2, int param_3, uint param_4)
     {
         DiagEe48Calls++;
+
+        // Read by no instruction in this body -- see the first-use scan in the header above. Kept
+        // in the signature because the image passes them and because they carry the hit position,
+        // which is the fact the previous one-parameter signature hid.
+        _ = param_2;
+        _ = param_3;
+        _ = param_4;
 
         if (PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0x70) + 0xc) == PsxRam.ReadI32(param_1 + 0x3c))
         {
@@ -2063,11 +2076,21 @@ internal static class FighterCombat
             param_1 = unchecked((PsxRam.ReadU8(iVar4 + 0x7e) & 0xc0) << 0x18);
         }
 
+        // THE THREE VALUES HOISTED, because the image computes them ONCE and uses them TWICE --
+        // here for the sprite and again as FUN_8004ee48's last three arguments at 0x80042ADC. They
+        // were inlined into this call while that second use was missing from the port.
+        //   iVar5 = (int)*(short *)(iVar8 + 0x42)
+        //   iVar4 = ((*(ushort *)(iVar8 + 0x40) - DAT_1f8000b4) * 0x10000) >> 0x10
+        //   uVar7 = ((*(ushort *)(iVar8 + 0x44) - DAT_1f8000bc) * 0x10000) >> 0x10
+        int iVar5 = (short)PsxRam.ReadU16(iVar4 + 0x42);
+        int iVar3x = (int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10;
+        uint uVar7 = unchecked((uint)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x44) - (uint)Scratchpad._DAT_1f8000bc) * 0x10000) >> 0x10));
+
         SpriteDrawer.DrawSpriteGroup(
             PsxRam.ReadI32(iVar4 + 0x28),
-            (short)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x40) - (uint)Scratchpad._DAT_1f8000b4) * 0x10000) >> 0x10),
-            (short)PsxRam.ReadU16(iVar4 + 0x42),
-            (short)((int)(((uint)PsxRam.ReadU16(iVar4 + 0x44) - (uint)Scratchpad._DAT_1f8000bc) * 0x10000) >> 0x10),
+            (short)iVar3x,
+            (short)iVar5,
+            (short)uVar7,
             (ushort)(param_1 >> 0x10),
             0,
             0,
@@ -2095,7 +2118,7 @@ internal static class FighterCombat
 
         if (PsxRam.ReadI32(iVar4 + 0x78) < 0)
         {
-            int iVar3 = FUN_8004ee48(iVar4);
+            int iVar3 = FUN_8004ee48(iVar4, iVar3x, iVar5, uVar7);
 
             if (iVar3 != -1)
             {
