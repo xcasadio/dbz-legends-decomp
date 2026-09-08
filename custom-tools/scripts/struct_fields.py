@@ -72,7 +72,7 @@ def function_end(start, limit=0x2000):
     return start + limit
 
 
-def scan(start, arg_reg, fields, pointers, warnings):
+def scan(start, arg_reg, fields, pointers, warnings, seed_at=None, scan_from=None):
     """Walk one function, tracking registers that hold `record base + K`.
 
     THE CODE IS BUILT AT -O0 AND THAT IS THE WHOLE DIFFICULTY. A function does not keep
@@ -84,14 +84,23 @@ def scan(start, arg_reg, fields, pointers, warnings):
     frame (sp and any alias of it), which is what makes spill/reload pairs followable.
     """
     end = function_end(start)
-    # reg -> offset from the record base
-    base = {RNUM[arg_reg]: 0}
+    # reg -> offset from the record base.
+    #
+    # SEEDING SOMEWHERE OTHER THAN THE PROLOGUE. Plenty of records are never anyone's
+    # argument: RunFighterSubstitution reaches a fighter as `*(*(ctx + 0x1520 + i*4) + 8)`
+    # and FUN_8004EE48 reaches a task node as `event->targetTaskNode`. For those, say
+    # WHERE the base appears instead of which argument carries it -- `--seed 0x80026e2c:v0`
+    # means "at that instruction, $v0 holds the record". The walk then starts there rather
+    # than at the prologue, because before that point the register held something else.
+    base = {} if seed_at is not None else {RNUM[arg_reg]: 0}
     # reg -> offset from the frame base, so $sp and its aliases (typically $s8) agree
     frame = {29: 0}
     # frame slot -> offset from the record base
     slots = {}
 
-    for a in range(start, end, 4):
+    for a in range(scan_from if scan_from is not None else start, end, 4):
+        if seed_at is not None and a == seed_at:
+            base[RNUM[arg_reg]] = 0
         w = word(a)
         if w is None:
             return
@@ -290,12 +299,19 @@ def main():
             if key not in PRESETS:
                 print('preset inconnu: %s (connus: %s)' % (key, ', '.join(PRESETS)))
                 return 2
-            name, funcs = PRESETS[key]
+            name, raw = PRESETS[key]
+            funcs = [(a, r, None) for a, r in raw]
             i += 2
         elif argv[i] == '--func' and i + 1 < len(argv):
             addr, _, reg = argv[i + 1].partition(':')
-            funcs.append((int(addr, 16), reg or 'a0'))
+            funcs.append((int(addr, 16), reg or 'a0', None))
             i += 2
+        elif argv[i] == '--seed' and i + 2 < len(argv):
+            # --seed <function> <address:reg>
+            fn = int(argv[i + 1], 16)
+            addr, _, reg = argv[i + 2].partition(':')
+            funcs.append((fn, reg or 'v0', int(addr, 16)))
+            i += 3
         elif argv[i] == '--name' and i + 1 < len(argv):
             name = argv[i + 1]
             i += 2
@@ -312,8 +328,10 @@ def main():
     fields = {}
     pointers = {}
     warnings = set()
-    for addr, reg in funcs:
-        scan(addr, reg, fields, pointers, warnings)
+    for entry in funcs:
+        addr, reg = entry[0], entry[1]
+        seed = entry[2] if len(entry) > 2 else None
+        scan(addr, reg, fields, pointers, warnings, seed_at=seed, scan_from=seed)
 
     if emit:
         print(emit_c(name, fields))

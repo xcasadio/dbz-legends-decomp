@@ -60,6 +60,28 @@ déborder sur la suivante, ce qui a fait entrer l'enregistrement d'événement
 (0x3c, 0x50–0x5f, 0x6c, 0x70, 0x78) dans la carte du combattant. Le corps se borne
 au **prochain bloc `// GHIDRA:`**.
 
+## OU LES TYPES DOIVENT ALLER
+
+**Dans l ARCHIVE `DbzLegendsTypes`, pas dans une categorie du programme.** Une
+categorie vit dans le gestionnaire de types du programme et ne se partage pas ; une
+archive est un fichier `.gdt` que VS.EXE, TITLE.EXE et SELECT.EXE peuvent ouvrir
+ensemble, ce qui est exactement ce qu on veut pour des enregistrements communs.
+
+**ReVa ne sait pas creer d archive.** `parse-c-structure` n ecrit que dans le
+gestionnaire du PROGRAMME, avec un chemin de categorie ; il n y a aucun outil
+`create-archive`, et le scripting PyGhidra n est pas disponible dans cette instance
+(« Ghidra was not started with PyGhidra »). L archive se cree donc a la main, une
+fois :
+
+1. `Window > Data Type Manager`, icone d archive, `New File Archive...`,
+   la nommer **DbzLegendsTypes** ;
+2. clic droit sur l archive > `Parse C Source...` et lui donner
+   `docs/types/DbzLegendsTypes.h` ;
+3. les types deviennent alors applicables depuis n importe quel programme du projet.
+
+`docs/types/DbzLegendsTypes.h` est **genere** — ne pas l editer a la main, le
+regenerer avec l outil.
+
 ## CE QUI EST DANS GHIDRA
 
 Catégorie **`/DbzLegendsTypes`** du programme `/VS.EXE` :
