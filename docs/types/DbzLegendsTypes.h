@@ -43,14 +43,18 @@ struct FighterRecord {
     struct AnimStreamHeader anim;   /* +0x00..+0x0B, voir ci-dessus */
     undefined1 pad_c[12];
     undefined4 field_18;
-    undefined1 pad_1c[68];
+    undefined1 pad_1c[52];
+    ushort   *slotRecordPtr;        /* +0x50 = &ctx->slotRecord[slot][2], pose par ActivateFighterInSlot */
+    undefined1 pad_54[12];
     undefined4 field_60;
-    undefined1 pad_64[28];
-    int      field_80;
-    int      field_84;
-    undefined1 pad_88[4];
-    int      field_8c;
-    undefined1 pad_90[4];
+    undefined1 pad_64[8];
+    void     *characterRow;         /* +0x6C = 0x80082ED4 + (characterId - 1) * 8 */
+    undefined1 pad_70[16];
+    void     *bankEntry5;           /* +0x80..+0x90 : les entrees 5, 0, 6, 7, 12 de characterBank, */
+    void     *bankEntry0;           /*   resolues en absolu (+ characterData quand relatives)      */
+    void     *bankEntry6;
+    void     *bankEntry7;
+    void     *bankEntry12;
     undefined4 field_94;
     int      field_98;
     undefined1 pad_9c[8];
@@ -70,9 +74,13 @@ struct FighterRecord {
     undefined4 field_dc;
     undefined1 pad_e0[12];
     undefined4 field_ec;
-    int      field_f0;
+    struct BattleContext *battleContext;   /* +0xF0 : 41 lectures ; ctx + 0x15B0/0x1520/0x16A0 en passent */
     int      field_f4;
-    undefined1 pad_f8[28];
+    void     *listNext;             /* +0xF8/+0xFC/+0x108 : le maillon de la liste intrusive ancree a */
+    void     *listPrev;             /*   DAT_80083CB4. FUN_80045998 fait un push-front : new->next =  */
+    undefined1 pad_100[8];          /*   tete, tete->prev = new, ancre = new, new->prev = 0,          */
+    void     *listPayload;          /*   new->+0x108 = son 3e argument (&DAT_80101BA4 ici)           */
+    undefined1 pad_10c[8];
     uint     field_114;
     uint     field_118;
     undefined1 pad_11c[2];
@@ -95,10 +103,10 @@ struct FighterRecord {
     undefined1 pad_153[3];
     ushort   field_156;
     ushort   field_158;
-    ushort   field_15a;
+    ushort   clutId;                /* +0x15A = LoadImage_ReturnTPageOrClutId(..., isClut = 1) */
     undefined2 field_15c;
     ushort   field_15e;
-    short    field_160;
+    short    characterIndex;        /* +0x160 : indexe DAT_80080A80 par lignes de 8 */
     ushort   field_162;
     undefined1 pad_164[6];
     byte     stateOpcode;
@@ -110,7 +118,8 @@ struct FighterRecord {
     undefined1 field_171;
     undefined1 pad_172[1];
     byte     slotIndex;
-    undefined1 pad_174[12];
+    byte     field_174;             /* +0x174 <- ctx->slotRecord[slot][9], octet bas */
+    undefined1 pad_175[11];
     int      field_180;
     undefined1 pad_184[4];
     int      field_188;
@@ -308,6 +317,7 @@ struct BattleContext {
     struct TaskNode *fighterSlot[12];   /* 0x1520, un noeud par creneau ; ->context = FighterRecord */
     ushort   slotPose[12][4];           /* 0x1550, foulee 8, trois demi-mots utilises */
     ushort   slotRecord[12][10];        /* 0x15B0, foulee 0x14, le +0 porte les drapeaux */
-    undefined1 pad_16a0[5824];
+    void     *characterData[12];        /* 0x16A0 : ActivateFighterInSlot y lit fighter->characterData */
+    undefined1 pad_16d0[5776];
     uint     roundRequest;              /* 0x2D60 */
 };
