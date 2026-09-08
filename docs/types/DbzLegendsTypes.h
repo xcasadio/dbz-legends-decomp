@@ -30,28 +30,58 @@
  * C est pourquoi FighterRecord et AttackEventRecord commencent par la meme structure -- et
  * pourquoi le +0x04 du combattant, que le portage appelait animFrameCounter, EST la frame.
  *
- * +0x0C n en fait pas partie : l evenement y range ses liaisons de VM, le combattant autre
- * chose ; aucun des deux lecteurs ne le touche. */
+ * +0x0C EN FAIT PARTIE, contrairement a ce que j avais d abord ecrit : CreateFighterTask
+ * (0x800512CC) y range &+0x10 comme CreateAttackEventTask y range &+0x80. Ce ne sont pas
+ * les lecteurs de flux qui l ecrivent, ce sont les createurs. */
 struct AnimStreamHeader {
     int      streamBase;            /* +0x00 : ajoute aux pointeurs de flux relatifs */
     ushort   frame;                 /* +0x04 : incremente par StepAnimStream, 0 = flux boucle/fini */
     ushort   field_6;               /* +0x06 : 0 a la liaison, 1 apres le premier terminateur */
     ushort   *streamPtr;            /* +0x08 : le curseur dans le flux */
+    void     **vmBindings;          /* +0x0C : la table des variables de VM -- +0x10 chez le
+                                       combattant (28 entrees), +0x80 chez l evenement (10) ;
+                                       les deux createurs l ecrivent, d ou sa place ici */
 };
 
+/* LE COMBATTANT, lu chez ses DEUX createurs : CreateFighterTask (0x800512CC, ex-
+ * FUN_800512cc) alloue `CreateTask(UpdateFighter, 0, 10, 0x240, 1, ...)` -- 0x240 EST LA
+ * TAILLE -- et remplit la table de liaisons, les bornes, les noeuds ; ActivateFighterInSlot
+ * (0x80027340) le relie ensuite a son personnage. Puis UpdateFighter (0x80050AE4, la tache)
+ * borne la position contre posMin/posMax a chaque frame, et reecrit opponentTaskNode avec
+ * le resultat de FUN_8004fa8c (repli sur soi-meme) -- c est ce qui distingue +0xAC de
+ * +0x104, que le createur remplit tous deux avec le noeud propre. */
 struct FighterRecord {
-    struct AnimStreamHeader anim;   /* +0x00..+0x0B, voir ci-dessus */
-    undefined1 pad_c[12];
-    undefined4 field_18;
-    undefined1 pad_1c[52];
-    ushort   *slotRecordPtr;        /* +0x50 = &ctx->slotRecord[slot][2], pose par ActivateFighterInSlot */
-    undefined1 pad_54[12];
-    undefined4 field_60;
-    undefined1 pad_64[8];
+    struct AnimStreamHeader anim;   /* +0x00..+0x0F ; vmBindings -> &binding_10 */
+    void     *binding_10;           /* +0x10..+0x7C : 28 variables de VM, chacune un pointeur */
+    void     *binding_14;           /*   dans l enregistrement, posees par CreateFighterTask : */
+    SVECTOR  *opponentPos;          /*   +0x18 = &pos de l adversaire (UpdateFighter, chaque frame) */
+    void     *binding_1c;           /*   -> +0x80 bankEntry5      */
+    void     *binding_20;           /*   -> +0xD0                 */
+    void     *binding_24;           /*   -> +0xB0 posMin          */
+    void     *binding_28;           /*   -> +0xB8 posMax          */
+    void     *binding_2c;           /*   -> +0x134 flagsB         */
+    void     *binding_30;           /*   -> +0x16B moveClass      */
+    void     *binding_34;           /*   -> l enregistrement lui-meme */
+    void     *binding_38;           /*   -> +0xF4                 */
+    void     *binding_3c;           /*   -> +0x124                */
+    void     *binding_40;           /*   -> +0x12C                */
+    void     *binding_44;           /*   -> +0xE0                 */
+    void     *binding_48;           /*   -> +0xC0                 */
+    void     *binding_4c;           /*   -> +0x162                */
+    ushort   *slotRecordPtr;        /* +0x50 = &ctx->slotRecord[slot][2] (ActivateFighterInSlot) */
+    void     *binding_54;           /*   -> +0x16A stateOpcode    */
+    void     *binding_58;           /*   -> +0x226                */
+    void     *binding_5c;           /*   -> +0x176                */
+    void     *opponentListLink;     /* +0x60 = &listNext de l adversaire (UpdateFighter) */
+    struct TaskNode *binding_64;    /*   -> le noeud propre       */
+    void     *binding_68;           /*   -> +0x160 characterIndex */
     void     *characterRow;         /* +0x6C = 0x80082ED4 + (characterId - 1) * 8 */
-    undefined1 pad_70[16];
-    void     *bankEntry5;           /* +0x80..+0x90 : les entrees 5, 0, 6, 7, 12 de characterBank, */
-    void     *bankEntry0;           /*   resolues en absolu (+ characterData quand relatives)      */
+    void     *binding_70;           /*   -> +0x138 flagsA         */
+    void     *binding_74;           /*   -> +0xC8                 */
+    void     *binding_78;           /*   -> +0x228                */
+    void     *binding_7c;           /*   -> +0x224                */
+    void     *bankEntry5;           /* +0x80..+0x90 : entrees 5, 0, 6, 7, 12 de characterBank */
+    void     *bankEntry0;
     void     *bankEntry6;
     void     *bankEntry7;
     void     *bankEntry12;
@@ -63,10 +93,10 @@ struct FighterRecord {
     undefined1 pad_a9[1];
     byte     field_aa;
     undefined1 pad_ab[1];
-    struct TaskNode *currentTaskNode;
-    undefined1 pad_b0[2];
-    ushort   field_b2;
-    undefined1 pad_b4[20];
+    struct TaskNode *opponentTaskNode;  /* +0xAC : FUN_8004fa8c(fighter) ou soi-meme, chaque frame */
+    SVECTOR  posMin;                /* +0xB0 : (-480, -768, -480), ou (-20000, -3000, -20000) en mode 1 */
+    SVECTOR  posMax;                /* +0xB8 : ( 480,  120,  480), ou ( 20000,   120,  20000) en mode 1 */
+    undefined1 pad_c0[8];           /* +0xC0/+0xC4 recoivent field_50/field_54 de l evenement au coup */
     undefined2 field_c8;
     undefined2 field_ca;
     undefined2 field_cc;
@@ -74,19 +104,24 @@ struct FighterRecord {
     undefined4 field_dc;
     undefined1 pad_e0[12];
     undefined4 field_ec;
-    struct BattleContext *battleContext;   /* +0xF0 : 41 lectures ; ctx + 0x15B0/0x1520/0x16A0 en passent */
+    struct BattleContext *battleContext;   /* +0xF0, le 1er argument de CreateFighterTask */
     int      field_f4;
-    void     *listNext;             /* +0xF8/+0xFC/+0x108 : le maillon de la liste intrusive ancree a */
-    void     *listPrev;             /*   DAT_80083CB4. FUN_80045998 fait un push-front : new->next =  */
-    undefined1 pad_100[8];          /*   tete, tete->prev = new, ancre = new, new->prev = 0,          */
-    void     *listPayload;          /*   new->+0x108 = son 3e argument (&DAT_80101BA4 ici)           */
-    undefined1 pad_10c[8];
-    uint     field_114;
-    uint     field_118;
-    undefined1 pad_11c[2];
-    ushort   field_11e;
-    undefined1 pad_120[4];
-    uint     field_124;
+    void     *listNext;             /* +0xF8/+0xFC : maillon de la liste ancree a DAT_80083CB4 */
+    void     *listPrev;
+    undefined1 pad_100[4];
+    struct TaskNode *ownTaskNode;   /* +0x104 : le noeud propre, jamais reecrit */
+    void     *listPayload;          /* +0x108 : 3e argument de FUN_80045998 */
+    undefined1 pad_10c[4];
+    ushort   field_110;
+    undefined1 pad_112[2];
+    SVECTOR  pos;                   /* +0x114 : bornee par posMin/posMax dans UpdateFighter ;
+                                       vy <= 0 toujours, et >= posMin.vy quand stateOpcode == 0 ;
+                                       passee a DistanceBetweenPositions, ComputeYawPitchToTarget */
+    ushort   field_11c;             /* +0x11C..+0x120 : trois demi-mots remis a zero a la creation, */
+    ushort   field_11e;             /*   variable VM n.1, passes a FUN_800340a8 par adresse. PAS   */
+    ushort   field_120;             /*   nommes rot : cette fonction ne les donne pas a RotMatrix  */
+    undefined1 pad_122[2];
+    uint     field_124;             /* +0x124..+0x130 : quatre mots, le descripteur d attaque du portage */
     uint     field_128;
     uint     field_12c;
     uint     field_130;
@@ -94,48 +129,49 @@ struct FighterRecord {
     int      flagsA;
     undefined4 field_13c;
     int      field_140;
-    void     *characterData;        /* +0x144 : ActivateFighterInSlot en est le seul ecrivain non nul */
-    void     *characterBank;        /* +0x148 : sa +0x38 est la table de flux passee a BindAnimStream */
+    void     *characterData;        /* +0x144 = ctx->characterData[slot] */
+    void     *characterBank;        /* +0x148 = characterData + *characterData */
     undefined1 pad_14c[4];
     byte     field_150;
     byte     field_151;
     byte     field_152;
-    undefined1 pad_153[3];
+    undefined1 pad_153[1];
+    ushort   field_154;
     ushort   field_156;
     ushort   field_158;
-    ushort   clutId;                /* +0x15A = LoadImage_ReturnTPageOrClutId(..., isClut = 1) */
+    ushort   clutId;                /* +0x15A */
     undefined2 field_15c;
     ushort   field_15e;
-    short    characterIndex;        /* +0x160 : indexe DAT_80080A80 par lignes de 8 */
+    short    characterIndex;        /* +0x160, le 2e argument de CreateFighterTask */
     ushort   field_162;
-    undefined1 pad_164[6];
-    byte     stateOpcode;
-    byte     moveClass;
+    ushort   field_164;
+    ushort   field_166;
+    ushort   field_168;
+    byte     stateOpcode;           /* +0x16A */
+    byte     moveClass;             /* +0x16B */
     undefined1 pad_16c[1];
     undefined1 field_16d;
     undefined1 pad_16e[2];
     undefined1 field_170;
     undefined1 field_171;
     undefined1 pad_172[1];
-    byte     slotIndex;
-    byte     field_174;             /* +0x174 <- ctx->slotRecord[slot][9], octet bas */
-    undefined1 pad_175[11];
-    int      field_180;
-    undefined1 pad_184[4];
-    int      field_188;
-    undefined1 pad_18c[68];
-    int      field_1d0;
-    undefined1 pad_1d4[76];
-    int      field_220;
+    byte     slotIndex;             /* +0x173, le 3e argument de CreateFighterTask */
+    byte     field_174;
+    undefined1 pad_175[1];
+    ushort   field_176;
+    undefined1 pad_178[8];
+    uint     padStateHistory[20];   /* +0x180 : les anneaux de FighterInput.cs, passes aux dix */
+    uint     padEdgeHistory[20];    /* +0x1D0 :   decodeurs 0x80047E18..0x8004C300 ; pavent 0x220 */
+    int      repeatedFaceButton;    /* +0x220 */
     byte     field_224;
     byte     field_225;
     byte     field_226;
     undefined1 pad_227[1];
     byte     field_228;
     byte     field_229;
-    ushort   field_22a;
-    byte     inputFlags;
-    byte     archetypeIndex;
+    short    opponentLockFrames;    /* +0x22A : SelectOpponentTask le pose a 0x3C au changement de cible, le decremente, le remet a 0 sous flagsA 0x30000000 */
+    byte     inputFlags;            /* +0x22C */
+    byte     archetypeIndex;        /* +0x22D = ctx->slotDisplay[slot][0xC] */
     undefined1 pad_22e[3];
     byte     field_231;
     byte     field_232;
@@ -143,6 +179,7 @@ struct FighterRecord {
     ushort   field_234;
     ushort   field_236;
     ushort   field_238;
+    undefined1 pad_23a[6];          /* jusqu a 0x240, la taille passee a CreateTask */
 };
 
 /* L ENREGISTREMENT D EVENEMENT D ATTAQUE, lu chez son createur.

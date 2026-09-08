@@ -237,6 +237,41 @@ sa table de flux : `characterBank`.
 +0x0C n en fait pas partie -- l evenement y range ses liaisons de VM, et aucun des
 deux lecteurs ne le touche.
 
+## LE COMBATTANT CHEZ SES DEUX CREATEURS
+
+`CreateFighterTask` (0x800512CC, ex-FUN_800512cc) fait exactement le geste de
+`CreateAttackEventTask`, en plus grand : `CreateTask(UpdateFighter, 0, 10, 0x240, 1,
+...)` -- **0x240 est la taille**, que le portage avait deja (BattleState.FighterSize)
+sans que j en aie fait un champ -- puis `+0x0C = &+0x10` et **vingt-huit pointeurs
+de liaison en +0x10..+0x7C**. Donc `vmBindings` appartient bien au prefixe partage,
+contrairement a ce que j avais conclu d abord : ce ne sont pas les lecteurs de flux
+qui l ecrivent, ce sont les createurs.
+
+Le meme createur pose deux triplets de bornes en +0xB0 et +0xB8 -- (-480, -768,
+-480) / (480, 120, 480) en mode normal, (-20000, -3000, -20000) / (20000, 120, 20000)
+quand DAT_801FF100 == 1 -- et `UpdateFighter` (0x80050AE4) borne +0x114/+0x116/+0x118
+contre eux a chaque frame. **+0x114 est la position, +0xB0/+0xB8 les bornes de
+l arene.** Le balayage par pointeur le recoupe : +0x114 est l argument de
+DistanceBetweenPositions et de ComputeYawPitchToTarget, et +0x180/+0x1D0 sont
+l argument des dix decodeurs de pad -- les anneaux de BattleState.cs, 20 mots
+chacun, qui pavent exactement jusqu a +0x220.
+
+`UpdateFighter` distingue enfin deux noeuds que le createur remplit tous deux avec le
+noeud propre : **+0xAC est reecrit chaque frame** avec `FUN_8004fa8c(fighter)`, avec
+repli sur soi-meme, et FUN_800261EC teste `fighter == opponent->context` pour
+s arreter ; **+0x104 ne l est jamais**. Donc `opponentTaskNode` et `ownTaskNode` --
+le portage nommait +0xAC `currentTaskNode`, vrai au premier instant, faux ensuite.
+
+Un nom REFUSE, pour la methode : +0x11C..+0x120 suit +0x114 exactement comme `rot` suit
+`pos` dans l evenement, est remis a zero a la creation et lie comme variable VM. Tout
+invite a ecrire `rot`. Mais la seule fonction qui recoit son adresse, FUN_800340a8, ne
+la donne pas a RotMatrix -- elle cherche dans les banques de sprites. Un parallele de
+disposition n est pas une preuve de role ; le champ reste `field_11c`.
+
+La confrontation avec BattleState.cs a ete faite APRES la derivation, pas avant :
+FighterSize, FighterTaskNode, FighterBattleContext, FighterSlotIndex et les deux
+historiques de pad concordent tous. C est une corroboration, pas une source.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les
