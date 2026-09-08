@@ -524,7 +524,7 @@ internal static class FighterCombat
 
     // GHIDRA: FUN_8004a108 @ 0x8004A108 (VS.EXE)
     // 1040 bytes, six callers (FUN_8004a910, FUN_8004a97c, FUN_8004aa9c, FUN_8004bf50,
-    // FUN_8004dfc4, FUN_8004fd24 — none in this slice), every one passing a second argument. But
+    // FUN_8004dfc4, DriveFighterAura — none in this slice), every one passing a second argument. But
     // Ghidra's own signature is `void FUN_8004a108(int param_1)`, ONE parameter: no path through
     // this body reads a1. That is settled analysis (the switch below reads *(param_1+0x16a)
     // directly, never an argument), not a gap, so this port exposes the one-parameter signature

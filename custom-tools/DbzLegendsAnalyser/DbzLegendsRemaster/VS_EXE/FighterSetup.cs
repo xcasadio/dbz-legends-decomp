@@ -14,7 +14,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // FUN_800511a8 creates six fighters and files them into the twelve-slot array at context + 0x1520.
 // FUN_800512cc creates one: a 0x240-byte task on list 10, then about twenty scalar stores, a
 // two-way branch on the word SELECT.EXE handed over, twenty-six interior pointers at
-// +0x0C..+0x7C, and one registration through FUN_8003478c.
+// +0x0C..+0x7C, and one registration through AllocFighterAura.
 //
 // NOTHING IN THIS FILE DECLARES A SHARED OFFSET. The size of a fighter, the size of the context,
 // the slot array, the placement fields, the slot-index byte and the two task entry points are all
@@ -40,7 +40,7 @@ internal static class FighterSetup
     // GHIDRA: DAT_8008da48 @ 0x8008DA48 (VS.EXE)
     // Six slots of 0x1E58 bytes, 0x8008DA48..0x80099057. The extent is CLOSED, not assumed, by two
     // readings that agree: FUN_80034d98 @ 0x80034D98 does `memset(&DAT_8008da48, '\0', 0xb610)`,
-    // and 0xB610 = 6 * 0x1E58 is exactly the stride and count FUN_8003478c walks below.
+    // and 0xB610 = 6 * 0x1E58 is exactly the stride and count AllocFighterAura walks below.
     //
     // OWNERSHIP CAVEAT, in the shape VS_EXE/AnimCmdMesh.cs and VS_EXE/FileIo.cs already use. This
     // block is not this file's alone — FUN_80034d98 clears it and lives in VS_EXE_exe.cs, where it
@@ -123,7 +123,7 @@ internal static class FighterSetup
     //
     // `*puVar1` in the final call is the halfword at node + 0x00, TaskSystem's TaskId, verified as
     // `lhu v0,0x0(v1)` at 0x80051710 — and CreateTask was passed id 0 four lines above, so what
-    // FUN_8003478c receives there is 0 on all six calls.
+    // AllocFighterAura receives there is 0 on all six calls.
     //
     // `iVar2 + 300` and `iVar2 + 200` are decimal in Ghidra's output, that is +0x12C and +0xC8;
     // `iVar2 + 100` is the destination +0x64. Ghidra's spelling is kept so the line-for-line
@@ -239,13 +239,13 @@ internal static class FighterSetup
             PsxRam.WriteU16(iVar2 + 0x160, param_2);
             PsxRam.WriteI32(iVar2 + 0x144, 0);
             PsxRam.WriteU8(iVar2 + 0x174, 0);
-            FUN_8003478c(PsxRam.ReadU16(puVar1), PsxRam.ReadU8(iVar2 + BattleState.FighterSlotIndex));
+            AllocFighterAura(PsxRam.ReadU16(puVar1), PsxRam.ReadU8(iVar2 + BattleState.FighterSlotIndex));
         }
 
         return puVar1;
     }
 
-    // GHIDRA: FUN_8003478c @ 0x8003478C (VS.EXE)
+    // GHIDRA: AllocFighterAura @ 0x8003478C (VS.EXE)
     // Scans the six 0x1E58 slots at DAT_8008da48 FROM THE LAST ONE DOWN, takes the first whose
     // leading int is zero, and writes two halfwords into its head: param_1 & 0xff at +0x00 and
     // param_2 & 0xff at +0x02. Reports 0 on success and 0xFFFFFFFF when all six are taken. On the
@@ -262,9 +262,10 @@ internal static class FighterSetup
     // bytes. That is what the image does at 0x800347F4 and 0x80034800; rule 12, reproduced, not
     // tidied.
     //
-    // PARTIAL: what a 0x1E58-byte slot holds is not closed by anything read here. Only its head is
-    // touched, and only the leading int is tested for occupancy.
-    internal static uint FUN_8003478c(ushort param_1, ushort param_2)
+    // The slot is a FighterAuraRecord (0x1E58 bytes, docs/types/DbzLegendsTypes.h): its first two
+    // halfwords are the key this writes, and everything else is filled by BuildFighterAuraPrimitives
+    // and driven by SceneGeometry.UpdateFighterAura.
+    internal static uint AllocFighterAura(ushort characterId, ushort slotIndex)
     {
         int piVar1;
         uint uVar2;
@@ -298,8 +299,8 @@ internal static class FighterSetup
         }
         else
         {
-            PsxRam.WriteU16(puVar5, (ushort)(param_1 & 0xff));
-            PsxRam.WriteU16(puVar5 + 2, (ushort)(param_2 & 0xff));
+            PsxRam.WriteU16(puVar5, (ushort)(characterId & 0xff));
+            PsxRam.WriteU16(puVar5 + 2, (ushort)(slotIndex & 0xff));
         }
 
         return uVar2;

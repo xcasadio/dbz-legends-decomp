@@ -3,9 +3,11 @@ using static PsxSdkMonogame.LibGpu;
 
 namespace DbzLegendsRemaster.VS_EXE;
 
-// THE CHARACTER PRIMITIVE BUILDER — what gives a fighter something to draw.
+// THE FIGHTER AURA PRIMITIVE BUILDER — what gives a fighter's aura something to draw. The fighter
+// itself is a sprite (DrawSpriteGroup); the six 0x1E58-byte workspaces below are FighterAuraRecords
+// (docs/types/DbzLegendsTypes.h), one per fighter, read at their renderer RenderFighterAuraPass.
 //
-// FighterSubstitution.ActivateFighterInSlot calls BuildCharacterPrimitives as its second act, before it even
+// FighterSubstitution.ActivateFighterInSlot calls BuildFighterAuraPrimitives as its second act, before it even
 // publishes the fighter's own character-data pointer, and until this file landed that call went to
 // an empty stub: every fighter on the field had its state, its input and its position, and not one
 // primitive to submit.
@@ -15,9 +17,12 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   +0x00  the new character id, +0x02 the slot -- the pair the search below matches on
 //   +0x05  a running primitive-record cursor, advanced by each of the three passes
 //   +0x0A / +0x09 / +0x0B  the three passes' own record counts, written by ExpandPrimitiveTemplate
-//   +0x14..+0x6F  three 8-byte blocks and three 16-byte blocks of identity-shaped state
-//   +0x1E44  an eight-byte copy of the fighter's own +0x114 position triple
-//   from +0x14C4  the primitive records themselves, 0x34 bytes each
+//   +0x14 SVECTOR rot[3], +0x2C SVECTOR pos[3], +0x44 VECTOR scale[3] -- one per template pass,
+//         the arguments of RotMatrix / the translation / ScaleMatrix in RenderFighterAuraPass
+//   +0x1E44  lastFighterPos, a copy of the fighter's own +0x114 position
+//   +0x74    POLY_GT4 prims[100], the GPU packets (0x34 bytes each)
+//   +0x14C4  short vertices[100][4][3], the quad corners in model space (0x18 each) that
+//            ExpandPrimitiveTemplate copies out of the template's vertex table
 //
 // THE SEARCH IS THE FIRST THING IT DOES, AND IT CAN FAIL. It walks the six workspaces from slot 5
 // down to slot 0 looking for one whose first word equals `(previousCharacterId & 0xFF) |
@@ -169,7 +174,7 @@ internal static class CharacterPrimitives
     private const int PtrDat800811b4Address = unchecked((int)0x800811B4);
 
     // GHIDRA: DAT_800817d8 @ 0x800817D8 (VS.EXE)
-    // Forty two-byte rows, indexed by the CHARACTER ID (the workspace's own +0x00). BuildCharacterPrimitives
+    // Forty two-byte rows, indexed by the CHARACTER ID (the workspace's own +0x00). BuildFighterAuraPrimitives
     // reads both bytes of a row: the high one feeds a tpage word, the low one's top nibble a CLUT
     // index. Forty rows covers the roster's own 1..38 range with two spare, and the fortieth reads
     // 0x00 0x00, which is what the count is measured against rather than assumed from.
@@ -197,9 +202,9 @@ internal static class CharacterPrimitives
     // independently and only the index survives into the result.
     private const int WorkspaceCursorBase = unchecked((int)0x8008BBF0);
 
-    // GHIDRA: BuildCharacterPrimitives @ 0x80034818 (VS.EXE)
+    // GHIDRA: BuildFighterAuraPrimitives @ 0x80034818 (VS.EXE)
     // 1408 bytes, 267 decompiled lines. One caller: FighterSubstitution.ActivateFighterInSlot, as
-    // `BuildCharacterPrimitives(*taskNode, fighter+0x173, characterId, slot, fighter+0x114)`. Its return value
+    // `BuildFighterAuraPrimitives(*taskNode, fighter+0x173, characterId, slot, fighter+0x114)`. Its return value
     // is DISCARDED by that caller, and it is -1 when the workspace search finds nothing.
     //
     // THE EIGHT-BYTE COPY at +0x1E44 is `lwl`/`lwr` on the source and `swl`/`swr` on the
@@ -211,8 +216,8 @@ internal static class CharacterPrimitives
     // PARTIAL: what the three 8-byte and three 16-byte blocks at +0x14..+0x6F hold is not closed
     // here. Their shape is suggestive -- three 0x1000 values with a zero beside each, and 0x1000 is
     // 1.0 in this game's 12-bit fixed point -- but no reader of them is in this slice.
-    internal static int BuildCharacterPrimitives(uint param_1, uint param_2, ushort param_3, ushort param_4,
-        int param_5)
+    internal static int BuildFighterAuraPrimitives(uint previousCharacterId, uint slotIndex, ushort characterId, ushort slot,
+        int fighterPos)
     {
         int iVar8 = 6;
         int iVar13 = 0xb610;
@@ -229,7 +234,7 @@ internal static class CharacterPrimitives
 
             int puVar3 = iVar13 + WorkspaceCursorBase;
             iVar13 = iVar13 + -0x1e58;
-            if ((uint)PsxRam.ReadI32(puVar3) == ((param_1 & 0xff) | ((param_2 & 0xff) << 0x10)))
+            if ((uint)PsxRam.ReadI32(puVar3) == ((previousCharacterId & 0xff) | ((slotIndex & 0xff) << 0x10)))
             {
                 puVar14 = Dat8008da48Address + iVar8 * 0x1e58;
                 break;
@@ -243,8 +248,8 @@ internal static class CharacterPrimitives
         }
 
         PsxRam.WriteU8(puVar14 + 4, 0);
-        PsxRam.WriteU16(puVar14, param_3);
-        PsxRam.WriteU16(puVar14 + 2, param_4);
+        PsxRam.WriteU16(puVar14, characterId);
+        PsxRam.WriteU16(puVar14 + 2, slot);
         PsxRam.WriteU8(puVar14 + 5, 0);
         PsxRam.WriteU16(puVar14 + 0xc, 0);
         PsxRam.WriteU16(puVar14 + 0xe, 0);
@@ -288,8 +293,8 @@ internal static class CharacterPrimitives
         PsxRam.WriteU16(puVar14 + 0x1e3e, 0);
 
         // The eight-byte position copy. See this function's own header note on lwl/lwr.
-        PsxRam.WriteI32(puVar14 + 0x1e44, PsxRam.ReadI32(param_5));
-        PsxRam.WriteI32(puVar14 + 0x1e48, PsxRam.ReadI32(param_5 + 4));
+        PsxRam.WriteI32(puVar14 + 0x1e44, PsxRam.ReadI32(fighterPos));
+        PsxRam.WriteI32(puVar14 + 0x1e48, PsxRam.ReadI32(fighterPos + 4));
 
         uint uVar12 = PsxRam.ReadU8(puVar14 + 5);
         PsxRam.WriteU16(puVar14 + 0x1e4c, 0);
@@ -446,7 +451,7 @@ internal static class CharacterPrimitives
     }
 
     // GHIDRA: ExpandPrimitiveTemplate @ 0x80032134 (VS.EXE)
-    // 328 bytes. Three callers, all BuildCharacterPrimitives above, with param_1 = 1, then 0, then 2.
+    // 328 bytes. Three callers, all BuildFighterAuraPrimitives above, with param_1 = 1, then 0, then 2.
     //
     // It expands ONE template into the workspace's primitive records. param_1 selects the template
     // through the pointer triple at 0x800811B4; param_3 is the record cursor the caller has reached.

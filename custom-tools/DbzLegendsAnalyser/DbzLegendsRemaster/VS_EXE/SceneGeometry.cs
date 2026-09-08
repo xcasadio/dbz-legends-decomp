@@ -6,15 +6,15 @@ namespace DbzLegendsRemaster.VS_EXE;
 
 // THE SIX AFTER-IMAGE / TRAIL RECORDS AT 0x8008DA48, AND THE STATE MACHINE THAT DRIVES THEM.
 //
-// WHAT THIS CLUSTER IS. FighterMotion.FUN_8004fd24 calls FUN_800340a8 once per fighter per frame
-// with seven arguments; FUN_800340a8 finds ONE record out of six by a composite key, steps a small
+// WHAT THIS CLUSTER IS. FighterMotion.DriveFighterAura calls UpdateFighterAura once per fighter per frame
+// with seven arguments; UpdateFighterAura finds ONE record out of six by a composite key, steps a small
 // state machine on it, and hands the record to one of six per-state workers, each of which ends by
-// asking FUN_80033c64 to project the record's primitives through the GTE and link them into the
+// asking RenderFighterAuraPass to project the record's primitives through the GTE and link them into the
 // ordering table. Nothing here is the fighter's own mesh: the fighter's mesh goes through
 // AnimCmdMesh.TransformMeshPrimitives. This is a SECOND, self-contained geometry stream that hangs
 // off the fighter's position triple.
 //
-// THE RECORD TABLE IS CLOSED BY ARITHMETIC, not by a guess. FUN_800340a8's search walks backwards
+// THE RECORD TABLE IS CLOSED BY ARITHMETIC, not by a guess. UpdateFighterAura's search walks backwards
 // from a base Ghidra prints as `iVar3 + -0x7ff74410` with iVar3 = 0xB610: as an unsigned 32-bit
 // addition that is 0x8008BBF0 + 0xB610 = 0x80097200, and 0x80097200 = 0x8008DA48 + 5 * 0x1E58. So
 // the base is DAT_8008da48, the stride is 0x1E58 and the count is six -- which is exactly the
@@ -32,13 +32,13 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   +0x00  ushort  an index into the four .data tables at 0x800811C0 / 0x800812F8 (layer 1) and
 //                  0x8008125C / 0x80081568 (layer 2). Stride 4 for the first of each pair (a short)
 //                  and 0x10 for the second (four ints).
-//   +0x04  byte    THE STATE. Written as 0xFF, 0, 1, 2 or 3; FUN_800340a8 switches on the SIGNED
+//   +0x04  byte    THE STATE. Written as 0xFF, 0, 1, 2 or 3; UpdateFighterAura switches on the SIGNED
 //                  byte plus one, so 0xFF selects case 0 and 3 selects case 4.
 //   +0x06  byte    layer 0's first primitive index   +0x09  byte  layer 0's primitive count
 //   +0x07  byte    layer 1's first primitive index   +0x0A  byte  layer 1's primitive count
 //   +0x08  byte    layer 2's first primitive index   +0x0B  byte  layer 2's primitive count
 //   +0x0C  int     a frame countdown, decremented by the workers; going negative ends the state.
-//   +0x10  int     THE LAYER SELECTOR, 1 or 2. Every state in FUN_800340a8 branches on it to pick
+//   +0x10  int     THE LAYER SELECTOR, 1 or 2. Every state in UpdateFighterAura branches on it to pick
 //                  between the layer-1 worker and the layer-2 worker.
 //   +0x14 / +0x2C / +0x44   layer 0's rotation / translation / scale slots
 //   +0x1C / +0x34 / +0x54   layer 1's
@@ -52,14 +52,14 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   +0x1E24 / +0x1E28 / +0x1E2C   int, three per-axis velocities (case 4 decays them by 300/frame)
 //   +0x1E34 / +0x1E38 / +0x1E3C   int, three per-axis scales, 0x1000 = 1.0
 //   +0x1E44 .. +0x1E4B      the PREVIOUS frame's copy of param_3's first four shorts, stamped by
-//                           FUN_800340a8's own tail on every path that reaches it.
+//                           UpdateFighterAura's own tail on every path that reaches it.
 //   +0x1E4C / +0x1E4E       two 12-bit angles, yaw and pitch towards the movement delta.
 //   +0x1E54  int            the PREVIOUS frame's param_5. 0x1E54 + 4 = 0x1E58, the stride: the
 //                           record's last field ends exactly on its own size.
 //
-// THE THREE-LAYER READING IS WHAT MAKES FUN_80033c64 AND FUN_800322d0 LEGIBLE. Both take a small
-// `param_1` and index the record with it: FUN_80033c64 reads rotation at `+ param_1 * 8 + 0x14`,
-// translation at `+ param_1 * 8 + 0x2c` and scale at `+ param_1 * 0x10 + 0x44`, and FUN_800322d0
+// THE THREE-LAYER READING IS WHAT MAKES RenderFighterAuraPass AND SetFighterAuraPassColor LEGIBLE. Both take a small
+// `param_1` and index the record with it: RenderFighterAuraPass reads rotation at `+ param_1 * 8 + 0x14`,
+// translation at `+ param_1 * 8 + 0x2c` and scale at `+ param_1 * 0x10 + 0x44`, and SetFighterAuraPassColor
 // reads the first index at `+ param_1 + 6` and the count at `+ param_1 + 9`. Substituting
 // param_1 = 0, 1, 2 into all five expressions reproduces exactly the offsets the six workers write,
 // with nothing left over and nothing missing. That is the whole evidence for calling it a layer
@@ -89,12 +89,12 @@ internal static class SceneGeometry
 
     // GHIDRA: DAT_8008da48 @ 0x8008DA48 (VS.EXE)
     // ADDRESS ONLY. The storage is VS_EXE/FighterSetup.cs's `DAT_8008da48` byte[0xB610], and that
-    // file is its one declaration. This constant exists because FUN_800340a8 does pointer
+    // file is its one declaration. This constant exists because UpdateFighterAura does pointer
     // arithmetic on the block's ADDRESS (`&DAT_8008da48 + i * 0x1e58`) and hands the result to five
     // callees as a pointer, so the record has to be an address here, not an array index.
     private const int Dat8008da48Address = unchecked((int)0x8008DA48);
 
-    // The literal Ghidra prints as `-0x7ff74410` in FUN_800340a8's search loop, kept as the image's
+    // The literal Ghidra prints as `-0x7ff74410` in UpdateFighterAura's search loop, kept as the image's
     // own constant rather than folded into the base. 0x8008BBF0 + 0xB610 = 0x80097200 = record 5.
     private const int SearchBase8008bbf0 = unchecked((int)0x8008BBF0);
 
@@ -157,7 +157,7 @@ internal static class SceneGeometry
     };
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: same bridge, for the four SVECTORs FUN_80033c64 stages on its own STACK rather than
+    // RELATION: same bridge, for the four SVECTORs RenderFighterAuraPass stages on its own STACK rather than
     // in PSX RAM. The stack block is modelled as a byte[] so that RotTransPers -- whose C# entry
     // point is buffer-and-offset -- and RotAverage4 -- whose C# entry point is SVECTOR objects --
     // can both be fed from the one piece of storage the console has there.
@@ -173,8 +173,8 @@ internal static class SceneGeometry
     // THE ENTRY POINT
     // =====================================================================================
 
-    // GHIDRA: FUN_800340a8 @ 0x800340A8 (VS.EXE)
-    // 1764 bytes, 0x800340A8..0x8003478B. One caller: FighterMotion.FUN_8004fd24 at 0x8004FFCC,
+    // GHIDRA: UpdateFighterAura @ 0x800340A8 (VS.EXE)
+    // 1764 bytes, 0x800340A8..0x8003478B. One caller: FighterMotion.DriveFighterAura at 0x8004FFCC,
     // whose own note already lists all seven arguments verified against the marshalling.
     //
     // CLASH DECLARED RATHER THAN HIDDEN. VS_EXE/FighterMotion.cs carries a PRIVATE, deliberately
@@ -182,16 +182,30 @@ internal static class SceneGeometry
     // stub and this body are now two declarations of 0x800340A8, which is exactly the defect
     // custom-tools/scripts/check_function_addresses.py exists to catch -- and C# would bind
     // FighterMotion's own unqualified call to its own private stub, so the stub would silently win.
-    // Removing it and repointing that call at SceneGeometry.FUN_800340a8 can only be done in
+    // Removing it and repointing that call at SceneGeometry.UpdateFighterAura can only be done in
     // FighterMotion.cs, which this slice is not allowed to edit. It is reported upward instead.
     //
-    // THE SEARCH KEY is `param_1 & 0xff | (param_2 & 0xff) << 0x10` compared against the record's
-    // own first word. param_1 is the halfword at the running task node and param_2 the fighter's
-    // slot index, so a record belongs to one (task, slot) pair. The scan runs record 5 down to
-    // record 0 and answers -1 when none matches -- the ONLY early return in the function besides
-    // state 0 (case 1 of the switch).
-    internal static uint FUN_800340a8(uint param_1, uint param_2, int param_3, int param_4,
-        byte param_5, int param_6, int param_7)
+    // THE RECORD IS A FighterAuraRecord (0x1E58 bytes, docs/types/DbzLegendsTypes.h): the six at
+    // g_FighterAuras / DAT_8008DA48 are the fighters' auras. The search key is
+    // `characterId & 0xff | (slotIndex & 0xff) << 0x10` compared against the record's own first
+    // word (its characterId/slotIndex halfwords, written by AllocFighterAura and re-keyed by
+    // BuildFighterAuraPrimitives); characterId is the running task node's id, which
+    // ActivateFighterInSlot sets to the character id. The scan runs record 5 down to record 0 and
+    // answers -1 when none matches -- the ONLY early return besides phase 0 (case 1 of the switch).
+    //
+    // WHAT IT DRIVES. The aura's phase byte (+0x04: 0 idle, 1 begin, 2 running, 3 settling, 0xFF
+    // fading out) and its activePass (+0x10: 1 = the motion aura of template pass 1 plus the trail
+    // streaks of pass 0, oriented along the fighter's displacement through ratan2 into
+    // motionPitch/motionYaw at +0x1E4C and rolling by -0xA0 a frame; 2 = the upright aura of
+    // template pass 2, pitched -0x400, whose scale pops from scaleVelocity (+0x1E24) into
+    // scaleFactor (+0x1E34) until all three reach 0x1000). States 2..10, 0x1C and 0x2A select pass
+    // 1, every other state pass 2. keepAlive == 0 starts the fade (timer 10, pass colour 0x80);
+    // restart re-randomises scaleVelocity while pass 2 is in phase 2 or 3. fighterRot is handed to
+    // every phase function and read by none of them. The layout itself was read at the RENDERER,
+    // RenderFighterAuraPass: RotMatrix(rot[pass]), translation pos[pass], ScaleMatrix(scale[pass]),
+    // then RotAverage4 over vertices[i] (+0x14C4, 0x18 each) into prims[i] (+0x74, POLY_GT4).
+    internal static uint UpdateFighterAura(uint characterId, uint slotIndex, int fighterPos, int fighterRot,
+        byte stateOpcode, int keepAlive, int restart)
     {
         bool bVar1;
         int puVar2;
@@ -203,7 +217,7 @@ internal static class SceneGeometry
         int iVar8;
         uint uVar9;
 
-        // Ghidra's uVar10/uVar11/uVar12 -- the two arguments the switch hands FUN_80033c64, plus a
+        // Ghidra's uVar10/uVar11/uVar12 -- the two arguments the switch hands RenderFighterAuraPass, plus a
         // third the case-3 body reuses as a table temporary. Initialised here only because C#
         // demands definite assignment before the call below; on the console they are registers the
         // default arm simply leaves stale, and the default arm jumps PAST that call.
@@ -217,7 +231,7 @@ internal static class SceneGeometry
         uint uVar14;
 
         iVar8 = 6;
-        uVar14 = param_5;
+        uVar14 = stateOpcode;
         iVar3 = 0xb610;
         do
         {
@@ -231,7 +245,7 @@ internal static class SceneGeometry
             puVar2 = iVar3 + SearchBase8008bbf0;
             iVar3 = iVar3 + -0x1e58;
         }
-        while (PsxRam.ReadI32(puVar2) != (int)((param_1 & 0xff) | ((param_2 & 0xff) << 0x10)));
+        while (PsxRam.ReadI32(puVar2) != (int)((characterId & 0xff) | ((slotIndex & 0xff) << 0x10)));
 
         puVar13 = Dat8008da48Address + iVar8 * 0x1e58;
 
@@ -241,11 +255,11 @@ internal static class SceneGeometry
             goto switchD_80034438_caseD_1;
         }
 
-        // The re-arm. Only when the caller says param_7 (FighterMotion's local_c, the attack-state
+        // The re-arm. Only when the caller says restart (FighterMotion's local_c, the attack-state
         // flag), the record is on layer 2, and the state byte is 2 or 3 -- `(byte)(state - 2) < 2`
         // is UNSIGNED byte arithmetic, so it is exactly the set {2, 3}.
         bVar1 = false;
-        if ((param_7 != 0) && (PsxRam.ReadI32(puVar13 + 0x10) == 2))
+        if ((restart != 0) && (PsxRam.ReadI32(puVar13 + 0x10) == 2))
         {
             bVar1 = (byte)(PsxRam.ReadU8(puVar13 + 4) - 2) < 2;
         }
@@ -281,7 +295,7 @@ internal static class SceneGeometry
             iVar3 = 2;
         }
 
-        if (param_6 == 0)
+        if (keepAlive == 0)
         {
             // `1 < (byte)((char)state + 1)`: the state byte read SIGNED, plus one, truncated to a
             // byte, compared unsigned. 0xFF gives 0 and 0 gives 1, so this is "state is 1, 2 or 3".
@@ -296,7 +310,7 @@ internal static class SceneGeometry
                 PsxRam.WriteU8(puVar13 + 4, 0xff);
                 PsxRam.WriteU16(puVar13 + 0x0c, 10);
                 PsxRam.WriteU16(puVar13 + 0x0e, 0);
-                FUN_800322d0((int)uVar10, puVar13, 0x80, 0x80, 0x80);
+                SetFighterAuraPassColor((int)uVar10, puVar13, 0x80, 0x80, 0x80);
             }
         }
         else if (iVar3 == 1)
@@ -312,7 +326,7 @@ internal static class SceneGeometry
                 PsxRam.WriteU16(puVar13 + 0x12, 0);
             }
 
-            // Five (this frame's param_5, last frame's param_5) pairs, each firing when the value
+            // Five (this frame's stateOpcode, last frame's stateOpcode) pairs, each firing when the value
             // has just CHANGED TO one of 2, 10, 6, 0x2A, 0x1C. The stored copy is +0x1E54, which
             // this function's own tail stamps. Reproduced in the original's order.
             else if ((((uVar14 == 2) && (PsxRam.ReadI32(puVar13 + 0x1e54) != 2))
@@ -356,12 +370,12 @@ internal static class SceneGeometry
                 // instead, and the arm would have picked the wrong worker for the whole of state 0.
                 if (PsxRam.ReadI32(puVar13 + 0x10) == 2)
                 {
-                    uVar10 = FUN_800338e0(puVar13, param_4, param_3);
+                    uVar10 = FadeOutUprightAura(puVar13, fighterRot, fighterPos);
                     uVar11 = 2;
                 }
                 else
                 {
-                    uVar10 = FUN_80033564(puVar13, param_4, param_3);
+                    uVar10 = FadeOutMotionAura(puVar13, fighterRot, fighterPos);
                     uVar11 = 1;
                 }
 
@@ -373,12 +387,12 @@ internal static class SceneGeometry
             case 2:
                 if (PsxRam.ReadI32(puVar13 + 0x10) == 2)
                 {
-                    uVar10 = FUN_80032c24(puVar13, param_4, param_3);
+                    uVar10 = BeginUprightAura(puVar13, fighterRot, fighterPos);
                     uVar11 = 2;
                 }
                 else
                 {
-                    uVar10 = FUN_800326ac(puVar13, param_4, param_3);
+                    uVar10 = BeginMotionAura(puVar13, fighterRot, fighterPos);
                     uVar11 = 1;
                 }
 
@@ -399,13 +413,13 @@ internal static class SceneGeometry
                 // equal on all three axes -> skip; equal on X but not on Y or Z -> recompute lVar4
                 // then run the angle block; X different -> run the angle block with the lVar4
                 // computed above.
-                lVar4 = (short)PsxRam.ReadU16(param_3) - (short)PsxRam.ReadU16(puVar13 + 0x1e44);
-                if ((short)PsxRam.ReadU16(puVar13 + 0x1e44) == (short)PsxRam.ReadU16(param_3))
+                lVar4 = (short)PsxRam.ReadU16(fighterPos) - (short)PsxRam.ReadU16(puVar13 + 0x1e44);
+                if ((short)PsxRam.ReadU16(puVar13 + 0x1e44) == (short)PsxRam.ReadU16(fighterPos))
                 {
-                    if (((short)PsxRam.ReadU16(puVar13 + 0x1e46) != (short)PsxRam.ReadU16(param_3 + 2))
-                        || ((short)PsxRam.ReadU16(puVar13 + 0x1e48) != (short)PsxRam.ReadU16(param_3 + 4)))
+                    if (((short)PsxRam.ReadU16(puVar13 + 0x1e46) != (short)PsxRam.ReadU16(fighterPos + 2))
+                        || ((short)PsxRam.ReadU16(puVar13 + 0x1e48) != (short)PsxRam.ReadU16(fighterPos + 4)))
                     {
-                        lVar4 = (short)PsxRam.ReadU16(param_3) - (short)PsxRam.ReadU16(puVar13 + 0x1e44);
+                        lVar4 = (short)PsxRam.ReadU16(fighterPos) - (short)PsxRam.ReadU16(puVar13 + 0x1e44);
                         goto LAB_800344c4;
                     }
 
@@ -413,8 +427,8 @@ internal static class SceneGeometry
                 }
 
             LAB_800344c4:
-                iVar3 = (short)PsxRam.ReadU16(param_3 + 2) - (short)PsxRam.ReadU16(puVar13 + 0x1e46);
-                iVar8 = (short)PsxRam.ReadU16(param_3 + 4) - (short)PsxRam.ReadU16(puVar13 + 0x1e48);
+                iVar3 = (short)PsxRam.ReadU16(fighterPos + 2) - (short)PsxRam.ReadU16(puVar13 + 0x1e46);
+                iVar8 = (short)PsxRam.ReadU16(fighterPos + 4) - (short)PsxRam.ReadU16(puVar13 + 0x1e48);
                 lVar5 = LibGte.ratan2(-iVar3, iVar8);
                 PsxRam.WriteU16(puVar13 + 0x1e4c, (ushort)lVar5);
                 lVar5 = LibGte.SquareRoot0(iVar8 * iVar8 + iVar3 * iVar3);
@@ -426,15 +440,15 @@ internal static class SceneGeometry
 
                 if (PsxRam.ReadI32(puVar13 + 0x10) == 2)
                 {
-                    uVar10 = FUN_80033020(puVar13, param_4, param_3);
+                    uVar10 = UpdateUprightAura(puVar13, fighterRot, fighterPos);
                     uVar11 = 2;
                 }
                 else
                 {
                     // The layer-1 path of state 3 is the only place in this cluster that renders
                     // TWO layers in one frame: it fills layer 1, submits layer 1 through
-                    // FUN_80033c64(1, ...), then copies layer 1 down into layer 0 and lets the
-                    // switch's shared tail submit layer 0 through FUN_80033c64(0, ...).
+                    // RenderFighterAuraPass(1, ...), then copies layer 1 down into layer 0 and lets the
+                    // switch's shared tail submit layer 0 through RenderFighterAuraPass(0, ...).
                     PsxRam.WriteU16(puVar13 + 0x1c, PsxRam.ReadU16(puVar13 + 0x1e4c));
                     PsxRam.WriteU16(puVar13 + 0x1e, (ushort)(PsxRam.ReadU16(puVar13 + 0x1e4e) & 0xfff));
 
@@ -445,10 +459,10 @@ internal static class SceneGeometry
                         PsxRam.WriteU16(puVar13 + 0x20, (ushort)uVar6);
                     }
 
-                    // Aligned word copy -- see the file header on lwl/lwr. param_3[0..3] into the
+                    // Aligned word copy -- see the file header on lwl/lwr. fighterPos[0..3] into the
                     // layer-1 translation slot.
-                    uVar7 = (uint)PsxRam.ReadI32(param_3);
-                    uVar9 = (uint)PsxRam.ReadI32(param_3 + 4);
+                    uVar7 = (uint)PsxRam.ReadI32(fighterPos);
+                    uVar9 = (uint)PsxRam.ReadI32(fighterPos + 4);
                     PsxRam.WriteI32(puVar13 + 0x34, (int)uVar7);
                     PsxRam.WriteI32(puVar13 + 0x38, (int)uVar9);
 
@@ -467,7 +481,7 @@ internal static class SceneGeometry
                     PsxRam.WriteI32(puVar13 + 0x5c, (int)uVar11);
                     PsxRam.WriteI32(puVar13 + 0x60, (int)uVar12);
 
-                    FUN_80033c64(1, puVar13, 0);
+                    RenderFighterAuraPass(1, puVar13, 0);
 
                     // Layer 1 down into layer 0: rotation 0x1C -> 0x14, translation 0x34 -> 0x2C,
                     // and only the FIRST TWO words of the scale quad, 0x54/0x58 -> 0x44/0x48. The
@@ -506,7 +520,7 @@ internal static class SceneGeometry
                 break;
 
             case 4:
-                uVar10 = FUN_80033210(puVar13, param_4, param_3, uVar14);
+                uVar10 = SettleUprightAura(puVar13, fighterRot, fighterPos, uVar14);
                 uVar11 = 2;
                 break;
 
@@ -514,15 +528,15 @@ internal static class SceneGeometry
                 goto switchD_80034438_default;
         }
 
-        FUN_80033c64((int)uVar11, puVar13, (int)uVar10);
+        RenderFighterAuraPass((int)uVar11, puVar13, (int)uVar10);
 
     switchD_80034438_default:
 
         // The tail every path but the two early returns reaches. Ghidra seeds these two aligned
-        // word loads with the (v0, v1) pair FUN_80033c64 left behind -- FUN_80033c64 returns void,
+        // word loads with the (v0, v1) pair RenderFighterAuraPass left behind -- RenderFighterAuraPass returns void,
         // so that pair is garbage, and it is dead for the reason the file header gives.
-        uVar7 = (uint)PsxRam.ReadI32(param_3);
-        uVar9 = (uint)PsxRam.ReadI32(param_3 + 4);
+        uVar7 = (uint)PsxRam.ReadI32(fighterPos);
+        uVar9 = (uint)PsxRam.ReadI32(fighterPos + 4);
         PsxRam.WriteI32(puVar13 + 0x1e44, (int)uVar7);
         PsxRam.WriteI32(puVar13 + 0x1e48, (int)uVar9);
         PsxRam.WriteI32(puVar13 + 0x1e54, (int)uVar14);
@@ -536,8 +550,8 @@ internal static class SceneGeometry
     // THE SIX PER-STATE WORKERS
     // =====================================================================================
 
-    // GHIDRA: FUN_800326ac @ 0x800326AC (VS.EXE)
-    // 1400 bytes, 0x800326AC..0x80032C23. One caller: FUN_800340a8's state-2 layer-1 arm.
+    // GHIDRA: BeginMotionAura @ 0x800326AC (VS.EXE)
+    // 1400 bytes, 0x800326AC..0x80032C23. One caller: UpdateFighterAura's state-2 layer-1 arm.
     //
     // THREE PATHS, and which one runs is decided before anything is written:
     //   * the VM is globally paused (AnimVm.DAT_800b305a bit 0) -- refresh the transform from the
@@ -555,7 +569,7 @@ internal static class SceneGeometry
     // char, written into all twelve RGB bytes of each primitive in the layer-1 range. It is
     // recomputed INSIDE the loop on every iteration although it does not depend on the iteration --
     // the original does that, and hoisting it would be an optimisation.
-    internal static uint FUN_800326ac(int param_1, int param_2, int param_3)
+    internal static uint BeginMotionAura(int aura, int fighterRot, int fighterPos)
     {
         ushort uVar1;
         byte cVar3;
@@ -573,39 +587,39 @@ internal static class SceneGeometry
         int uVar14;
         int uVar15;
 
-        _ = param_2;
+        _ = fighterRot;
 
         if ((AnimVm.DAT_800b305a & 1) != 0)
         {
-            PsxRam.WriteU16(param_1 + 0x1c, 0);
-            PsxRam.WriteU16(param_1 + 0x1e, 0);
+            PsxRam.WriteU16(aura + 0x1c, 0);
+            PsxRam.WriteU16(aura + 0x1e, 0);
 
-            uVar5 = (uint)PsxRam.ReadI32(param_3);
-            uVar9 = (uint)PsxRam.ReadI32(param_3 + 4);
-            PsxRam.WriteI32(param_1 + 0x34, (int)uVar5);
-            PsxRam.WriteI32(param_1 + 0x38, (int)uVar9);
+            uVar5 = (uint)PsxRam.ReadI32(fighterPos);
+            uVar9 = (uint)PsxRam.ReadI32(fighterPos + 4);
+            PsxRam.WriteI32(aura + 0x34, (int)uVar5);
+            PsxRam.WriteI32(aura + 0x38, (int)uVar9);
 
-            uVar4 = PsxRam.ReadU8(param_1 + 7);
-            uVar9 = uVar4 + PsxRam.ReadU8(param_1 + 0x0a);
-            PsxRam.WriteU16(param_1 + 0x36, (ushort)((short)PsxRam.ReadU16(param_1 + 0x36)
-                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(param_1) * 4)));
-            PsxRam.WriteI32(param_1 + 0x54, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(param_1) * 0x10));
-            PsxRam.WriteI32(param_1 + 0x58, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(param_1) * 0x10));
-            PsxRam.WriteI32(param_1 + 0x5c, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(param_1) * 0x10));
+            uVar4 = PsxRam.ReadU8(aura + 7);
+            uVar9 = uVar4 + PsxRam.ReadU8(aura + 0x0a);
+            PsxRam.WriteU16(aura + 0x36, (ushort)((short)PsxRam.ReadU16(aura + 0x36)
+                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(aura) * 4)));
+            PsxRam.WriteI32(aura + 0x54, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(aura) * 0x10));
+            PsxRam.WriteI32(aura + 0x58, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(aura) * 0x10));
+            PsxRam.WriteI32(aura + 0x5c, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(aura) * 0x10));
 
             if (uVar9 <= uVar4)
             {
                 return 1;
             }
 
-            puVar11 = param_1 + (int)(uVar4 * 0x34);
+            puVar11 = aura + (int)(uVar4 * 0x34);
             do
             {
                 uVar4 = uVar4 + 1;
-                cVar3 = (byte)((3 - (sbyte)PsxRam.ReadI32(param_1 + 0x0c)) * 0x20 + 0x40);
+                cVar3 = (byte)((3 - (sbyte)PsxRam.ReadI32(aura + 0x0c)) * 0x20 + 0x40);
                 PsxRam.WriteU8(puVar11 + 0x78, cVar3);
                 PsxRam.WriteU8(puVar11 + 0x79, cVar3);
                 PsxRam.WriteU8(puVar11 + 0x7a, cVar3);
@@ -625,41 +639,41 @@ internal static class SceneGeometry
             return 1;
         }
 
-        iVar6 = PsxRam.ReadI32(param_1 + 0x0c);
-        PsxRam.WriteI32(param_1 + 0x0c, iVar6 + -1);
+        iVar6 = PsxRam.ReadI32(aura + 0x0c);
+        PsxRam.WriteI32(aura + 0x0c, iVar6 + -1);
         if (-1 < iVar6 + -1)
         {
-            uVar1 = PsxRam.ReadU16(param_1 + 0x20);
-            PsxRam.WriteU16(param_1 + 0x1c, 0);
-            PsxRam.WriteU16(param_1 + 0x1e, 0);
-            PsxRam.WriteU16(param_1 + 0x20, (ushort)(uVar1 - 0xa0));
+            uVar1 = PsxRam.ReadU16(aura + 0x20);
+            PsxRam.WriteU16(aura + 0x1c, 0);
+            PsxRam.WriteU16(aura + 0x1e, 0);
+            PsxRam.WriteU16(aura + 0x20, (ushort)(uVar1 - 0xa0));
 
-            uVar5 = (uint)PsxRam.ReadI32(param_3);
-            uVar9 = (uint)PsxRam.ReadI32(param_3 + 4);
-            PsxRam.WriteI32(param_1 + 0x34, (int)uVar5);
-            PsxRam.WriteI32(param_1 + 0x38, (int)uVar9);
+            uVar5 = (uint)PsxRam.ReadI32(fighterPos);
+            uVar9 = (uint)PsxRam.ReadI32(fighterPos + 4);
+            PsxRam.WriteI32(aura + 0x34, (int)uVar5);
+            PsxRam.WriteI32(aura + 0x38, (int)uVar9);
 
-            uVar4 = PsxRam.ReadU8(param_1 + 7);
-            uVar9 = uVar4 + PsxRam.ReadU8(param_1 + 0x0a);
-            PsxRam.WriteU16(param_1 + 0x36, (ushort)((short)PsxRam.ReadU16(param_1 + 0x36)
-                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(param_1) * 4)));
-            PsxRam.WriteI32(param_1 + 0x54, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(param_1) * 0x10));
-            PsxRam.WriteI32(param_1 + 0x58, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(param_1) * 0x10));
-            PsxRam.WriteI32(param_1 + 0x5c, (3 - PsxRam.ReadI32(param_1 + 0x0c)) * 500
-                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(param_1) * 0x10));
+            uVar4 = PsxRam.ReadU8(aura + 7);
+            uVar9 = uVar4 + PsxRam.ReadU8(aura + 0x0a);
+            PsxRam.WriteU16(aura + 0x36, (ushort)((short)PsxRam.ReadU16(aura + 0x36)
+                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(aura) * 4)));
+            PsxRam.WriteI32(aura + 0x54, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(aura) * 0x10));
+            PsxRam.WriteI32(aura + 0x58, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(aura) * 0x10));
+            PsxRam.WriteI32(aura + 0x5c, (3 - PsxRam.ReadI32(aura + 0x0c)) * 500
+                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(aura) * 0x10));
 
             if (uVar9 <= uVar4)
             {
                 return 1;
             }
 
-            puVar11 = param_1 + (int)(uVar4 * 0x34);
+            puVar11 = aura + (int)(uVar4 * 0x34);
             do
             {
                 uVar4 = uVar4 + 1;
-                cVar3 = (byte)((3 - (sbyte)PsxRam.ReadI32(param_1 + 0x0c)) * 0x20 + 0x40);
+                cVar3 = (byte)((3 - (sbyte)PsxRam.ReadI32(aura + 0x0c)) * 0x20 + 0x40);
                 PsxRam.WriteU8(puVar11 + 0x78, cVar3);
                 PsxRam.WriteU8(puVar11 + 0x79, cVar3);
                 PsxRam.WriteU8(puVar11 + 0x7a, cVar3);
@@ -679,33 +693,33 @@ internal static class SceneGeometry
             return 1;
         }
 
-        PsxRam.WriteU8(param_1 + 4, 2);
-        iVar6 = (short)PsxRam.ReadU16(param_3);
+        PsxRam.WriteU8(aura + 4, 2);
+        iVar6 = (short)PsxRam.ReadU16(fighterPos);
         uVar9 = 0;
-        if ((short)PsxRam.ReadU16(param_1 + 0x1e44) == iVar6)
+        if ((short)PsxRam.ReadU16(aura + 0x1e44) == iVar6)
         {
-            if ((short)PsxRam.ReadU16(param_1 + 0x1e46) == (short)PsxRam.ReadU16(param_3 + 2))
+            if ((short)PsxRam.ReadU16(aura + 0x1e46) == (short)PsxRam.ReadU16(fighterPos + 2))
             {
-                uVar4 = (uint)(short)PsxRam.ReadU16(param_1 + 0x1e48);
-                uVar9 = (uint)(short)PsxRam.ReadU16(param_3 + 4);
+                uVar4 = (uint)(short)PsxRam.ReadU16(aura + 0x1e48);
+                uVar9 = (uint)(short)PsxRam.ReadU16(fighterPos + 4);
                 if (uVar4 == uVar9)
                 {
                     goto LAB_80032938;
                 }
             }
 
-            iVar6 = (short)PsxRam.ReadU16(param_3);
+            iVar6 = (short)PsxRam.ReadU16(fighterPos);
         }
 
-        uVar1 = PsxRam.ReadU16(param_1 + 0x1e44);
-        iVar12 = (short)PsxRam.ReadU16(param_3 + 2) - (short)PsxRam.ReadU16(param_1 + 0x1e46);
-        x = (short)PsxRam.ReadU16(param_3 + 4) - (short)PsxRam.ReadU16(param_1 + 0x1e48);
+        uVar1 = PsxRam.ReadU16(aura + 0x1e44);
+        iVar12 = (short)PsxRam.ReadU16(fighterPos + 2) - (short)PsxRam.ReadU16(aura + 0x1e46);
+        x = (short)PsxRam.ReadU16(fighterPos + 4) - (short)PsxRam.ReadU16(aura + 0x1e48);
         lVar7 = LibGte.ratan2(-iVar12, x);
-        PsxRam.WriteU16(param_1 + 0x1e4c, (ushort)lVar7);
+        PsxRam.WriteU16(aura + 0x1e4c, (ushort)lVar7);
         uVar4 = (uint)(x * x);
         lVar7 = LibGte.SquareRoot0((int)uVar4 + iVar12 * iVar12);
         uVar9 = (uint)LibGte.ratan2(iVar6 - (short)uVar1, lVar7);
-        PsxRam.WriteU16(param_1 + 0x1e4e, (ushort)uVar9);
+        PsxRam.WriteU16(aura + 0x1e4e, (ushort)uVar9);
 
     LAB_80032938:
         _ = uVar9;
@@ -713,48 +727,48 @@ internal static class SceneGeometry
         // Two aligned word copies: the angle pair at +0x1E4C/+0x1E50 becomes layer 1's rotation
         // slot at +0x1C/+0x20. Reached with uVar9 stale when the position had not moved -- dead,
         // because it is only an lwl seed.
-        uVar8 = (uint)PsxRam.ReadI32(param_1 + 0x1e4c);
-        uVar10 = (uint)PsxRam.ReadI32(param_1 + 0x1e50);
-        PsxRam.WriteI32(param_1 + 0x1c, (int)uVar8);
-        PsxRam.WriteI32(param_1 + 0x20, (int)uVar10);
+        uVar8 = (uint)PsxRam.ReadI32(aura + 0x1e4c);
+        uVar10 = (uint)PsxRam.ReadI32(aura + 0x1e50);
+        PsxRam.WriteI32(aura + 0x1c, (int)uVar8);
+        PsxRam.WriteI32(aura + 0x20, (int)uVar10);
 
-        uVar5 = (uint)PsxRam.ReadI32(param_3);
-        uVar9 = (uint)PsxRam.ReadI32(param_3 + 4);
-        PsxRam.WriteI32(param_1 + 0x34, (int)uVar5);
-        PsxRam.WriteI32(param_1 + 0x38, (int)uVar9);
+        uVar5 = (uint)PsxRam.ReadI32(fighterPos);
+        uVar9 = (uint)PsxRam.ReadI32(fighterPos + 4);
+        PsxRam.WriteI32(aura + 0x34, (int)uVar5);
+        PsxRam.WriteI32(aura + 0x38, (int)uVar9);
 
-        iVar6 = PsxRam.ReadU16(param_1) * 0x10;
-        PsxRam.WriteU16(param_1 + 0x36, (ushort)((short)PsxRam.ReadU16(param_1 + 0x36)
-            - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(param_1) * 4)));
+        iVar6 = PsxRam.ReadU16(aura) * 0x10;
+        PsxRam.WriteU16(aura + 0x36, (ushort)((short)PsxRam.ReadU16(aura + 0x36)
+            - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(aura) * 4)));
         uVar13 = PsxRam.ReadI32(Dat800812fcAddress + iVar6);
         uVar14 = PsxRam.ReadI32(Dat80081300Address + iVar6);
         uVar15 = PsxRam.ReadI32(Dat80081304Address + iVar6);
-        PsxRam.WriteI32(param_1 + 0x54, PsxRam.ReadI32(Dat800812f8Address + iVar6));
-        PsxRam.WriteI32(param_1 + 0x58, uVar13);
-        PsxRam.WriteI32(param_1 + 0x5c, uVar14);
-        PsxRam.WriteI32(param_1 + 0x60, uVar15);
+        PsxRam.WriteI32(aura + 0x54, PsxRam.ReadI32(Dat800812f8Address + iVar6));
+        PsxRam.WriteI32(aura + 0x58, uVar13);
+        PsxRam.WriteI32(aura + 0x5c, uVar14);
+        PsxRam.WriteI32(aura + 0x60, uVar15);
 
-        uVar4 = PsxRam.ReadU8(param_1 + 7);
-        uVar9 = uVar4 + PsxRam.ReadU8(param_1 + 0x0a);
+        uVar4 = PsxRam.ReadU8(aura + 7);
+        uVar9 = uVar4 + PsxRam.ReadU8(aura + 0x0a);
         if (uVar4 < uVar9)
         {
-            param_1 = param_1 + (int)(uVar4 * 0x34);
+            aura = aura + (int)(uVar4 * 0x34);
             do
             {
-                PsxRam.WriteU8(param_1 + 0x78, 0x60);
-                PsxRam.WriteU8(param_1 + 0x79, 0x60);
-                PsxRam.WriteU8(param_1 + 0x7a, 0x60);
-                PsxRam.WriteU8(param_1 + 0x84, 0x60);
-                PsxRam.WriteU8(param_1 + 0x85, 0x60);
-                PsxRam.WriteU8(param_1 + 0x86, 0x60);
-                PsxRam.WriteU8(param_1 + 0x90, 0x60);
-                PsxRam.WriteU8(param_1 + 0x91, 0x60);
-                PsxRam.WriteU8(param_1 + 0x92, 0x60);
-                PsxRam.WriteU8(param_1 + 0x9c, 0x60);
-                PsxRam.WriteU8(param_1 + 0x9d, 0x60);
-                PsxRam.WriteU8(param_1 + 0x9e, 0x60);
+                PsxRam.WriteU8(aura + 0x78, 0x60);
+                PsxRam.WriteU8(aura + 0x79, 0x60);
+                PsxRam.WriteU8(aura + 0x7a, 0x60);
+                PsxRam.WriteU8(aura + 0x84, 0x60);
+                PsxRam.WriteU8(aura + 0x85, 0x60);
+                PsxRam.WriteU8(aura + 0x86, 0x60);
+                PsxRam.WriteU8(aura + 0x90, 0x60);
+                PsxRam.WriteU8(aura + 0x91, 0x60);
+                PsxRam.WriteU8(aura + 0x92, 0x60);
+                PsxRam.WriteU8(aura + 0x9c, 0x60);
+                PsxRam.WriteU8(aura + 0x9d, 0x60);
+                PsxRam.WriteU8(aura + 0x9e, 0x60);
                 uVar4 = uVar4 + 1;
-                param_1 = param_1 + 0x34;
+                aura = aura + 0x34;
             }
             while ((int)uVar4 < (int)uVar9);
         }
@@ -762,8 +776,8 @@ internal static class SceneGeometry
         return 0;
     }
 
-    // GHIDRA: FUN_80032c24 @ 0x80032C24 (VS.EXE)
-    // 628 bytes, 0x80032C24..0x80032E97. One caller: FUN_800340a8's state-2 layer-2 arm.
+    // GHIDRA: BeginUprightAura @ 0x80032C24 (VS.EXE)
+    // 628 bytes, 0x80032C24..0x80032E97. One caller: UpdateFighterAura's state-2 layer-2 arm.
     //
     // NO GATE AT ALL -- this one runs its whole body unconditionally, which is what separates it
     // from every other worker here. It arms state 3: the three scales go to 0x11F4, the three
@@ -777,7 +791,7 @@ internal static class SceneGeometry
     // and packet[start + 4k]'s SECOND RGB -- an irregular pattern that the tint loop above does not
     // produce and does not undo. It is reproduced literally, statement for statement, precisely
     // because no rule was found that would let it be written as a loop honestly.
-    internal static uint FUN_80032c24(int param_1, int param_2, int param_3)
+    internal static uint BeginUprightAura(int aura, int fighterRot, int fighterPos)
     {
         uint uVar2;
         int iVar3;
@@ -788,48 +802,48 @@ internal static class SceneGeometry
         int uVar8;
         int uVar9;
 
-        _ = param_2;
+        _ = fighterRot;
 
-        PsxRam.WriteU8(param_1 + 4, 3);
-        PsxRam.WriteU16(param_1 + 0x1e34, 0x11f4);
-        PsxRam.WriteU16(param_1 + 0x1e36, 0);
-        PsxRam.WriteU16(param_1 + 0x1e38, 0x11f4);
-        PsxRam.WriteU16(param_1 + 0x1e3a, 0);
-        PsxRam.WriteU16(param_1 + 0x1e3c, 0x11f4);
-        PsxRam.WriteU16(param_1 + 0x1e3e, 0);
-        PsxRam.WriteU16(param_1 + 0x1e24, 1000);
-        PsxRam.WriteU16(param_1 + 0x1e26, 0);
-        PsxRam.WriteU16(param_1 + 0x1e28, 1000);
-        PsxRam.WriteU16(param_1 + 0x1e2a, 0);
-        PsxRam.WriteU16(param_1 + 0x1e2c, 600);
-        PsxRam.WriteU16(param_1 + 0x1e2e, 0);
-        PsxRam.WriteU16(param_1 + 0x0c, 0);
-        PsxRam.WriteU16(param_1 + 0x0e, 0);
-        PsxRam.WriteU16(param_1 + 0x24, 0xfc00);
-        PsxRam.WriteU16(param_1 + 0x26, 0);
-        PsxRam.WriteU16(param_1 + 0x28, 0);
+        PsxRam.WriteU8(aura + 4, 3);
+        PsxRam.WriteU16(aura + 0x1e34, 0x11f4);
+        PsxRam.WriteU16(aura + 0x1e36, 0);
+        PsxRam.WriteU16(aura + 0x1e38, 0x11f4);
+        PsxRam.WriteU16(aura + 0x1e3a, 0);
+        PsxRam.WriteU16(aura + 0x1e3c, 0x11f4);
+        PsxRam.WriteU16(aura + 0x1e3e, 0);
+        PsxRam.WriteU16(aura + 0x1e24, 1000);
+        PsxRam.WriteU16(aura + 0x1e26, 0);
+        PsxRam.WriteU16(aura + 0x1e28, 1000);
+        PsxRam.WriteU16(aura + 0x1e2a, 0);
+        PsxRam.WriteU16(aura + 0x1e2c, 600);
+        PsxRam.WriteU16(aura + 0x1e2e, 0);
+        PsxRam.WriteU16(aura + 0x0c, 0);
+        PsxRam.WriteU16(aura + 0x0e, 0);
+        PsxRam.WriteU16(aura + 0x24, 0xfc00);
+        PsxRam.WriteU16(aura + 0x26, 0);
+        PsxRam.WriteU16(aura + 0x28, 0);
 
-        uVar2 = (uint)PsxRam.ReadI32(param_3);
-        uVar5 = (uint)PsxRam.ReadI32(param_3 + 4);
-        PsxRam.WriteI32(param_1 + 0x3c, (int)uVar2);
-        PsxRam.WriteI32(param_1 + 0x40, (int)uVar5);
+        uVar2 = (uint)PsxRam.ReadI32(fighterPos);
+        uVar5 = (uint)PsxRam.ReadI32(fighterPos + 4);
+        PsxRam.WriteI32(aura + 0x3c, (int)uVar2);
+        PsxRam.WriteI32(aura + 0x40, (int)uVar5);
 
-        iVar3 = PsxRam.ReadU16(param_1) * 0x10;
-        PsxRam.WriteU16(param_1 + 0x3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x3e)
-            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(param_1) * 4)));
+        iVar3 = PsxRam.ReadU16(aura) * 0x10;
+        PsxRam.WriteU16(aura + 0x3e, (ushort)((short)PsxRam.ReadU16(aura + 0x3e)
+            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(aura) * 4)));
         uVar7 = PsxRam.ReadI32(Dat8008156cAddress + iVar3);
         uVar8 = PsxRam.ReadI32(Dat80081570Address + iVar3);
         uVar9 = PsxRam.ReadI32(Dat80081574Address + iVar3);
-        PsxRam.WriteI32(param_1 + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar3));
-        PsxRam.WriteI32(param_1 + 0x68, uVar7);
-        PsxRam.WriteI32(param_1 + 0x6c, uVar8);
-        PsxRam.WriteI32(param_1 + 0x70, uVar9);
+        PsxRam.WriteI32(aura + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar3));
+        PsxRam.WriteI32(aura + 0x68, uVar7);
+        PsxRam.WriteI32(aura + 0x6c, uVar8);
+        PsxRam.WriteI32(aura + 0x70, uVar9);
 
-        uVar4 = PsxRam.ReadU8(param_1 + 8);
-        uVar5 = uVar4 + PsxRam.ReadU8(param_1 + 0x0b);
+        uVar4 = PsxRam.ReadU8(aura + 8);
+        uVar5 = uVar4 + PsxRam.ReadU8(aura + 0x0b);
         if (uVar4 < uVar5)
         {
-            puVar6 = param_1 + (int)(uVar4 * 0x34);
+            puVar6 = aura + (int)(uVar4 * 0x34);
             do
             {
                 PsxRam.WriteU8(puVar6 + 0x78, 0x60);
@@ -850,83 +864,83 @@ internal static class SceneGeometry
             while ((int)uVar4 < (int)uVar5);
         }
 
-        uVar4 = PsxRam.ReadU8(param_1 + 8);
+        uVar4 = PsxRam.ReadU8(aura + 8);
         iVar3 = (int)(uVar4 * 0x34);
-        // The twenty RGB triples described in FUN_80032c24's own note, written out
+        // The twenty RGB triples described in BeginUprightAura's own note, written out
         // statement by statement in the original's order: ten at 0x114 + k * 0xD0 and then
         // ten at 0x84 + k * 0xD0, all relative to `record + first_primitive * 0x34`.
-        PsxRam.WriteU8(param_1 + iVar3 + 0x114, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x115, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x116, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x1e4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x1e5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x1e6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2b4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2b5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2b6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x384, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x385, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x386, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x454, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x455, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x456, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x524, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x525, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x526, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x5f4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x5f5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x5f6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x6c4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x6c5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x6c6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x794, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x795, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x796, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x864, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x865, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x866, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x84, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x85, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x86, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x154, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x155, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x156, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x224, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x225, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x226, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2f4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2f5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x2f6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x3c4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x3c5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x3c6, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x494, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x495, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x496, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x564, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x565, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x566, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x634, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x635, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x636, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x704, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x705, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x706, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x7d4, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x7d5, 0);
-        PsxRam.WriteU8(param_1 + iVar3 + 0x7d6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x114, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x115, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x116, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x1e4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x1e5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x1e6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2b4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2b5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2b6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x384, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x385, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x386, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x454, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x455, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x456, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x524, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x525, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x526, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x5f4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x5f5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x5f6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x6c4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x6c5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x6c6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x794, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x795, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x796, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x864, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x865, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x866, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x84, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x85, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x86, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x154, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x155, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x156, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x224, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x225, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x226, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2f4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2f5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x2f6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x3c4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x3c5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x3c6, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x494, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x495, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x496, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x564, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x565, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x566, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x634, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x635, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x636, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x704, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x705, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x706, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x7d4, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x7d5, 0);
+        PsxRam.WriteU8(aura + iVar3 + 0x7d6, 0);
         return 0;
     }
 
-    // GHIDRA: FUN_80033020 @ 0x80033020 (VS.EXE)
-    // 496 bytes, 0x80033020..0x8003320F. One caller: FUN_800340a8's state-3 layer-2 arm.
+    // GHIDRA: UpdateUprightAura @ 0x80033020 (VS.EXE)
+    // 496 bytes, 0x80033020..0x8003320F. One caller: UpdateFighterAura's state-3 layer-2 arm.
     //
     // The plainest of the six: layer 2's rotation head, the aligned copy of the caller's position
     // into layer 2's translation, the four-column table refresh into layer 2's scale quad, and the
-    // same twenty zeroed RGB triples FUN_80032c24 ends with. No countdown, no gate, no tint loop.
-    // It differs from FUN_80033210 below only in that it has no scale-decay stage and takes the
+    // same twenty zeroed RGB triples BeginUprightAura ends with. No countdown, no gate, no tint loop.
+    // It differs from SettleUprightAura below only in that it has no scale-decay stage and takes the
     // 0xA0 rotation step unconditionally rather than under the VM-paused gate for a second time.
-    internal static uint FUN_80033020(int param_1, int param_2, int param_3)
+    internal static uint UpdateUprightAura(int aura, int fighterRot, int fighterPos)
     {
         uint uVar2;
         uint uVar3;
@@ -936,111 +950,111 @@ internal static class SceneGeometry
         int uVar7;
         int uVar8;
 
-        _ = param_2;
+        _ = fighterRot;
 
-        PsxRam.WriteU16(param_1 + 0x24, 0xfc00);
-        PsxRam.WriteU16(param_1 + 0x26, 0);
+        PsxRam.WriteU16(aura + 0x24, 0xfc00);
+        PsxRam.WriteU16(aura + 0x26, 0);
         uVar2 = (uint)(AnimVm.DAT_800b305a & 1);
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            uVar2 = (uint)(PsxRam.ReadU16(param_1 + 0x28) - 0xa0);
-            PsxRam.WriteU16(param_1 + 0x28, (ushort)uVar2);
+            uVar2 = (uint)(PsxRam.ReadU16(aura + 0x28) - 0xa0);
+            PsxRam.WriteU16(aura + 0x28, (ushort)uVar2);
         }
 
-        uVar3 = (uint)PsxRam.ReadI32(param_3);
-        uVar5 = (uint)PsxRam.ReadI32(param_3 + 4);
-        PsxRam.WriteI32(param_1 + 0x3c, (int)uVar3);
-        PsxRam.WriteI32(param_1 + 0x40, (int)uVar5);
+        uVar3 = (uint)PsxRam.ReadI32(fighterPos);
+        uVar5 = (uint)PsxRam.ReadI32(fighterPos + 4);
+        PsxRam.WriteI32(aura + 0x3c, (int)uVar3);
+        PsxRam.WriteI32(aura + 0x40, (int)uVar5);
 
-        iVar4 = PsxRam.ReadU16(param_1) * 0x10;
-        PsxRam.WriteU16(param_1 + 0x3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x3e)
-            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(param_1) * 4)));
+        iVar4 = PsxRam.ReadU16(aura) * 0x10;
+        PsxRam.WriteU16(aura + 0x3e, (ushort)((short)PsxRam.ReadU16(aura + 0x3e)
+            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(aura) * 4)));
         uVar6 = PsxRam.ReadI32(Dat8008156cAddress + iVar4);
         uVar7 = PsxRam.ReadI32(Dat80081570Address + iVar4);
         uVar8 = PsxRam.ReadI32(Dat80081574Address + iVar4);
-        PsxRam.WriteI32(param_1 + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar4));
-        PsxRam.WriteI32(param_1 + 0x68, uVar6);
-        PsxRam.WriteI32(param_1 + 0x6c, uVar7);
-        PsxRam.WriteI32(param_1 + 0x70, uVar8);
+        PsxRam.WriteI32(aura + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar4));
+        PsxRam.WriteI32(aura + 0x68, uVar6);
+        PsxRam.WriteI32(aura + 0x6c, uVar7);
+        PsxRam.WriteI32(aura + 0x70, uVar8);
 
-        uVar2 = PsxRam.ReadU8(param_1 + 8);
+        uVar2 = PsxRam.ReadU8(aura + 8);
         iVar4 = (int)(uVar2 * 0x34);
-        // The twenty RGB triples described in FUN_80032c24's own note, written out
+        // The twenty RGB triples described in BeginUprightAura's own note, written out
         // statement by statement in the original's order: ten at 0x114 + k * 0xD0 and then
         // ten at 0x84 + k * 0xD0, all relative to `record + first_primitive * 0x34`.
-        PsxRam.WriteU8(param_1 + iVar4 + 0x114, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x115, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x116, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x384, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x385, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x386, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x454, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x455, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x456, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x524, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x525, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x526, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x794, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x795, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x796, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x864, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x865, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x866, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x84, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x85, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x86, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x154, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x155, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x156, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x224, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x225, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x226, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x494, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x495, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x496, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x564, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x565, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x566, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x634, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x635, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x636, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x704, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x705, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x706, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x114, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x115, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x116, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x384, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x385, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x386, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x454, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x455, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x456, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x524, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x525, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x526, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x794, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x795, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x796, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x864, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x865, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x866, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x84, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x85, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x86, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x154, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x155, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x156, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x224, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x225, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x226, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x494, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x495, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x496, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x564, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x565, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x566, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x634, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x635, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x636, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x704, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x705, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x706, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d6, 0);
         return 0;
     }
 
-    // GHIDRA: FUN_80033210 @ 0x80033210 (VS.EXE)
-    // 852 bytes, 0x80033210..0x80033563. One caller: FUN_800340a8's state-4 arm.
+    // GHIDRA: SettleUprightAura @ 0x80033210 (VS.EXE)
+    // 852 bytes, 0x80033210..0x80033563. One caller: UpdateFighterAura's state-4 arm.
     //
     // FOUR ARGUMENTS AT THE CALL SITE, THREE IN THE BODY. Ghidra prints
-    // `FUN_80033210(puVar13, param_4, param_3, uVar14)` at 0x800346E8 but decompiles the callee as
+    // `SettleUprightAura(puVar13, param_4, param_3, uVar14)` at 0x800346E8 but decompiles the callee as
     // three parameters, and reading the body confirms it: nothing reads a3. The fourth is kept on
     // this signature and discarded here so that the call site stays literal and so that a later
     // reader is not tempted to "fix" the caller by dropping an argument the image really passes.
     //
-    // WHAT IT DOES BEYOND FUN_80033020: the scale-decay stage. Each of the three scale components
+    // WHAT IT DOES BEYOND UpdateUprightAura: the scale-decay stage. Each of the three scale components
     // is multiplied by its own 0x1000-based scale factor with the C-style `+ 0xFFF` bias before an
     // arithmetic right shift by 12 -- the classic "round toward zero for negatives" idiom, kept as
     // an explicit branch because that is how the compiler emitted it. Then each of the three
@@ -1049,10 +1063,10 @@ internal static class SceneGeometry
     // snapped, the state byte goes to 2.
     //
     // NOTE THE CLAMP DIRECTION, because the arithmetic reads backwards at first glance: the scales
-    // start at 0x11F4 (FUN_80032c24) with POSITIVE velocities and the velocities decay by 300 per
+    // start at 0x11F4 (BeginUprightAura) with POSITIVE velocities and the velocities decay by 300 per
     // frame, so a scale rises, then falls once its velocity goes negative, and the floor at 0x1000
     // is what ends the state. The comparison is `< 0x1000`, signed, on the value AFTER the add.
-    internal static uint FUN_80033210(int param_1, int param_2, int param_3, uint param_4)
+    internal static uint SettleUprightAura(int aura, int fighterRot, int fighterPos, uint stateOpcode)
     {
         uint uVar2;
         uint uVar3;
@@ -1063,181 +1077,181 @@ internal static class SceneGeometry
         int uVar8;
         int uVar9;
 
-        _ = param_2;
-        _ = param_4;
+        _ = fighterRot;
+        _ = stateOpcode;
 
-        PsxRam.WriteU16(param_1 + 0x24, 0xfc00);
-        PsxRam.WriteU16(param_1 + 0x26, 0);
+        PsxRam.WriteU16(aura + 0x24, 0xfc00);
+        PsxRam.WriteU16(aura + 0x26, 0);
         uVar2 = (uint)(AnimVm.DAT_800b305a & 1);
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            uVar2 = (uint)(PsxRam.ReadU16(param_1 + 0x28) - 0xa0);
-            PsxRam.WriteU16(param_1 + 0x28, (ushort)uVar2);
+            uVar2 = (uint)(PsxRam.ReadU16(aura + 0x28) - 0xa0);
+            PsxRam.WriteU16(aura + 0x28, (ushort)uVar2);
         }
 
-        uVar3 = (uint)PsxRam.ReadI32(param_3);
-        uVar5 = (uint)PsxRam.ReadI32(param_3 + 4);
-        PsxRam.WriteI32(param_1 + 0x3c, (int)uVar3);
-        PsxRam.WriteI32(param_1 + 0x40, (int)uVar5);
+        uVar3 = (uint)PsxRam.ReadI32(fighterPos);
+        uVar5 = (uint)PsxRam.ReadI32(fighterPos + 4);
+        PsxRam.WriteI32(aura + 0x3c, (int)uVar3);
+        PsxRam.WriteI32(aura + 0x40, (int)uVar5);
 
-        PsxRam.WriteU16(param_1 + 0x3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x3e)
-            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(param_1) * 4)));
+        PsxRam.WriteU16(aura + 0x3e, (ushort)((short)PsxRam.ReadU16(aura + 0x3e)
+            - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(aura) * 4)));
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            iVar4 = PsxRam.ReadU16(param_1) * 0x10;
+            iVar4 = PsxRam.ReadU16(aura) * 0x10;
             uVar6 = PsxRam.ReadI32(Dat8008156cAddress + iVar4);
             uVar8 = PsxRam.ReadI32(Dat80081570Address + iVar4);
             uVar9 = PsxRam.ReadI32(Dat80081574Address + iVar4);
-            PsxRam.WriteI32(param_1 + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar4));
-            PsxRam.WriteI32(param_1 + 0x68, uVar6);
-            PsxRam.WriteI32(param_1 + 0x6c, uVar8);
-            PsxRam.WriteI32(param_1 + 0x70, uVar9);
+            PsxRam.WriteI32(aura + 0x64, PsxRam.ReadI32(Dat80081568Address + iVar4));
+            PsxRam.WriteI32(aura + 0x68, uVar6);
+            PsxRam.WriteI32(aura + 0x6c, uVar8);
+            PsxRam.WriteI32(aura + 0x70, uVar9);
 
-            iVar4 = PsxRam.ReadI32(param_1 + 0x64) * PsxRam.ReadI32(param_1 + 0x1e34);
+            iVar4 = PsxRam.ReadI32(aura + 0x64) * PsxRam.ReadI32(aura + 0x1e34);
             if (iVar4 < 0)
             {
                 iVar4 = iVar4 + 0xfff;
             }
 
-            iVar7 = PsxRam.ReadI32(param_1 + 0x68) * PsxRam.ReadI32(param_1 + 0x1e38);
-            PsxRam.WriteI32(param_1 + 0x64, iVar4 >> 0xc);
+            iVar7 = PsxRam.ReadI32(aura + 0x68) * PsxRam.ReadI32(aura + 0x1e38);
+            PsxRam.WriteI32(aura + 0x64, iVar4 >> 0xc);
             if (iVar7 < 0)
             {
                 iVar7 = iVar7 + 0xfff;
             }
 
-            iVar4 = PsxRam.ReadI32(param_1 + 0x6c) * PsxRam.ReadI32(param_1 + 0x1e3c);
-            PsxRam.WriteI32(param_1 + 0x68, iVar7 >> 0xc);
+            iVar4 = PsxRam.ReadI32(aura + 0x6c) * PsxRam.ReadI32(aura + 0x1e3c);
+            PsxRam.WriteI32(aura + 0x68, iVar7 >> 0xc);
             if (iVar4 < 0)
             {
                 iVar4 = iVar4 + 0xfff;
             }
 
-            PsxRam.WriteI32(param_1 + 0x6c, iVar4 >> 0xc);
+            PsxRam.WriteI32(aura + 0x6c, iVar4 >> 0xc);
 
-            PsxRam.WriteI32(param_1 + 0x1e24, PsxRam.ReadI32(param_1 + 0x1e24) + -300);
-            PsxRam.WriteI32(param_1 + 0x1e28, PsxRam.ReadI32(param_1 + 0x1e28) + -300);
-            iVar4 = PsxRam.ReadI32(param_1 + 0x1e34);
-            PsxRam.WriteI32(param_1 + 0x1e34, iVar4 + PsxRam.ReadI32(param_1 + 0x1e24));
-            PsxRam.WriteI32(param_1 + 0x1e2c, PsxRam.ReadI32(param_1 + 0x1e2c) + -300);
-            if (iVar4 + PsxRam.ReadI32(param_1 + 0x1e24) < 0x1000)
+            PsxRam.WriteI32(aura + 0x1e24, PsxRam.ReadI32(aura + 0x1e24) + -300);
+            PsxRam.WriteI32(aura + 0x1e28, PsxRam.ReadI32(aura + 0x1e28) + -300);
+            iVar4 = PsxRam.ReadI32(aura + 0x1e34);
+            PsxRam.WriteI32(aura + 0x1e34, iVar4 + PsxRam.ReadI32(aura + 0x1e24));
+            PsxRam.WriteI32(aura + 0x1e2c, PsxRam.ReadI32(aura + 0x1e2c) + -300);
+            if (iVar4 + PsxRam.ReadI32(aura + 0x1e24) < 0x1000)
             {
-                PsxRam.WriteU16(param_1 + 0x1e24, 0);
-                PsxRam.WriteU16(param_1 + 0x1e26, 0);
-                PsxRam.WriteU16(param_1 + 0x1e34, 0x1000);
-                PsxRam.WriteU16(param_1 + 0x1e36, 0);
+                PsxRam.WriteU16(aura + 0x1e24, 0);
+                PsxRam.WriteU16(aura + 0x1e26, 0);
+                PsxRam.WriteU16(aura + 0x1e34, 0x1000);
+                PsxRam.WriteU16(aura + 0x1e36, 0);
             }
 
-            iVar4 = PsxRam.ReadI32(param_1 + 0x1e38);
-            PsxRam.WriteI32(param_1 + 0x1e38, iVar4 + PsxRam.ReadI32(param_1 + 0x1e28));
-            if (iVar4 + PsxRam.ReadI32(param_1 + 0x1e28) < 0x1000)
+            iVar4 = PsxRam.ReadI32(aura + 0x1e38);
+            PsxRam.WriteI32(aura + 0x1e38, iVar4 + PsxRam.ReadI32(aura + 0x1e28));
+            if (iVar4 + PsxRam.ReadI32(aura + 0x1e28) < 0x1000)
             {
-                PsxRam.WriteU16(param_1 + 0x1e28, 0);
-                PsxRam.WriteU16(param_1 + 0x1e2a, 0);
-                PsxRam.WriteU16(param_1 + 0x1e38, 0x1000);
-                PsxRam.WriteU16(param_1 + 0x1e3a, 0);
+                PsxRam.WriteU16(aura + 0x1e28, 0);
+                PsxRam.WriteU16(aura + 0x1e2a, 0);
+                PsxRam.WriteU16(aura + 0x1e38, 0x1000);
+                PsxRam.WriteU16(aura + 0x1e3a, 0);
             }
 
-            iVar4 = PsxRam.ReadI32(param_1 + 0x1e3c);
-            PsxRam.WriteI32(param_1 + 0x1e3c, iVar4 + PsxRam.ReadI32(param_1 + 0x1e2c));
-            if (iVar4 + PsxRam.ReadI32(param_1 + 0x1e2c) < 0x1000)
+            iVar4 = PsxRam.ReadI32(aura + 0x1e3c);
+            PsxRam.WriteI32(aura + 0x1e3c, iVar4 + PsxRam.ReadI32(aura + 0x1e2c));
+            if (iVar4 + PsxRam.ReadI32(aura + 0x1e2c) < 0x1000)
             {
-                PsxRam.WriteU16(param_1 + 0x1e2c, 0);
-                PsxRam.WriteU16(param_1 + 0x1e2e, 0);
-                PsxRam.WriteU16(param_1 + 0x1e3c, 0x1000);
-                PsxRam.WriteU16(param_1 + 0x1e3e, 0);
+                PsxRam.WriteU16(aura + 0x1e2c, 0);
+                PsxRam.WriteU16(aura + 0x1e2e, 0);
+                PsxRam.WriteU16(aura + 0x1e3c, 0x1000);
+                PsxRam.WriteU16(aura + 0x1e3e, 0);
             }
 
-            if (((PsxRam.ReadI32(param_1 + 0x1e34) == 0x1000) && (PsxRam.ReadI32(param_1 + 0x1e38) == 0x1000))
-                && (PsxRam.ReadI32(param_1 + 0x1e3c) == 0x1000))
+            if (((PsxRam.ReadI32(aura + 0x1e34) == 0x1000) && (PsxRam.ReadI32(aura + 0x1e38) == 0x1000))
+                && (PsxRam.ReadI32(aura + 0x1e3c) == 0x1000))
             {
-                PsxRam.WriteU8(param_1 + 4, 2);
+                PsxRam.WriteU8(aura + 4, 2);
             }
         }
 
-        uVar2 = PsxRam.ReadU8(param_1 + 8);
+        uVar2 = PsxRam.ReadU8(aura + 8);
         iVar4 = (int)(uVar2 * 0x34);
-        // The twenty RGB triples described in FUN_80032c24's own note, written out
+        // The twenty RGB triples described in BeginUprightAura's own note, written out
         // statement by statement in the original's order: ten at 0x114 + k * 0xD0 and then
         // ten at 0x84 + k * 0xD0, all relative to `record + first_primitive * 0x34`.
-        PsxRam.WriteU8(param_1 + iVar4 + 0x114, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x115, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x116, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x1e6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2b6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x384, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x385, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x386, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x454, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x455, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x456, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x524, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x525, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x526, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x5f6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x6c6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x794, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x795, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x796, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x864, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x865, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x866, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x84, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x85, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x86, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x154, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x155, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x156, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x224, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x225, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x226, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x2f6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x3c6, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x494, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x495, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x496, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x564, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x565, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x566, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x634, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x635, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x636, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x704, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x705, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x706, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d4, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d5, 0);
-        PsxRam.WriteU8(param_1 + iVar4 + 0x7d6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x114, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x115, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x116, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x1e6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2b6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x384, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x385, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x386, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x454, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x455, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x456, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x524, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x525, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x526, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x5f6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x6c6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x794, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x795, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x796, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x864, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x865, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x866, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x84, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x85, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x86, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x154, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x155, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x156, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x224, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x225, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x226, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x2f6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x3c6, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x494, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x495, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x496, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x564, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x565, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x566, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x634, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x635, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x636, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x704, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x705, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x706, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d4, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d5, 0);
+        PsxRam.WriteU8(aura + iVar4 + 0x7d6, 0);
         return 0;
     }
 
-    // GHIDRA: FUN_80033564 @ 0x80033564 (VS.EXE)
-    // 892 bytes, 0x80033564..0x800338DF. One caller: FUN_800340a8's state-0 layer-1 arm.
+    // GHIDRA: FadeOutMotionAura @ 0x80033564 (VS.EXE)
+    // 892 bytes, 0x80033564..0x800338DF. One caller: UpdateFighterAura's state-0 layer-1 arm.
     //
     // THE LAYER-1 FADE-OUT, and the return value is the state, not a status: 0 when the countdown
-    // has run out and the record has been torn down, 1 otherwise. FUN_800340a8 hands that number
-    // straight to FUN_80033c64 as its param_3, where a non-zero value replaces the composed
+    // has run out and the record has been torn down, 1 otherwise. UpdateFighterAura hands that number
+    // straight to RenderFighterAuraPass as its param_3, where a non-zero value replaces the composed
     // rotation with the uncomposed one -- so this return is a rendering decision, made here.
     //
     // THE FADE IS PER-PRIMITIVE AND CONDITIONAL. Each primitive whose LAST RGB byte (+0x9E) is
     // still non-zero has its first two RGB triples ZEROED and its last two dimmed by 0x10. That
     // asymmetry -- zero for two, minus sixteen for two -- is the original's, and it is the opposite
-    // way round from FUN_800338e0's layer-2 fade, which dims all four. Both are reproduced as
+    // way round from FadeOutUprightAura's layer-2 fade, which dims all four. Both are reproduced as
     // written; neither is corrected against the other.
-    internal static uint FUN_80033564(int param_1, int param_2, int param_3)
+    internal static uint FadeOutMotionAura(int aura, int fighterRot, int fighterPos)
     {
         ushort uVar1;
         byte cVar3;
@@ -1247,48 +1261,48 @@ internal static class SceneGeometry
         uint uVar7;
         uint uVar8;
 
-        _ = param_2;
+        _ = fighterRot;
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            iVar6 = PsxRam.ReadI32(param_1 + 0x0c);
-            PsxRam.WriteI32(param_1 + 0x0c, iVar6 + -1);
+            iVar6 = PsxRam.ReadI32(aura + 0x0c);
+            PsxRam.WriteI32(aura + 0x0c, iVar6 + -1);
             if (iVar6 + -1 < 0)
             {
-                uVar4 = PsxRam.ReadU8(param_1 + 7);
-                PsxRam.WriteU8(param_1 + 4, 0);
-                PsxRam.WriteU16(param_1 + 0x1c, 0);
-                PsxRam.WriteU16(param_1 + 0x1e, 0);
-                PsxRam.WriteU16(param_1 + 0x20, 0);
-                PsxRam.WriteU16(param_1 + 0x34, 0);
-                PsxRam.WriteU16(param_1 + 0x36, 0);
-                PsxRam.WriteU16(param_1 + 0x38, 0);
-                PsxRam.WriteU16(param_1 + 0x54, 0);
-                PsxRam.WriteU16(param_1 + 0x56, 0);
-                PsxRam.WriteU16(param_1 + 0x58, 0);
-                PsxRam.WriteU16(param_1 + 0x5a, 0);
-                uVar7 = uVar4 + PsxRam.ReadU8(param_1 + 0x0a);
-                PsxRam.WriteU16(param_1 + 0x5c, 0);
-                PsxRam.WriteU16(param_1 + 0x5e, 0);
+                uVar4 = PsxRam.ReadU8(aura + 7);
+                PsxRam.WriteU8(aura + 4, 0);
+                PsxRam.WriteU16(aura + 0x1c, 0);
+                PsxRam.WriteU16(aura + 0x1e, 0);
+                PsxRam.WriteU16(aura + 0x20, 0);
+                PsxRam.WriteU16(aura + 0x34, 0);
+                PsxRam.WriteU16(aura + 0x36, 0);
+                PsxRam.WriteU16(aura + 0x38, 0);
+                PsxRam.WriteU16(aura + 0x54, 0);
+                PsxRam.WriteU16(aura + 0x56, 0);
+                PsxRam.WriteU16(aura + 0x58, 0);
+                PsxRam.WriteU16(aura + 0x5a, 0);
+                uVar7 = uVar4 + PsxRam.ReadU8(aura + 0x0a);
+                PsxRam.WriteU16(aura + 0x5c, 0);
+                PsxRam.WriteU16(aura + 0x5e, 0);
                 if (uVar4 < uVar7)
                 {
-                    param_1 = param_1 + (int)(uVar4 * 0x34);
+                    aura = aura + (int)(uVar4 * 0x34);
                     do
                     {
-                        PsxRam.WriteU8(param_1 + 0x78, 0);
-                        PsxRam.WriteU8(param_1 + 0x79, 0);
-                        PsxRam.WriteU8(param_1 + 0x7a, 0);
-                        PsxRam.WriteU8(param_1 + 0x84, 0);
-                        PsxRam.WriteU8(param_1 + 0x85, 0);
-                        PsxRam.WriteU8(param_1 + 0x86, 0);
-                        PsxRam.WriteU8(param_1 + 0x90, 0);
-                        PsxRam.WriteU8(param_1 + 0x91, 0);
-                        PsxRam.WriteU8(param_1 + 0x92, 0);
-                        PsxRam.WriteU8(param_1 + 0x9c, 0);
-                        PsxRam.WriteU8(param_1 + 0x9d, 0);
-                        PsxRam.WriteU8(param_1 + 0x9e, 0);
+                        PsxRam.WriteU8(aura + 0x78, 0);
+                        PsxRam.WriteU8(aura + 0x79, 0);
+                        PsxRam.WriteU8(aura + 0x7a, 0);
+                        PsxRam.WriteU8(aura + 0x84, 0);
+                        PsxRam.WriteU8(aura + 0x85, 0);
+                        PsxRam.WriteU8(aura + 0x86, 0);
+                        PsxRam.WriteU8(aura + 0x90, 0);
+                        PsxRam.WriteU8(aura + 0x91, 0);
+                        PsxRam.WriteU8(aura + 0x92, 0);
+                        PsxRam.WriteU8(aura + 0x9c, 0);
+                        PsxRam.WriteU8(aura + 0x9d, 0);
+                        PsxRam.WriteU8(aura + 0x9e, 0);
                         uVar4 = uVar4 + 1;
-                        param_1 = param_1 + 0x34;
+                        aura = aura + 0x34;
                     }
                     while ((int)uVar4 < (int)uVar7);
                 }
@@ -1297,51 +1311,51 @@ internal static class SceneGeometry
             }
             else
             {
-                uVar1 = PsxRam.ReadU16(param_1 + 0x20);
-                PsxRam.WriteU16(param_1 + 0x1c, 0);
-                PsxRam.WriteU16(param_1 + 0x1e, 0);
-                PsxRam.WriteU16(param_1 + 0x20, (ushort)(uVar1 - 0xa0));
+                uVar1 = PsxRam.ReadU16(aura + 0x20);
+                PsxRam.WriteU16(aura + 0x1c, 0);
+                PsxRam.WriteU16(aura + 0x1e, 0);
+                PsxRam.WriteU16(aura + 0x20, (ushort)(uVar1 - 0xa0));
 
-                uVar5 = (uint)PsxRam.ReadI32(param_3);
-                uVar7 = (uint)PsxRam.ReadI32(param_3 + 4);
-                PsxRam.WriteI32(param_1 + 0x34, (int)uVar5);
-                PsxRam.WriteI32(param_1 + 0x38, (int)uVar7);
+                uVar5 = (uint)PsxRam.ReadI32(fighterPos);
+                uVar7 = (uint)PsxRam.ReadI32(fighterPos + 4);
+                PsxRam.WriteI32(aura + 0x34, (int)uVar5);
+                PsxRam.WriteI32(aura + 0x38, (int)uVar7);
 
-                uVar4 = PsxRam.ReadU8(param_1 + 7);
-                uVar7 = uVar4 + PsxRam.ReadU8(param_1 + 0x0a);
-                PsxRam.WriteU16(param_1 + 0x36, (ushort)((short)PsxRam.ReadU16(param_1 + 0x36)
-                    - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(param_1) * 4)));
-                PsxRam.WriteI32(param_1 + 0x54, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                    + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(param_1) * 0x10));
-                PsxRam.WriteI32(param_1 + 0x58, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                    + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(param_1) * 0x10));
-                PsxRam.WriteI32(param_1 + 0x5c, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                    + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(param_1) * 0x10));
+                uVar4 = PsxRam.ReadU8(aura + 7);
+                uVar7 = uVar4 + PsxRam.ReadU8(aura + 0x0a);
+                PsxRam.WriteU16(aura + 0x36, (ushort)((short)PsxRam.ReadU16(aura + 0x36)
+                    - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(aura) * 4)));
+                PsxRam.WriteI32(aura + 0x54, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                    + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(aura) * 0x10));
+                PsxRam.WriteI32(aura + 0x58, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                    + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(aura) * 0x10));
+                PsxRam.WriteI32(aura + 0x5c, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                    + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(aura) * 0x10));
 
                 if (uVar4 < uVar7)
                 {
-                    param_1 = param_1 + (int)(uVar4 * 0x34);
+                    aura = aura + (int)(uVar4 * 0x34);
                     do
                     {
                         uVar4 = uVar4 + 1;
-                        if ((sbyte)PsxRam.ReadU8(param_1 + 0x9e) != 0)
+                        if ((sbyte)PsxRam.ReadU8(aura + 0x9e) != 0)
                         {
-                            PsxRam.WriteU8(param_1 + 0x86, 0);
-                            PsxRam.WriteU8(param_1 + 0x85, 0);
-                            PsxRam.WriteU8(param_1 + 0x84, 0);
-                            PsxRam.WriteU8(param_1 + 0x7a, 0);
-                            PsxRam.WriteU8(param_1 + 0x79, 0);
-                            PsxRam.WriteU8(param_1 + 0x78, 0);
-                            cVar3 = (byte)((sbyte)PsxRam.ReadU8(param_1 + 0x9e) + -0x10);
-                            PsxRam.WriteU8(param_1 + 0x9e, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x9d, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x9c, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x92, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x91, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x90, cVar3);
+                            PsxRam.WriteU8(aura + 0x86, 0);
+                            PsxRam.WriteU8(aura + 0x85, 0);
+                            PsxRam.WriteU8(aura + 0x84, 0);
+                            PsxRam.WriteU8(aura + 0x7a, 0);
+                            PsxRam.WriteU8(aura + 0x79, 0);
+                            PsxRam.WriteU8(aura + 0x78, 0);
+                            cVar3 = (byte)((sbyte)PsxRam.ReadU8(aura + 0x9e) + -0x10);
+                            PsxRam.WriteU8(aura + 0x9e, cVar3);
+                            PsxRam.WriteU8(aura + 0x9d, cVar3);
+                            PsxRam.WriteU8(aura + 0x9c, cVar3);
+                            PsxRam.WriteU8(aura + 0x92, cVar3);
+                            PsxRam.WriteU8(aura + 0x91, cVar3);
+                            PsxRam.WriteU8(aura + 0x90, cVar3);
                         }
 
-                        param_1 = param_1 + 0x34;
+                        aura = aura + 0x34;
                     }
                     while ((int)uVar4 < (int)uVar7);
                 }
@@ -1351,39 +1365,39 @@ internal static class SceneGeometry
         }
         else
         {
-            PsxRam.WriteU16(param_1 + 0x1c, 0);
-            PsxRam.WriteU16(param_1 + 0x1e, 0);
+            PsxRam.WriteU16(aura + 0x1c, 0);
+            PsxRam.WriteU16(aura + 0x1e, 0);
 
-            uVar5 = (uint)PsxRam.ReadI32(param_3);
-            uVar7 = (uint)PsxRam.ReadI32(param_3 + 4);
-            PsxRam.WriteI32(param_1 + 0x34, (int)uVar5);
-            PsxRam.WriteI32(param_1 + 0x38, (int)uVar7);
+            uVar5 = (uint)PsxRam.ReadI32(fighterPos);
+            uVar7 = (uint)PsxRam.ReadI32(fighterPos + 4);
+            PsxRam.WriteI32(aura + 0x34, (int)uVar5);
+            PsxRam.WriteI32(aura + 0x38, (int)uVar7);
 
-            PsxRam.WriteU16(param_1 + 0x36, (ushort)((short)PsxRam.ReadU16(param_1 + 0x36)
-                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(param_1) * 4)));
-            PsxRam.WriteI32(param_1 + 0x54, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(param_1) * 0x10));
+            PsxRam.WriteU16(aura + 0x36, (ushort)((short)PsxRam.ReadU16(aura + 0x36)
+                - (short)PsxRam.ReadU16(Dat800811c0Address + PsxRam.ReadU16(aura) * 4)));
+            PsxRam.WriteI32(aura + 0x54, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                + PsxRam.ReadI32(Dat800812f8Address + PsxRam.ReadU16(aura) * 0x10));
             uVar8 = 1;
-            PsxRam.WriteI32(param_1 + 0x58, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(param_1) * 0x10));
-            PsxRam.WriteI32(param_1 + 0x5c, (10 - PsxRam.ReadI32(param_1 + 0x0c)) * 400
-                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(param_1) * 0x10));
+            PsxRam.WriteI32(aura + 0x58, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                + PsxRam.ReadI32(Dat800812fcAddress + PsxRam.ReadU16(aura) * 0x10));
+            PsxRam.WriteI32(aura + 0x5c, (10 - PsxRam.ReadI32(aura + 0x0c)) * 400
+                + PsxRam.ReadI32(Dat80081300Address + PsxRam.ReadU16(aura) * 0x10));
         }
 
         return uVar8;
     }
 
-    // GHIDRA: FUN_800338e0 @ 0x800338E0 (VS.EXE)
-    // 900 bytes, 0x800338E0..0x80033C63. One caller: FUN_800340a8's state-0 layer-2 arm.
+    // GHIDRA: FadeOutUprightAura @ 0x800338E0 (VS.EXE)
+    // 900 bytes, 0x800338E0..0x80033C63. One caller: UpdateFighterAura's state-0 layer-2 arm.
     //
-    // The layer-2 twin of FUN_80033564, and NOT a copy of it. Four differences, all reproduced:
-    //   * it always returns 0, where FUN_80033564 returns the state (0 or 1);
+    // The layer-2 twin of FadeOutMotionAura, and NOT a copy of it. Four differences, all reproduced:
+    //   * it always returns 0, where FadeOutMotionAura returns the state (0 or 1);
     //   * its table refresh uses the layer-2 tables and a step of `(10 - countdown) * -400` on X
-    //     and Y and `* -200` on Z, where FUN_80033564 uses `* 400` on all three -- opposite sign
+    //     and Y and `* -200` on Z, where FadeOutMotionAura uses `* 400` on all three -- opposite sign
     //     and a different Z coefficient;
-    //   * its fade dims ALL FOUR RGB triples by 0x10, where FUN_80033564 zeroes two and dims two;
-    //   * its paused arm writes +0x24/+0x26 as (0xFC00, 0), where FUN_80033564's writes (0, 0).
-    internal static uint FUN_800338e0(int param_1, int param_2, int param_3)
+    //   * its fade dims ALL FOUR RGB triples by 0x10, where FadeOutMotionAura zeroes two and dims two;
+    //   * its paused arm writes +0x24/+0x26 as (0xFC00, 0), where FadeOutMotionAura's writes (0, 0).
+    internal static uint FadeOutUprightAura(int aura, int fighterRot, int fighterPos)
     {
         ushort uVar1;
         byte cVar3;
@@ -1392,102 +1406,102 @@ internal static class SceneGeometry
         uint uVar6;
         uint uVar7;
 
-        _ = param_2;
+        _ = fighterRot;
 
         if ((AnimVm.DAT_800b305a & 1) == 0)
         {
-            iVar5 = PsxRam.ReadI32(param_1 + 0x0c);
-            PsxRam.WriteI32(param_1 + 0x0c, iVar5 + -1);
+            iVar5 = PsxRam.ReadI32(aura + 0x0c);
+            PsxRam.WriteI32(aura + 0x0c, iVar5 + -1);
             if (iVar5 + -1 < 0)
             {
-                uVar7 = PsxRam.ReadU8(param_1 + 8);
-                PsxRam.WriteU8(param_1 + 4, 0);
-                PsxRam.WriteU16(param_1 + 0x24, 0);
-                PsxRam.WriteU16(param_1 + 0x26, 0);
-                PsxRam.WriteU16(param_1 + 0x28, 0);
-                PsxRam.WriteU16(param_1 + 0x3c, 0);
-                PsxRam.WriteU16(param_1 + 0x3e, 0);
-                PsxRam.WriteU16(param_1 + 0x40, 0);
-                PsxRam.WriteU16(param_1 + 0x64, 0);
-                PsxRam.WriteU16(param_1 + 0x66, 0);
-                PsxRam.WriteU16(param_1 + 0x68, 0);
-                PsxRam.WriteU16(param_1 + 0x6a, 0);
-                uVar6 = uVar7 + PsxRam.ReadU8(param_1 + 0x0b);
-                PsxRam.WriteU16(param_1 + 0x6c, 0);
-                PsxRam.WriteU16(param_1 + 0x6e, 0);
+                uVar7 = PsxRam.ReadU8(aura + 8);
+                PsxRam.WriteU8(aura + 4, 0);
+                PsxRam.WriteU16(aura + 0x24, 0);
+                PsxRam.WriteU16(aura + 0x26, 0);
+                PsxRam.WriteU16(aura + 0x28, 0);
+                PsxRam.WriteU16(aura + 0x3c, 0);
+                PsxRam.WriteU16(aura + 0x3e, 0);
+                PsxRam.WriteU16(aura + 0x40, 0);
+                PsxRam.WriteU16(aura + 0x64, 0);
+                PsxRam.WriteU16(aura + 0x66, 0);
+                PsxRam.WriteU16(aura + 0x68, 0);
+                PsxRam.WriteU16(aura + 0x6a, 0);
+                uVar6 = uVar7 + PsxRam.ReadU8(aura + 0x0b);
+                PsxRam.WriteU16(aura + 0x6c, 0);
+                PsxRam.WriteU16(aura + 0x6e, 0);
                 if (uVar7 < uVar6)
                 {
-                    param_1 = param_1 + (int)(uVar7 * 0x34);
+                    aura = aura + (int)(uVar7 * 0x34);
                     do
                     {
-                        PsxRam.WriteU8(param_1 + 0x78, 0);
-                        PsxRam.WriteU8(param_1 + 0x79, 0);
-                        PsxRam.WriteU8(param_1 + 0x7a, 0);
-                        PsxRam.WriteU8(param_1 + 0x84, 0);
-                        PsxRam.WriteU8(param_1 + 0x85, 0);
-                        PsxRam.WriteU8(param_1 + 0x86, 0);
-                        PsxRam.WriteU8(param_1 + 0x90, 0);
-                        PsxRam.WriteU8(param_1 + 0x91, 0);
-                        PsxRam.WriteU8(param_1 + 0x92, 0);
-                        PsxRam.WriteU8(param_1 + 0x9c, 0);
-                        PsxRam.WriteU8(param_1 + 0x9d, 0);
-                        PsxRam.WriteU8(param_1 + 0x9e, 0);
+                        PsxRam.WriteU8(aura + 0x78, 0);
+                        PsxRam.WriteU8(aura + 0x79, 0);
+                        PsxRam.WriteU8(aura + 0x7a, 0);
+                        PsxRam.WriteU8(aura + 0x84, 0);
+                        PsxRam.WriteU8(aura + 0x85, 0);
+                        PsxRam.WriteU8(aura + 0x86, 0);
+                        PsxRam.WriteU8(aura + 0x90, 0);
+                        PsxRam.WriteU8(aura + 0x91, 0);
+                        PsxRam.WriteU8(aura + 0x92, 0);
+                        PsxRam.WriteU8(aura + 0x9c, 0);
+                        PsxRam.WriteU8(aura + 0x9d, 0);
+                        PsxRam.WriteU8(aura + 0x9e, 0);
                         uVar7 = uVar7 + 1;
-                        param_1 = param_1 + 0x34;
+                        aura = aura + 0x34;
                     }
                     while ((int)uVar7 < (int)uVar6);
                 }
             }
             else
             {
-                uVar1 = PsxRam.ReadU16(param_1 + 0x28);
-                PsxRam.WriteU16(param_1 + 0x24, 0xfc00);
-                PsxRam.WriteU16(param_1 + 0x26, 0);
-                PsxRam.WriteU16(param_1 + 0x28, (ushort)(uVar1 - 0xa0));
+                uVar1 = PsxRam.ReadU16(aura + 0x28);
+                PsxRam.WriteU16(aura + 0x24, 0xfc00);
+                PsxRam.WriteU16(aura + 0x26, 0);
+                PsxRam.WriteU16(aura + 0x28, (ushort)(uVar1 - 0xa0));
 
-                uVar4 = (uint)PsxRam.ReadI32(param_3);
-                uVar6 = (uint)PsxRam.ReadI32(param_3 + 4);
-                PsxRam.WriteI32(param_1 + 0x3c, (int)uVar4);
-                PsxRam.WriteI32(param_1 + 0x40, (int)uVar6);
+                uVar4 = (uint)PsxRam.ReadI32(fighterPos);
+                uVar6 = (uint)PsxRam.ReadI32(fighterPos + 4);
+                PsxRam.WriteI32(aura + 0x3c, (int)uVar4);
+                PsxRam.WriteI32(aura + 0x40, (int)uVar6);
 
-                uVar7 = PsxRam.ReadU8(param_1 + 8);
-                uVar6 = uVar7 + PsxRam.ReadU8(param_1 + 0x0b);
-                PsxRam.WriteU16(param_1 + 0x3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x3e)
-                    - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(param_1) * 4)));
-                PsxRam.WriteI32(param_1 + 0x64,
-                    PsxRam.ReadI32(Dat80081568Address + PsxRam.ReadU16(param_1) * 0x10)
-                    + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -400);
-                PsxRam.WriteI32(param_1 + 0x68,
-                    PsxRam.ReadI32(Dat8008156cAddress + PsxRam.ReadU16(param_1) * 0x10)
-                    + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -400);
-                PsxRam.WriteI32(param_1 + 0x6c,
-                    PsxRam.ReadI32(Dat80081570Address + PsxRam.ReadU16(param_1) * 0x10)
-                    + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -200);
+                uVar7 = PsxRam.ReadU8(aura + 8);
+                uVar6 = uVar7 + PsxRam.ReadU8(aura + 0x0b);
+                PsxRam.WriteU16(aura + 0x3e, (ushort)((short)PsxRam.ReadU16(aura + 0x3e)
+                    - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(aura) * 4)));
+                PsxRam.WriteI32(aura + 0x64,
+                    PsxRam.ReadI32(Dat80081568Address + PsxRam.ReadU16(aura) * 0x10)
+                    + (10 - PsxRam.ReadI32(aura + 0x0c)) * -400);
+                PsxRam.WriteI32(aura + 0x68,
+                    PsxRam.ReadI32(Dat8008156cAddress + PsxRam.ReadU16(aura) * 0x10)
+                    + (10 - PsxRam.ReadI32(aura + 0x0c)) * -400);
+                PsxRam.WriteI32(aura + 0x6c,
+                    PsxRam.ReadI32(Dat80081570Address + PsxRam.ReadU16(aura) * 0x10)
+                    + (10 - PsxRam.ReadI32(aura + 0x0c)) * -200);
 
                 if (uVar7 < uVar6)
                 {
-                    param_1 = param_1 + (int)(uVar7 * 0x34);
+                    aura = aura + (int)(uVar7 * 0x34);
                     do
                     {
                         uVar7 = uVar7 + 1;
-                        if ((sbyte)PsxRam.ReadU8(param_1 + 0x9e) != 0)
+                        if ((sbyte)PsxRam.ReadU8(aura + 0x9e) != 0)
                         {
-                            cVar3 = (byte)((sbyte)PsxRam.ReadU8(param_1 + 0x9e) + -0x10);
-                            PsxRam.WriteU8(param_1 + 0x9e, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x9d, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x9c, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x92, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x91, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x90, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x86, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x85, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x84, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x7a, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x79, cVar3);
-                            PsxRam.WriteU8(param_1 + 0x78, cVar3);
+                            cVar3 = (byte)((sbyte)PsxRam.ReadU8(aura + 0x9e) + -0x10);
+                            PsxRam.WriteU8(aura + 0x9e, cVar3);
+                            PsxRam.WriteU8(aura + 0x9d, cVar3);
+                            PsxRam.WriteU8(aura + 0x9c, cVar3);
+                            PsxRam.WriteU8(aura + 0x92, cVar3);
+                            PsxRam.WriteU8(aura + 0x91, cVar3);
+                            PsxRam.WriteU8(aura + 0x90, cVar3);
+                            PsxRam.WriteU8(aura + 0x86, cVar3);
+                            PsxRam.WriteU8(aura + 0x85, cVar3);
+                            PsxRam.WriteU8(aura + 0x84, cVar3);
+                            PsxRam.WriteU8(aura + 0x7a, cVar3);
+                            PsxRam.WriteU8(aura + 0x79, cVar3);
+                            PsxRam.WriteU8(aura + 0x78, cVar3);
                         }
 
-                        param_1 = param_1 + 0x34;
+                        aura = aura + 0x34;
                     }
                     while ((int)uVar7 < (int)uVar6);
                 }
@@ -1495,25 +1509,25 @@ internal static class SceneGeometry
         }
         else
         {
-            PsxRam.WriteU16(param_1 + 0x24, 0xfc00);
-            PsxRam.WriteU16(param_1 + 0x26, 0);
+            PsxRam.WriteU16(aura + 0x24, 0xfc00);
+            PsxRam.WriteU16(aura + 0x26, 0);
 
-            uVar4 = (uint)PsxRam.ReadI32(param_3);
-            uVar6 = (uint)PsxRam.ReadI32(param_3 + 4);
-            PsxRam.WriteI32(param_1 + 0x3c, (int)uVar4);
-            PsxRam.WriteI32(param_1 + 0x40, (int)uVar6);
+            uVar4 = (uint)PsxRam.ReadI32(fighterPos);
+            uVar6 = (uint)PsxRam.ReadI32(fighterPos + 4);
+            PsxRam.WriteI32(aura + 0x3c, (int)uVar4);
+            PsxRam.WriteI32(aura + 0x40, (int)uVar6);
 
-            PsxRam.WriteU16(param_1 + 0x3e, (ushort)((short)PsxRam.ReadU16(param_1 + 0x3e)
-                - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(param_1) * 4)));
-            PsxRam.WriteI32(param_1 + 0x64,
-                PsxRam.ReadI32(Dat80081568Address + PsxRam.ReadU16(param_1) * 0x10)
-                + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -400);
-            PsxRam.WriteI32(param_1 + 0x68,
-                PsxRam.ReadI32(Dat8008156cAddress + PsxRam.ReadU16(param_1) * 0x10)
-                + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -400);
-            PsxRam.WriteI32(param_1 + 0x6c,
-                PsxRam.ReadI32(Dat80081570Address + PsxRam.ReadU16(param_1) * 0x10)
-                + (10 - PsxRam.ReadI32(param_1 + 0x0c)) * -200);
+            PsxRam.WriteU16(aura + 0x3e, (ushort)((short)PsxRam.ReadU16(aura + 0x3e)
+                - (short)PsxRam.ReadU16(Dat8008125cAddress + PsxRam.ReadU16(aura) * 4)));
+            PsxRam.WriteI32(aura + 0x64,
+                PsxRam.ReadI32(Dat80081568Address + PsxRam.ReadU16(aura) * 0x10)
+                + (10 - PsxRam.ReadI32(aura + 0x0c)) * -400);
+            PsxRam.WriteI32(aura + 0x68,
+                PsxRam.ReadI32(Dat8008156cAddress + PsxRam.ReadU16(aura) * 0x10)
+                + (10 - PsxRam.ReadI32(aura + 0x0c)) * -400);
+            PsxRam.WriteI32(aura + 0x6c,
+                PsxRam.ReadI32(Dat80081570Address + PsxRam.ReadU16(aura) * 0x10)
+                + (10 - PsxRam.ReadI32(aura + 0x0c)) * -200);
         }
 
         return 0;
@@ -1523,48 +1537,48 @@ internal static class SceneGeometry
     // THE TWO SHARED SERVICES
     // =====================================================================================
 
-    // GHIDRA: FUN_800322d0 @ 0x800322D0 (VS.EXE)
-    // 132 bytes, 0x800322D0..0x80032353. One caller: FUN_800340a8's `param_6 == 0` teardown, which
-    // calls it as `FUN_800322d0(layer, record, 0x80, 0x80, 0x80)`.
+    // GHIDRA: SetFighterAuraPassColor @ 0x800322D0 (VS.EXE)
+    // 132 bytes, 0x800322D0..0x80032353. One caller: UpdateFighterAura's `param_6 == 0` teardown, which
+    // calls it as `SetFighterAuraPassColor(layer, record, 0x80, 0x80, 0x80)`.
     //
     // Writes one RGB triple into all four colour fields of every primitive in one layer's range.
     // param_1 is the layer index and is used twice as an offset -- `record + param_1 + 6` for the
     // first primitive and `record + param_1 + 9` for the count -- which is what pins the three
     // start bytes to +0x06/+0x07/+0x08 and the three count bytes to +0x09/+0x0A/+0x0B.
-    internal static void FUN_800322d0(int param_1, int param_2, byte param_3, byte param_4, byte param_5)
+    internal static void SetFighterAuraPassColor(int pass, int aura, byte r, byte g, byte b)
     {
         uint uVar1;
         uint uVar2;
 
-        uVar1 = PsxRam.ReadU8(param_2 + param_1 + 6);
-        uVar2 = uVar1 + PsxRam.ReadU8(param_2 + param_1 + 9);
+        uVar1 = PsxRam.ReadU8(aura + pass + 6);
+        uVar2 = uVar1 + PsxRam.ReadU8(aura + pass + 9);
         if (uVar1 < uVar2)
         {
-            param_2 = (int)(uVar1 * 0x34) + param_2;
+            aura = (int)(uVar1 * 0x34) + aura;
             do
             {
-                PsxRam.WriteU8(param_2 + 0x78, param_3);
-                PsxRam.WriteU8(param_2 + 0x79, param_4);
-                PsxRam.WriteU8(param_2 + 0x7a, param_5);
-                PsxRam.WriteU8(param_2 + 0x84, param_3);
-                PsxRam.WriteU8(param_2 + 0x85, param_4);
-                PsxRam.WriteU8(param_2 + 0x86, param_5);
-                PsxRam.WriteU8(param_2 + 0x90, param_3);
-                PsxRam.WriteU8(param_2 + 0x91, param_4);
-                PsxRam.WriteU8(param_2 + 0x92, param_5);
-                PsxRam.WriteU8(param_2 + 0x9c, param_3);
-                PsxRam.WriteU8(param_2 + 0x9d, param_4);
-                PsxRam.WriteU8(param_2 + 0x9e, param_5);
+                PsxRam.WriteU8(aura + 0x78, r);
+                PsxRam.WriteU8(aura + 0x79, g);
+                PsxRam.WriteU8(aura + 0x7a, b);
+                PsxRam.WriteU8(aura + 0x84, r);
+                PsxRam.WriteU8(aura + 0x85, g);
+                PsxRam.WriteU8(aura + 0x86, b);
+                PsxRam.WriteU8(aura + 0x90, r);
+                PsxRam.WriteU8(aura + 0x91, g);
+                PsxRam.WriteU8(aura + 0x92, b);
+                PsxRam.WriteU8(aura + 0x9c, r);
+                PsxRam.WriteU8(aura + 0x9d, g);
+                PsxRam.WriteU8(aura + 0x9e, b);
                 uVar1 = uVar1 + 1;
-                param_2 = param_2 + 0x34;
+                aura = aura + 0x34;
             }
             while ((int)uVar1 < (int)uVar2);
         }
     }
 
-    // GHIDRA: FUN_80033c64 @ 0x80033C64 (VS.EXE)
-    // 796 bytes, 0x80033C64..0x80033F7F. Two callers, both in FUN_800340a8: the explicit
-    // `FUN_80033c64(1, record, 0)` inside state 3's layer-1 arm at 0x80034634, and the switch's
+    // GHIDRA: RenderFighterAuraPass @ 0x80033C64 (VS.EXE)
+    // 796 bytes, 0x80033C64..0x80033F7F. Two callers, both in UpdateFighterAura: the explicit
+    // `RenderFighterAuraPass(1, record, 0)` inside state 3's layer-1 arm at 0x80034634, and the switch's
     // shared tail at 0x80034734.
     //
     // THE GTE PIPELINE, and every SDK entry point it uses is at or above 0x800632C4, so all ten are
@@ -1591,7 +1605,7 @@ internal static class SceneGeometry
     // defect check_duplicate_symbols.py exists to catch. That it lives under a TITLE_EXE namespace
     // is an artefact of which overlay was ported first; moving it beside _DAT_1f8000b4 in the
     // shared Scratchpad.cs would be right, and is reported upward rather than done here.
-    internal static void FUN_80033c64(int param_1, int param_2, int param_3)
+    internal static void RenderFighterAuraPass(int pass, int aura, int screenSpaceRotation)
     {
         int psVar1;
         int lVar2;
@@ -1603,14 +1617,14 @@ internal static class SceneGeometry
         int iVar10;
         uint uVar11;
 
-        psVar8 = param_2 + param_1 * 8 + 0x2c;
+        psVar8 = aura + pass * 8 + 0x2c;
         LibGte.PushMatrix();
 
         var MStack_b8 = new LibGte.MATRIX();
         LibGte.ReadRotMatrix(MStack_b8);
 
         var local_98 = new LibGte.MATRIX();
-        LibGte.RotMatrix(ReadSvectorFromRam(param_2 + param_1 * 8 + 0x14), local_98);
+        LibGte.RotMatrix(ReadSvectorFromRam(aura + pass * 8 + 0x14), local_98);
 
         // All three are signed halfword loads; the X and Z biases are the camera offsets the
         // scratchpad carries, exactly as AnimCmdMesh's TransformMeshPrimitives applies them.
@@ -1622,16 +1636,16 @@ internal static class SceneGeometry
         // read as a VECTOR of ints and not as halfwords.
         var scale = new LibGte.VECTOR
         {
-            vx = PsxRam.ReadI32(param_2 + param_1 * 0x10 + 0x44),
-            vy = PsxRam.ReadI32(param_2 + param_1 * 0x10 + 0x48),
-            vz = PsxRam.ReadI32(param_2 + param_1 * 0x10 + 0x4c),
+            vx = PsxRam.ReadI32(aura + pass * 0x10 + 0x44),
+            vy = PsxRam.ReadI32(aura + pass * 0x10 + 0x48),
+            vz = PsxRam.ReadI32(aura + pass * 0x10 + 0x4c),
         };
         LibGte.ScaleMatrix(local_98, scale);
 
         var local_78 = new LibGte.MATRIX();
         LibGte.CompMatrix(MStack_b8, local_98, local_78);
 
-        if (param_3 != 0)
+        if (screenSpaceRotation != 0)
         {
             // The original writes out all nine elements one at a time; nine is the whole 3x3.
             local_78.m[0] = local_98.m[0];
@@ -1665,8 +1679,8 @@ internal static class SceneGeometry
         BitConverter.GetBytes((short)0).CopyTo(local_58, 0);
         lVar2 = LibGte.RotTransPers(local_58, 0, local_38, 0, 16, 20);
 
-        uVar4 = PsxRam.ReadU8(param_2 + param_1 + 6);
-        uVar11 = uVar4 + PsxRam.ReadU8(param_2 + param_1 + 9);
+        uVar4 = PsxRam.ReadU8(aura + pass + 6);
+        uVar11 = uVar4 + PsxRam.ReadU8(aura + pass + 9);
         if (uVar4 < uVar11)
         {
             iVar10 = (int)(uVar4 * 0x34 + 0x74);
@@ -1674,7 +1688,7 @@ internal static class SceneGeometry
             do
             {
                 iVar6 = 0;
-                psVar8 = param_2 + iVar9;
+                psVar8 = aura + iVar9;
                 int pSVar5 = 0;
                 do
                 {
@@ -1704,7 +1718,7 @@ internal static class SceneGeometry
                     local_38, 0, 4, 8, 12,
                     lStack_28, lStack_24);
 
-                int puVar7 = param_2 + iVar10;
+                int puVar7 = aura + iVar10;
                 PsxRam.WriteU16(puVar7 + 8, BitConverter.ToUInt16(local_38, 0));
                 PsxRam.WriteU16(puVar7 + 10, BitConverter.ToUInt16(local_38, 2));
                 PsxRam.WriteU16(puVar7 + 0x14, BitConverter.ToUInt16(local_38, 4));
@@ -1740,7 +1754,7 @@ internal static class SceneGeometry
     // =====================================================================================
     // TWO SMALL RECORD STEPPERS THAT BELONG TO A DIFFERENT CALLER
     // =====================================================================================
-    // Neither of these is reached from FUN_800340a8 or from anything else in this file. They are
+    // Neither of these is reached from UpdateFighterAura or from anything else in this file. They are
     // ported here because they sit in the same address range and were handed to this slice; their
     // callers are at 0x8002A980 / 0x8002C240 (FUN_800319ac) and 0x8002B5D0 / 0x8002C450 /
     // 0x8002F100 / 0x80030520 (FUN_80031ab8), none of which exists in this port yet. The record
@@ -1829,7 +1843,7 @@ internal static class SceneGeometry
                 return;
         }
 
-        // Same C# rule as in FUN_800340a8: cases 1 and 2 jump INTO this `if` body in the original,
+        // Same C# rule as in UpdateFighterAura: cases 1 and 2 jump INTO this `if` body in the original,
         // which C# forbids, so the two labels are lifted to method scope and the `if` becomes a
         // forward goto. No read, no write and no test moves.
         PsxRam.WriteU16(param_1 + 10, (ushort)sVar1);

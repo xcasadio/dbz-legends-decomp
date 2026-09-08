@@ -87,12 +87,13 @@ les deux divergent, c est l archive qui a raison.
 
 ## CE QUI EST DANS GHIDRA
 
-Catégorie **`/DbzLegendsTypes`** du programme `/VS.EXE` :
+Archive **`DbzLegendsTypes`** (les types nouveaux naissent dans la catégorie `/` du programme `/VS.EXE`, puis sont déplacés dans l'archive à la main) :
 
 | type | taille | source |
 |---|---|---|
 | `FighterRecord` | 0x23C | union de 73 fonctions prenant un combattant en `$a0` |
 | `AttackEventRecord` | 0xC0 | `FUN_8004EE48` seule, la seule à le prendre en argument |
+| `FighterAuraRecord` | 0x1E58 | lue à son rendu, `RenderFighterAuraPass` (0x80033C64) ; six exemplaires à `g_FighterAuras` |
 
 Noms posés uniquement là où la preuve est décisive — `flagsA` (+0x138, 244 accès),
 `flagsB` (+0x134), `stateOpcode` (+0x16A), `moveClass` (+0x16B), `slotIndex`
@@ -271,6 +272,50 @@ disposition n est pas une preuve de role ; le champ reste `field_11c`.
 La confrontation avec BattleState.cs a ete faite APRES la derivation, pas avant :
 FighterSize, FighterTaskNode, FighterBattleContext, FighterSlotIndex et les deux
 historiques de pad concordent tous. C est une corroboration, pas une source.
+
+## L AURA DU COMBATTANT : LE RENDU NOMME LA DISPOSITION, LES GABARITS NOMMENT L OBJET
+
+`FUN_800340a8` (1764 octets, un seul appelant) cherchait un enregistrement de 0x1E58
+octets parmi six, à `DAT_8008DA48`, et le portage les appelait « espaces de travail de
+personnage ». Trois lectures ont suffi, dans cet ordre :
+
+1. **Le créateur ne donne que la clé.** `AllocFighterAura` (0x8003478C) écrit deux
+   demi-mots, `characterId` et `slotIndex`, que la recherche relit en un mot
+   `characterId | slotIndex << 16`. Rien d'autre : la taille vient du `memset` de
+   `FUN_80034D98` (0xB610 = 6 × 0x1E58).
+2. **Le rendu donne la disposition.** `RenderFighterAuraPass` (0x80033C64) fait
+   `RotMatrix(rec + pass*8 + 0x14)`, prend sa translation à `rec + pass*8 + 0x2C`,
+   `ScaleMatrix(rec + pass*0x10 + 0x44)`, puis `RotAverage4` sur `rec + i*0x18 + 0x14C4`
+   et écrit les xy dans `rec + i*0x34 + 0x74`. Donc `SVECTOR rot[3]`, `SVECTOR pos[3]`,
+   `VECTOR scale[3]`, `POLY_GT4 prims[100]`, `short vertices[100][4][3]` — et les deux
+   tableaux de cent pavent exactement (0x74 + 100·0x34 = 0x14C4, + 100·0x18 = 0x1E24).
+   Le coloriste `SetFighterAuraPassColor` écrit à +0x78/+0x84/+0x90/+0x9C de chaque
+   primitive : r0..r3 d'un `POLY_GT4`, foulée 0xC — le type des paquets est fermé.
+3. **Les gabarits donnent l'objet.** Les sommets à 0x80080ADC (lus dans l'image, pas
+   supposés) dessinent un ellipsoïde (anneaux de rayon ~80 à z = ±48, pôles à +68 et
+   −130) et des traînées de 1000 unités le long de −z. Orienté selon le déplacement du
+   combattant (`ratan2` de `pos − lastFighterPos`, dans `motionPitch`/`motionYaw`), ou
+   redressé à −0x400 autour de X : c'est l'aura, pas « le personnage » — le combattant
+   lui-même est un sprite.
+
+Le piège des demi-mots était là aussi : `puVar13` est un `ushort *`, et `puVar13[0xf22]`
+est +0x1E44, pas +0xF22.
+
+**Deux faits que seul l'octet tranche.** L'appelant passe quatre arguments à
+`FUN_80033210` alors que Ghidra ne lui en voyait que trois : 0x800346EC, le slot de délai
+du `jal`, est `addu $a3,$s4,$zero` — le prototype d'origine a quatre paramètres, et le
+corps n'utilise pas le dernier. Et `&fighter->+0x11C`, passé aux six fonctions de
+phase, n'est lu par aucune (`struct_fields.py` sur `$a1` : carte vide) ; son rôle est
+venu d'ailleurs, des deux résolveurs jumeaux de la VM d'animation — `FUN_8003f228`
+rend `base + 0x114` pour un vecteur de position, `FUN_8003f2b0` rend `base + 0x11C`
+pour un vecteur de rotation, sur les mêmes pointeurs de créneau — et de `FUN_80047550`,
+qui lit +2/+4 de la cible comme angles de `RotMatrix`. `field_11c` est devenu
+`SVECTOR rot`. Le refus précédent était juste sur sa seule preuve, et faux sur l'image.
+
+Quatre tables par personnage, fermées par pavage (39 entrées chacune, 0x800811C0 →
+0x800817D8 sans trou) : `g_MotionAuraYOffset`, `g_UprightAuraYOffset` (`int[39]`),
+`g_MotionAuraScale`, `g_UprightAuraScale` (`VECTOR[39]`). Le miroir
+`docs/types/DbzLegendsTypes.h` porte la structure et la machine à phases.
 
 ## LA SUITE
 

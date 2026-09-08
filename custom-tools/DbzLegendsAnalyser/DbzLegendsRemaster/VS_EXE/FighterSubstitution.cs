@@ -399,7 +399,7 @@ internal static class FighterSubstitution
     // WHAT IT DOES, in the original's order:
     //   1. The slot record's own +0x0C (ctx + slot*0x14 + 0x15BC) is the roster character id.
     //      Hand it and the fighter's own +0x160 to the sound bank switcher.
-    //   2. BuildCharacterPrimitives -- BLOCKED below -- builds the character's primitive buffers.
+    //   2. BuildFighterAuraPrimitives -- BLOCKED below -- builds the character's primitive buffers.
     //   3. Publish: node+0 = character id, ctx + 0x1520 + slot*4 = this node, fighter +0x173 = slot.
     //   4. THE GUARD PHASE 1 TESTS: fighter +0x144 = ctx + 0x16A0 + slot*4, the loaded character
     //      data. Everything after this reads through that pointer.
@@ -425,7 +425,7 @@ internal static class FighterSubstitution
 
         ushort uVar1 = PsxRam.ReadU16(ctx + iVar7 + 0x15bc);
         FUN_8005f5c4((short)uVar1, (short)PsxRam.ReadU16(puVar6 + BattleState.FighterIndex));
-        CharacterPrimitives.BuildCharacterPrimitives(
+        CharacterPrimitives.BuildFighterAuraPrimitives(
             PsxRam.ReadU16(param_1),
             PsxRam.ReadU8(puVar6 + BattleState.FighterSlotIndex),
             uVar1,
@@ -580,7 +580,7 @@ internal static class FighterSubstitution
         BattleScene.DAT_8008d340 = BattleScene.DAT_8008d340 | 4;
     }
 
-    // GHIDRA: BuildCharacterPrimitives @ 0x80034818 (VS.EXE)
+    // GHIDRA: BuildFighterAuraPrimitives @ 0x80034818 (VS.EXE)
     // NO LONGER DECLARED HERE. CLOSED, in VS_EXE/CharacterPrimitives.cs, together with its own
     // callee ExpandPrimitiveTemplate and the three primitive templates they expand. ActivateFighterInSlot's
     // call below is qualified; the note that used to sit here said leaving it a stub 'does not

@@ -14,7 +14,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   FUN_800477ec   0x800477EC   HERE  — the fighter's own sprite/primitive submission
 //   FUN_80047a24   0x80047A24   HERE  — the fighter's shadow, a second submission at y = 0
 //   FUN_80047b10   0x80047B10   ported in FighterTask.cs (the texture reload)
-//   FUN_8004fd24   0x8004FD24   HERE  — the per-frame report to FUN_800340a8
+//   DriveFighterAura   0x8004FD24   HERE  — the per-frame report to UpdateFighterAura
 //
 // FUN_8004b68c @ 0x8004B68C is not part of that quintet; it is step 9.3's neighbour, the fourth
 // recogniser path FUN_8004b9cc @ 0x8004B9CC takes when the fighter's +0x138 has either of bits
@@ -203,7 +203,7 @@ internal static class FighterMotion
             VS_EXE_exe.DAT_1f800128);
     }
 
-    // GHIDRA: FUN_8004fd24 @ 0x8004FD24 (VS.EXE)
+    // GHIDRA: DriveFighterAura @ 0x8004FD24 (VS.EXE)
     // 712 bytes, 0x8004FD24..0x8004FFEB. The same six callers, last of step 9.8's five. Ported in
     // full — the body is small; the 712 bytes are the eight-clause condition chain below, which the
     // compiler expanded into one compare-and-branch pair per clause with no sharing.
@@ -211,7 +211,7 @@ internal static class FighterMotion
     // TWO FLAGS AND ONE REPORT. When +0x138 bit 18 (0x40000) is set it raises local_10, tests the
     // fighter's own state byte +0x16a against eight values while +4 is 1 and raises local_c if any
     // matches, and applies the Ki-gauge decrement unless the anim VM is suspended. Then, on EVERY
-    // path including the one where bit 18 was clear, it calls FUN_800340a8 with both flags.
+    // path including the one where bit 18 was clear, it calls UpdateFighterAura with both flags.
     //
     // THE EIGHT STATES are 0x13, 0x14, 0x25, 0x23, 0x24, 0x26, 0x27 and 0x28, in that order in the
     // original's `||` chain, each paired with its own re-read of the +4 halfword. FighterInput.cs's
@@ -236,48 +236,48 @@ internal static class FighterMotion
     // an UNSIGNED HALFWORD at that node's own offset 0. So it is ReadU16(g_CurrentTask), not
     // ReadI32, and not the node's +8 context pointer that AnimCmdTransform.cs and AnimCmdSound.cs
     // read from the same global.
-    internal static void FUN_8004fd24(int param_1, int param_2)
+    internal static void DriveFighterAura(int fighter, int pos)
     {
         int local_10 = 0;
         int local_c = 0;
 
-        if ((PsxRam.ReadI32(param_1 + 0x138) & 0x40000) != 0)
+        if ((PsxRam.ReadI32(fighter + 0x138) & 0x40000) != 0)
         {
             local_10 = 1;
 
-            if ((PsxRam.ReadU8(param_1 + 0x16a) == 0x13 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x14 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x25 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x23 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x24 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x26 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x27 && (short)PsxRam.ReadU16(param_1 + 4) == 1)
-                || (PsxRam.ReadU8(param_1 + 0x16a) == 0x28 && (short)PsxRam.ReadU16(param_1 + 4) == 1))
+            if ((PsxRam.ReadU8(fighter + 0x16a) == 0x13 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x14 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x25 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x23 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x24 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x26 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x27 && (short)PsxRam.ReadU16(fighter + 4) == 1)
+                || (PsxRam.ReadU8(fighter + 0x16a) == 0x28 && (short)PsxRam.ReadU16(fighter + 4) == 1))
             {
                 local_c = 1;
             }
 
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
-                FighterCombat.FUN_8004a108(param_1);
+                FighterCombat.FUN_8004a108(fighter);
             }
         }
 
-        // CLOSED: FUN_800340a8 @ 0x800340A8 (1764 bytes) is VS_EXE/SceneGeometry.cs's own body.
-        SceneGeometry.FUN_800340a8(
+        // CLOSED: UpdateFighterAura @ 0x800340A8 (1764 bytes) is VS_EXE/SceneGeometry.cs's own body.
+        SceneGeometry.UpdateFighterAura(
             PsxRam.ReadU16(TaskSystem.g_CurrentTask),
-            PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex),
-            param_2,
-            param_1 + 0x11c,
-            PsxRam.ReadU8(param_1 + 0x16a),
+            PsxRam.ReadU8(fighter + BattleState.FighterSlotIndex),
+            pos,
+            fighter + 0x11c,
+            PsxRam.ReadU8(fighter + 0x16a),
             local_10,
             local_c);
     }
 
-    // GHIDRA: FUN_800340a8 @ 0x800340A8 (VS.EXE)
+    // GHIDRA: UpdateFighterAura @ 0x800340A8 (VS.EXE)
     // NO LONGER DECLARED HERE. Closed in VS_EXE/SceneGeometry.cs (1764 bytes). The call below is
     // qualified; the stub that used to sit here would have won the binding and this file's own
-    // FUN_8004FD24 would have gone on reporting to nothing.
+    // DriveFighterAura would have gone on reporting to nothing.
     // GHIDRA: FUN_8004b68c @ 0x8004B68C (VS.EXE)
     // 484 bytes, 0x8004B68C..0x8004B89F. One caller, FUN_8004b9cc @ 0x8004B9CC (ported in
     // FighterAction.cs): `else { local_10 = FUN_8004b68c(param_1); }`, the arm taken when the

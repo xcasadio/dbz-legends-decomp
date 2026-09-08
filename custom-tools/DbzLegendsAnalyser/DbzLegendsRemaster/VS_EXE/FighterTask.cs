@@ -394,7 +394,7 @@ internal static class FighterTask
                                     FighterMotion.FUN_800477ec(iVar3, iVar3 + 0x114);
                                     FighterMotion.FUN_80047a24(iVar3, iVar3 + 0x114);
                                     FUN_80047b10(iVar3);
-                                    FighterMotion.FUN_8004fd24(iVar3, iVar3 + 0x114);
+                                    FighterMotion.DriveFighterAura(iVar3, iVar3 + 0x114);
                                 }
 
                                 // PHASE 10 @ 0x8005117C — the tail. Runs on the main path only; none
@@ -460,7 +460,7 @@ internal static class FighterTask
     // the animation VM's suspend bit is up, i.e. the frozen-frame path. All five callees are the
     // same +0x138-bit-27-gated quintet phase 9.7/9.8 already runs in the main body above, called
     // here on the SAME two arguments (fighter, fighter's own +0x114 position triple) — reached
-    // through this file's own declarations of them, one of which (FUN_8004fd24) is still its own
+    // through this file's own declarations of them, one of which (DriveFighterAura) is still its own
     // BLOCKED stub below.
     private static void FUN_80050658(int param_1)
     {
@@ -470,7 +470,7 @@ internal static class FighterTask
             FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
             FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
 
@@ -490,7 +490,7 @@ internal static class FighterTask
             FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
             FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
 
@@ -567,7 +567,7 @@ internal static class FighterTask
             FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
             FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
 
@@ -598,7 +598,7 @@ internal static class FighterTask
             FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
             FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
 
         PsxRam.WriteU16(param_1 + 0x22a, 0);
@@ -695,7 +695,7 @@ internal static class FighterTask
             FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
             FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
             FUN_80047b10(param_1);
-            FighterMotion.FUN_8004fd24(param_1, param_1 + 0x114);
+            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
 
@@ -767,7 +767,7 @@ internal static class FighterTask
     // GHIDRA: FUN_8004fbfc @ 0x8004FBFC (VS.EXE)
     // 296 bytes, 0x8004FBFC..0x8004FD23. Step 9.2, run unconditionally between the node resolution
     // and the command word. It sits immediately after FUN_8004fa8c in the address space and
-    // immediately before FUN_8004fd24, the three of them one compilation unit.
+    // immediately before DriveFighterAura, the three of them one compilation unit.
     //
     // CERTAIN which bytes move, from two independent readings (Ghidra's decompilation and
     // mcp__pcsx-redux__pcsx_analyze_function @ 0x8004fbfc, which agree): Ghidra renders the first
@@ -1278,7 +1278,7 @@ internal static class FighterTask
         }
     }
 
-    // GHIDRA: FUN_8004fd24 @ 0x8004FD24 (VS.EXE)
+    // GHIDRA: DriveFighterAura @ 0x8004FD24 (VS.EXE)
     // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
     // reach it by qualified name: an empty stub in the enclosing class silently beats a real
     // body elsewhere, which is what check_function_addresses.py exists to catch.

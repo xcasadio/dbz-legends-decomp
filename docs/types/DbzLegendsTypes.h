@@ -117,10 +117,14 @@ struct FighterRecord {
     SVECTOR  pos;                   /* +0x114 : bornee par posMin/posMax dans UpdateFighter ;
                                        vy <= 0 toujours, et >= posMin.vy quand stateOpcode == 0 ;
                                        passee a DistanceBetweenPositions, ComputeYawPitchToTarget */
-    ushort   field_11c;             /* +0x11C..+0x120 : trois demi-mots remis a zero a la creation, */
-    ushort   field_11e;             /*   variable VM n.1, passes a FUN_800340a8 par adresse. PAS   */
-    ushort   field_120;             /*   nommes rot : cette fonction ne les donne pas a RotMatrix  */
-    undefined1 pad_122[2];
+    SVECTOR  rot;                   /* +0x11C : variable VM n.1 (binding_14). Le rasoir est le
+                                       couple de resolveurs de la VM d animation : FUN_8003f228
+                                       rend fighter + 0x114 pour un vecteur de POSITION, et
+                                       FUN_8003f2b0 rend fighter + 0x11C pour un vecteur de
+                                       ROTATION, sur les memes pointeurs de creneau ; rotate_set
+                                       (FUN_8003c3c0) passe ce dernier a FUN_80047550, qui lit
+                                       +2 et +4 comme angles de RotMatrix. Mon refus precedent
+                                       ne regardait que l aura, qui recoit &rot sans le lire. */
     uint     field_124;             /* +0x124..+0x130 : quatre mots, le descripteur d attaque du portage */
     uint     field_128;
     uint     field_12c;
@@ -358,3 +362,74 @@ struct BattleContext {
     undefined1 pad_16d0[5776];
     uint     roundRequest;              /* 0x2D60 */
 };
+
+/* L AURA DU COMBATTANT, lue a son rendu.
+ *
+ * Six enregistrements de 0x1E58 octets a 0x8008DA48 (g_FighterAuras), remis a zero par
+ * FUN_80034D98 (memset 0xB610 = 6 * 0x1E58). Le createur, AllocFighterAura @ 0x8003478C,
+ * n ecrit que la cle : characterId et slotIndex, deux demi-mots que UpdateFighterAura
+ * relit en un seul mot `characterId | slotIndex << 16`. BuildFighterAuraPrimitives
+ * @ 0x80034818 remplit le reste a partir de trois gabarits (PTR_DAT_800811B4 :
+ * 8, 40 et 40 quads), et UpdateFighterAura @ 0x800340A8 le pilote a chaque frame.
+ *
+ * C EST LE RENDU QUI NOMME LA DISPOSITION. RenderFighterAuraPass @ 0x80033C64 fait
+ *
+ *     RotMatrix(rec + pass*8 + 0x14)               -> SVECTOR rot[3]
+ *     translation depuis rec + pass*8 + 0x2C       -> SVECTOR pos[3]   (moins la camera)
+ *     ScaleMatrix(rec + pass*0x10 + 0x44)          -> VECTOR  scale[3]
+ *     RotAverage4 sur rec + i*0x18 + 0x14C4        -> short   vertices[100][4][3]
+ *     xy ecrits dans rec + i*0x34 + 0x74           -> POLY_GT4 prims[100]
+ *
+ * et 0x74 + 100 * 0x34 = 0x14C4 exactement, 0x14C4 + 100 * 0x18 = 0x1E24 exactement.
+ * Les couleurs que SetFighterAuraPassColor ecrit a +0x78/+0x84/+0x90/+0x9C de chaque
+ * primitive sont r0..r3 d un POLY_GT4 (foulee 0xC), ce qui ferme le type des paquets.
+ *
+ * LA MACHINE. phase (+0x04) : 0 repos, 1 debut, 2 en cours, 3 stabilisation, 0xFF fondu.
+ * activePass (+0x10) : 1 = aura de deplacement (gabarit 1, un ellipsoide, plus les
+ * trainees de 1000 unites du gabarit 0), orientee selon le deplacement du combattant --
+ * ratan2 de (pos - lastFighterPos) dans motionPitch/motionYaw, copies dans rot[1].vx/vy,
+ * rot[1].vz tournant de -0xA0 par frame ; 2 = aura dressee (gabarit 2), rot[2].vx = -0x400,
+ * dont l echelle "eclate" : scaleFactor += scaleVelocity, scaleVelocity -= 300 par frame,
+ * chaque composante bloquee a 0x1000, phase 2 quand les trois y sont. Les etats 2..10,
+ * 0x1C et 0x2A choisissent la passe 1, tous les autres la passe 2. timer (+0x0C) vaut 10
+ * au fondu et 3 au debut, decremente par les fonctions de phase. scale[pass] part des
+ * tables par personnage ci-dessous ; scale[0].vz croit de 500 par frame jusqu a
+ * scale[1].vz, c est l etirement des trainees.
+ *
+ * QUATRE TABLES PAR PERSONNAGE, fermees par pavage : 0x800811C0 + 39*4 = 0x8008125C,
+ * + 39*4 = 0x800812F8, + 39*16 = 0x80081568, + 39*16 = 0x800817D8, sans trou. Le
+ * decalage en y est soustrait a pos[pass].vy, le VECTOR va dans scale[pass].
+ *
+ * fighterRot (&fighter->rot) est passe aux six fonctions de phase et lu par aucune
+ * (struct_fields.py sur $a1 : carte vide). SettleUprightAura recoit un quatrieme
+ * argument, l etat, charge dans $a3 par le slot de delai de 0x800346EC, et ne le lit pas
+ * non plus. field_1e50 est lu comme un mot et jamais nomme : son role n est pas vu.
+ */
+struct FighterAuraRecord {
+    ushort   characterId;           /* +0x00 : id du noeud de tache, i.e. du personnage */
+    ushort   slotIndex;             /* +0x02 */
+    byte     phase;                 /* +0x04 */
+    byte     primCount;             /* +0x05 : curseur de primitives des trois passes */
+    byte     passFirst[3];          /* +0x06 : premiere primitive de la passe 0/1/2 */
+    byte     passCount[3];          /* +0x09 : nombre de primitives de la passe 0/1/2 */
+    int      timer;                 /* +0x0C : frames restantes */
+    int      activePass;            /* +0x10 : 1 ou 2 */
+    SVECTOR  rot[3];                /* +0x14 : une par passe, RotMatrix */
+    SVECTOR  pos[3];                /* +0x2C : une par passe, translation */
+    VECTOR   scale[3];              /* +0x44 : une par passe, ScaleMatrix */
+    POLY_GT4 prims[100];            /* +0x74 : paquets GPU, code 0x3C ou 0x34 */
+    short    vertices[100][4][3];   /* +0x14C4 : les quatre coins de chaque quad */
+    VECTOR   scaleVelocity;         /* +0x1E24 */
+    VECTOR   scaleFactor;           /* +0x1E34 : virgule fixe 12 bits, 0x1000 = 1.0 */
+    SVECTOR  lastFighterPos;        /* +0x1E44 */
+    short    motionPitch;           /* +0x1E4C : ratan2(-dy, dz) */
+    short    motionYaw;             /* +0x1E4E : ratan2(dx, sqrt(dz*dz + dy*dy)) */
+    uint     field_1e50;
+    int      lastStateOpcode;       /* +0x1E54 : l etat de la frame precedente */
+};
+
+extern struct FighterAuraRecord g_FighterAuras[6];   /* 0x8008DA48 */
+extern int    g_MotionAuraYOffset[39];               /* 0x800811C0 */
+extern int    g_UprightAuraYOffset[39];              /* 0x8008125C */
+extern VECTOR g_MotionAuraScale[39];                 /* 0x800812F8 */
+extern VECTOR g_UprightAuraScale[39];                /* 0x80081568 */
