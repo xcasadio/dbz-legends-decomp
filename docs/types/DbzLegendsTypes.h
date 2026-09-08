@@ -144,23 +144,27 @@ struct FighterRecord {
  * vaut 0 ou 1 aux sites d appel connus. Soit +0x70 ne pointe pas sur un noeud, soit
  * son +0x0C est reecrit apres coup. A mesurer, pas a trancher.
  *
- * +0x80..+0xA8 EST UNE TABLE DE LIAISONS : CreateAttackEventTask y range onze
- * pointeurs vers les champs de l enregistrement lui-meme (+0x10, +0x40, +0x48, +0x60,
- * +0x78, +0x7E, +0x70, +0x50, +0x58, +0x7C), et +0x0C pointe sur cette table. Le
- * dernier appel, `FUN_80053970(travail, &PTR_DAT_800217F0, drapeaux)`, est ce qui la
- * relie a la VM d animation : ce sont ses variables.
+ * +0x80..+0xA8 EST UNE TABLE DE LIAISONS, mais pas un tableau : CreateAttackEventTask
+ * y range DIX pointeurs vers les champs de l enregistrement lui-meme et SAUTE +0x98.
+ * J avais d abord ecrit `bindings[11]` ; l union des trois vues (createur, consommateur,
+ * tache propre) a montre le trou. +0x0C pointe sur cette table, et le dernier appel,
+ * `FUN_80053970(travail, &PTR_DAT_800217F0, drapeaux)`, la relie a la VM d animation.
  */
 struct AttackEventRecord {
-    undefined1 pad_0[12];
-    void     *vmBindings;           /* +0x0C -> &bindings (+0x80) */
-    undefined1 pad_10[44];
+    undefined1 pad_0[4];
+    ushort   field_4;
+    undefined1 pad_6[6];
+    void     *vmBindings;           /* +0x0C -> &binding_80, pose par CreateAttackEventTask */
+    undefined1 pad_10[24];
+    void     *field_28;             /* +0x28, premier argument de DrawSpriteGroup */
+    undefined1 pad_2c[16];
     struct TaskNode *attackerTaskNode;  /* +0x3C = g_CurrentTask a la creation */
-    ushort   field_40;              /* +0x40..+0x4C : les six demi-mots recopies des */
-    ushort   field_42;              /*   deux cibles passees a CreateAttackEventTask */
+    ushort   field_40;              /* +0x40..+0x44 : x, y (signe), z passes a DrawSpriteGroup */
+    short    field_42;
     ushort   field_44;
     undefined1 pad_46[2];
-    ushort   field_48;
-    ushort   field_4a;
+    undefined2 field_48;            /* +0x48..+0x4C : recopies de la seconde cible a la creation */
+    ushort   field_4a;              /*   lus en signe par FUN_80045b70, en non signe ailleurs */
     ushort   field_4c;
     undefined1 pad_4e[2];
     uint     field_50;
@@ -169,12 +173,23 @@ struct AttackEventRecord {
     uint     field_5c;
     undefined1 pad_60[12];
     uint     eventType;             /* +0x6C, >>8 == 0x80 : la forme cible alternative */
-    int      targetTaskNode;        /* +0x70, rempli par la VM via vmBindings */
-    undefined1 pad_74[4];
+    struct TaskNode *targetTaskNode;    /* +0x70, rempli par la VM via vmBindings */
+    int      field_74;              /* +0x74, l argument de profondeur de DrawSpriteGroup */
     int      eventFlags;            /* +0x78, initialise a 0x4000000 ; negatif ouvre le coup */
-    short    field_7c;              /* +0x7C = le type passe a CreateAttackEventTask */
-    undefined1 pad_7e[2];
-    void     *bindings[11];         /* +0x80 : pointeurs dans l enregistrement lui-meme */
+    ushort   field_7c;              /* +0x7C = le type passe a CreateAttackEventTask */
+    byte     field_7e;              /* +0x7E : un angle sur 6 bits (& 0x3f), 2 bits de drapeaux */
+    undefined1 pad_7f[1];
+    void     *binding_80;           /* +0x80..+0xA8 : dix pointeurs DANS l enregistrement, poses */
+    void     *binding_84;           /*   par CreateAttackEventTask -- +0x10, +0x40, +0x48, +0x60, */
+    void     *binding_88;           /*   +0x78, +0x7E, puis +0x70, +0x50, +0x58, +0x7C -- et lies */
+    void     *binding_8c;           /*   a la VM d animation par FUN_80053970(&PTR_DAT_800217F0). */
+    void     *binding_90;           /*   +0x98 N EST PAS ECRIT : ce n est pas un tableau de onze. */
+    void     *binding_94;
+    undefined1 pad_98[4];
+    void     *binding_9c;
+    void     *binding_a0;
+    void     *binding_a4;
+    void     *binding_a8;
     undefined1 pad_ac[16];
     byte     field_bc;
     undefined1 pad_bd[3];
@@ -204,14 +219,27 @@ struct AttackEventRecord {
  */
 struct TaskNode {
     ushort   id;                    /* +0x00 */
-    ushort   field_2;               /* +0x02, remis a zero a la creation */
-    void     *entry;                /* +0x04 */
+    ushort   field_2;               /* +0x02 : bits 0-1 = etat (0 tourne, 1 a supprimer), bit 1 = protege */
+    void     *entry;                /* +0x04 : appele sans argument par ExecuteTaskList */
     void     *context;              /* +0x08 -> &workspace, ou 0 si taille nulle */
-    uint     param5;                /* +0x0C */
-    struct TaskNode *prev;          /* +0x10 */
-    struct TaskNode *next;          /* +0x14 */
+    int      param5;                /* +0x0C : COMPTEUR DE FRAMES, lu chez ExecuteTaskList --
+                                       > 0  decremente chaque frame sans tourner (delai)
+                                       = 0  tourne a chaque frame
+                                       < 0  tourne, puis +1 ; a -1 le noeud est libere */
+    struct TaskNode *prev;          /* +0x10, vers la tete (g_TaskListHead) */
+    struct TaskNode *next;          /* +0x14, vers la queue ; c est le sens de parcours */
     /* +0x18 : l espace de travail, en ligne, de la taille demandee a CreateTask */
 };
+
+/* LES GLOBAUX DU SCHEDULER, types chez leurs ecrivains. g_CurrentTask a 96 references,
+ * mais seuls ExecuteTaskList, DeleteTask et DeleteTaskList l ECRIVENT, et le balayage du
+ * programme entier a travers sa valeur ne touche que +2, +4, +0xC, +0x10, +0x14 : rien hors
+ * de l en-tete de 0x18. Les trois tables ont 21 entrees : 0x80083B90 - 0x80083B3C = 0x54. */
+extern struct TaskNode *g_CurrentTask;          /* 0x8008D16C */
+extern ushort           g_CurrentTaskListIndex; /* 0x8008D170 */
+extern struct TaskNode *g_TaskListHead[21];     /* 0x80083B3C, le noeud dont prev == 0 */
+extern struct TaskNode *g_TaskListTail[21];     /* 0x80083B90, le noeud dont next == 0 */
+extern short            g_TaskListCount[21];    /* 0x80083BE4 */
 
 /* LE CONTEXTE DE COMBAT, ET IL PAVE DE BOUT EN BOUT.
  *

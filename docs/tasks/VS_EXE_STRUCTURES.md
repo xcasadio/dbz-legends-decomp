@@ -164,6 +164,31 @@ La chaine imbriquee que cela etablit :
 une structure qui en contient une autre, le pont etant le champ contexte que
 CreateTask range dans le noeud.
 
+## TYPER UN GLOBAL : LES ECRIVAINS D ABORD, PUIS TOUT CE QUI PASSE PAR SA VALEUR
+
+`DAT_8008d16c` a 96 references. Deux preuves, et aucune ne passe par un lecteur :
+
+1. **Ses ecrivains sont tous le scheduler.** `FUN_80053628` y range la tete de liste,
+   parcourt les noeuds a travers lui, lit +2 / +4 / +0xC / +0x10 / +0x14 et APPELLE
+   `*(+4)` ; `FUN_8005354c` et `FUN_80053840` le font avancer quand ils dechainent le
+   noeud courant. Personne d autre ne l ecrit.
+2. **Le balayage de tout le programme a travers sa valeur** -- `struct_fields.py`
+   amorce sur chaque `lw rt,0x70($gp)` (gp = 0x8008D0FC) -- ne touche que
+   +2, +4, +0xC, +0x10, +0x14. Rien hors de l en-tete de 0x18 d un noeud.
+
+Donc `TaskNode *`, nomme `g_CurrentTask` comme dans le portage TITLE.EXE, qui avait
+choisi les memes noms a ses propres adresses : `ExecuteTaskList` (0x80053628),
+`DeleteTask` (0x8005354c), `DeleteTaskList` (0x80053840), `g_CurrentTaskListIndex`
+(0x8008D170, le ushort que le repartiteur ecrit juste a cote). Les trois tables de
+listes ont 21 entrees : `0x80083B90 - 0x80083B3C = 0x54`, coherent avec l index 0x14
+que `main` passe a CreateTask.
+
+Le repartiteur donne aussi le sens de `+0x0C`, que CreateTask laissait opaque : un
+COMPTEUR DE FRAMES. Positif, il est decremente sans que la tache tourne (un delai) ;
+nul, la tache tourne a chaque frame ; negatif, elle tourne puis il est incremente, et
+a -1 le noeud est libere. C est ecrit dans le miroir, pas dans un nom : `param5`
+reste `param5` tant qu un seul appelant n a pas ete relu avec cette grille.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les
