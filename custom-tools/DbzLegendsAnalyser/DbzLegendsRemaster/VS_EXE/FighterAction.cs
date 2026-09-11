@@ -7,7 +7,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // FighterSetState, CreateAttackEventTask and the two attack-event roots): this file is the home
 // for the smaller leaves that pick WHICH attack/guard/special state a fighter enters, reached
 // from FighterTask.cs step 9.4 through three dispatchers this port does not touch —
-// FUN_8004b098, FUN_8004c198, FUN_8004cea0, all still empty stubs, all somebody else's slice in
+// DispatchFighterNeutralCommand, DispatchFighterActionState, DispatchFighterReactionState, all still empty stubs, all somebody else's slice in
 // this wave (two other agents are working on FighterTask.cs and its immediate callees while this
 // file is written). This file owns none of those three and edits nothing outside itself.
 //
@@ -49,7 +49,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 internal static class FighterAction
 {
     // GHIDRA: FUN_8004aa44 @ 0x8004AA44 (VS.EXE)
-    // 88 bytes. One caller, FUN_8004b098 (`else if (param_2 == 0x21) { FUN_8004aa44(param_1);
+    // 88 bytes. One caller, DispatchFighterNeutralCommand (`else if (param_2 == 0x21) { FUN_8004aa44(param_1);
     // FUN_8004bf50(param_1); ... }` — both siblings out of this slice). Forces state 0x21, then
     // sets +0x138 bit 1 (0x2).
     internal static void FUN_8004aa44(int param_1)
@@ -59,7 +59,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004a910 @ 0x8004A910 (VS.EXE)
-    // 108 bytes. Two callers: FUN_8004b098 (`FUN_8004a910(param_1,param_2);`) and FUN_8004ca54
+    // 108 bytes. Two callers: DispatchFighterNeutralCommand (`FUN_8004a910(param_1,param_2);`) and FUN_8004ca54
     // (`FUN_8004a910(param_1,0x17);`, after clearing +0x138 bit 9). Stamps the given state, sets
     // +0x138 bit 0 (0x1), then calls FighterCombat.FUN_8004a108 — the Ki-gauge decrement. Ghidra
     // prints that call with param_2 forwarded (`FUN_8004a108(param_1,param_2)`), but
@@ -73,7 +73,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004ad0c @ 0x8004AD0C (VS.EXE)
-    // 116 bytes. Three callers: FUN_8004b098, FUN_8004cb24, FUN_8004cc64 (all `else { FUN_8004ad0c
+    // 116 bytes. Three callers: DispatchFighterNeutralCommand, FUN_8004cb24, FUN_8004cc64 (all `else { FUN_8004ad0c
     // (param_1); }` or equivalent — none in this slice). Forces state 0x20, then masks +0x138
     // with 0xfa640000 (confirmed against the raw `lui v1,0xfa64 / and a0,a0,v1` pair — the value
     // is a genuine `lui`-built constant, not a decompiler artifact) before setting bit 14
@@ -86,7 +86,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004b024 @ 0x8004B024 (VS.EXE)
-    // 116 bytes. One caller, FUN_8004b098 (`else { FUN_8004b024(param_1); }`). When the fighter's
+    // 116 bytes. One caller, DispatchFighterNeutralCommand (`else { FUN_8004b024(param_1); }`). When the fighter's
     // +4 halfword is zero, clears +0x138 bit 15 (0x8000) and calls FighterCombat.FUN_8004a638
     // (fighter, 0) — the same "re-stamp current state, opcode 0" call shape FighterCombat.cs's
     // own header note documents for FUN_8004a638's other callers.
@@ -223,7 +223,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004b8a0 @ 0x8004B8A0 (VS.EXE)
-    // 300 bytes, the largest of the eight, taken last. One caller, FUN_8004c198 (out of this
+    // 300 bytes, the largest of the eight, taken last. One caller, DispatchFighterActionState (out of this
     // slice): `if ((*(uint*)(param_1+0x138) & 6) == 0) { FUN_8004b8a0(param_1,param_2,param_3); }`.
     // Two independent arms:
     //   +4 halfword == 0: clears +0x138 bit 0 and +0x134 bit 29 (0xdfffffff, the same mask
@@ -256,7 +256,7 @@ internal static class FighterAction
     //   0x8004B9CC (420B), 0x8004BB70 (460B), 0x8004BD3C (532B), 0x8004BF50 (584B, called from
     //   BOTH step-9.4 arms), 0x8004AD80 (676B). A sixth address named in this wave's own brief,
     //   0x8004AA9C (624B), is SKIPPED here: FighterCombat.cs already carries it as a real body —
-    //   its own header note there counts this file's FUN_8004b098 as one of its three callers —
+    //   its own header note there counts this file's DispatchFighterNeutralCommand as one of its three callers —
     //   so porting it again here would be exactly the duplicate-declaration defect this
     //   project's own rules call out. It is cross-referenced as FighterCombat.FUN_8004aa9c,
     //   never redeclared.
@@ -277,7 +277,7 @@ internal static class FighterAction
     // =====================================================================================
 
     // GHIDRA: FUN_8004b9cc @ 0x8004B9CC (VS.EXE)
-    // 420 bytes. One caller, FUN_8004c198 (out of this slice): `else { FUN_8004b9cc(param_1); }`.
+    // 420 bytes. One caller, DispatchFighterActionState (out of this slice): `else { FUN_8004b9cc(param_1); }`.
     // Gated on the fighter's own +4 halfword being zero (else a no-op). Clears +0x138 bits
     // 0x20/0x40 (mask 0xffffff9f) and +0x134 bit 0x20000000 (0xdfffffff, the same mask this file
     // already uses elsewhere), then picks a slot value: when the fighter's OWN task node's
@@ -456,7 +456,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004bb70 @ 0x8004BB70 (VS.EXE)
-    // 460 bytes. One caller, FUN_8004c198 (out of this slice): `else { FUN_8004bb70(param_1,
+    // 460 bytes. One caller, DispatchFighterActionState (out of this slice): `else { FUN_8004bb70(param_1,
     // param_2); }`.
     //
     // TWO INDEPENDENT ARMS:
@@ -503,7 +503,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004bd3c @ 0x8004BD3C (VS.EXE)
-    // 532 bytes. One caller, FUN_8004c198 (out of this slice): `else { FUN_8004bd3c(param_1,
+    // 532 bytes. One caller, DispatchFighterActionState (out of this slice): `else { FUN_8004bd3c(param_1,
     // param_2); }`.
     //
     // First computes local_10 = 0xffffffff (the "no slot" sentinel), and overwrites it with
@@ -560,8 +560,8 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004bf50 @ 0x8004BF50 (VS.EXE)
-    // 584 bytes. Two callers, both out of this slice — FUN_8004b098 (right after FUN_8004aa44
-    // above: `FUN_8004aa44(param_1); FUN_8004bf50(param_1);`) and FUN_8004c198 (`else {
+    // 584 bytes. Two callers, both out of this slice — DispatchFighterNeutralCommand (right after FUN_8004aa44
+    // above: `FUN_8004aa44(param_1); FUN_8004bf50(param_1);`) and DispatchFighterActionState (`else {
     // FUN_8004bf50(param_1); }`) — the pair this whole family's own header note already flags as
     // "called from BOTH step-9.4 arms".
     //
@@ -637,7 +637,7 @@ internal static class FighterAction
     }
 
     // GHIDRA: FUN_8004ad80 @ 0x8004AD80 (VS.EXE)
-    // 676 bytes, the largest of this wave's ported targets. One caller, FUN_8004b098 (out of
+    // 676 bytes, the largest of this wave's ported targets. One caller, DispatchFighterNeutralCommand (out of
     // this slice), reached from TWO different call sites in step 9.4's own body: once bare
     // (`else { FUN_8004ad80(param_1); }`) and once right after FighterCombat.FUN_8004aa9c
     // (`FUN_8004aa9c(param_1); FUN_8004ad80(param_1);`).

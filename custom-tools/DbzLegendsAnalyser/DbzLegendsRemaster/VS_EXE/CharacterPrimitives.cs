@@ -210,7 +210,7 @@ internal static class CharacterPrimitives
     // THE EIGHT-BYTE COPY at +0x1E44 is `lwl`/`lwr` on the source and `swl`/`swr` on the
     // destination, twice over. That idiom reconstructs the exact four source bytes regardless of
     // alignment, so the pair is PROVABLY a byte-for-byte 8-byte copy -- the same reading
-    // FighterTask.cs's own FUN_8004FBFC note already establishes for its own pair. Written as two
+    // FighterTask.cs's own UpdateFighterFacingFlag note already establishes for its own pair. Written as two
     // 32-bit moves.
     //
     // PARTIAL: what the three 8-byte and three 16-byte blocks at +0x14..+0x6F hold is not closed

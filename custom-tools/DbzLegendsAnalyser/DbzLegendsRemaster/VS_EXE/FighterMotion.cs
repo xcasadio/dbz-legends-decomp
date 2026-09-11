@@ -7,13 +7,13 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // WHAT THIS FILE IS. FighterTask.cs's UpdateFighter runs a numbered phase ladder; step 9.8 is the
 // "+0x138 bit 27 clear" quintet, run from FIVE different call sites in that file
-// (FUN_800501b8 / FUN_80050514 / FUN_80050658 / FUN_8005070c / FUN_80050824) and once more from
+// (FUN_800501b8 / UpdateHeldFighter / DrawFighter / FUN_8005070c / UpdateOutOfPlayFighter) and once more from
 // the main body at 0x8005112c..0x80051170. The quintet is, in evaluation order:
 //
-//   FUN_80047740   0x80047740   ported in FighterTask.cs (the three bytes at +0x150..+0x152)
-//   FUN_800477ec   0x800477EC   HERE  — the fighter's own sprite/primitive submission
-//   FUN_80047a24   0x80047A24   HERE  — the fighter's shadow, a second submission at y = 0
-//   FUN_80047b10   0x80047B10   ported in FighterTask.cs (the texture reload)
+//   SetFighterTint   0x80047740   ported in FighterTask.cs (the three bytes at +0x150..+0x152)
+//   DrawFighterSprite   0x800477EC   HERE  — the fighter's own sprite/primitive submission
+//   DrawFighterShadow   0x80047A24   HERE  — the fighter's shadow, a second submission at y = 0
+//   UploadFighterTexture   0x80047B10   ported in FighterTask.cs (the texture reload)
 //   DriveFighterAura   0x8004FD24   HERE  — the per-frame report to UpdateFighterAura
 //
 // FUN_8004b68c @ 0x8004B68C is not part of that quintet; it is step 9.3's neighbour, the fourth
@@ -23,7 +23,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // the duplicate this file's arrival creates and which the wiring pass has to delete. See the
 // note on the function itself.
 //
-// THE TWO SUBMISSION CALLS SHARE ONE CALLEE. FUN_800477ec and FUN_80047a24 both end in a call to
+// THE TWO SUBMISSION CALLS SHARE ONE CALLEE. DrawFighterSprite and DrawFighterShadow both end in a call to
 // DrawSpriteGroup @ 0x80052DB4, the "primitive pool" drawer VS_EXE/PrimitivePools.cs names in passing
 // and FighterCombat.cs already carries as a precise 18-parameter no-op stub. Its real prototype,
 // from Ghidra's own callee-side analysis, is
@@ -35,7 +35,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // EIGHTEEN parameters, and both call sites were checked instruction by instruction against that
 // count rather than against Ghidra's per-call-site guess — Ghidra prints NINETEEN arguments at
-// FUN_800477ec's call site, and that nineteenth is wrong. See FUN_800477ec's own note.
+// DrawFighterSprite's call site, and that nineteenth is wrong. See DrawFighterSprite's own note.
 //
 // WHAT param_2 IS. Every one of the five call sites passes `iVar3 + 0x114` — the fighter's own
 // position triple, three signed halfwords at +0x114 / +0x116 / +0x118, the same triple
@@ -49,12 +49,12 @@ namespace DbzLegendsRemaster.VS_EXE;
 // component and 0x1F8000BC from the z component. Scratchpad._DAT_1f8000b4 / _DAT_1f8000bc are
 // declared `int` there because FileIo.SetupGeometry writes them with a full word (`sw`), but every
 // read in THIS file is `lhu` — 0x800478E8 `lhu v1,0xb4(v1)` and 0x80047918 `lhu a0,0xbc(a0)` in
-// FUN_800477ec, 0x80047A50 and 0x80047A74 in FUN_80047a24. The low halfword is what the hardware
+// DrawFighterSprite, 0x80047A50 and 0x80047A74 in DrawFighterShadow. The low halfword is what the hardware
 // takes, so each read is masked to `ushort` here. That is a load-width fact read off the
 // instructions, not an inference from the decompiler's `(uint)` cast.
 internal static class FighterMotion
 {
-    // GHIDRA: FUN_800477ec @ 0x800477EC (VS.EXE)
+    // GHIDRA: DrawFighterSprite @ 0x800477EC (VS.EXE)
     // 568 bytes, 0x800477EC..0x80047A23. Six callers: the five step-9.8 call sites in
     // FighterTask.cs's own early-out functions plus the main body's 0x8005112c. Ported in full.
     //
@@ -68,7 +68,7 @@ internal static class FighterMotion
     // (0x8004783C `andi v1,v0,0x1f` / 0x80047840 `sw v1,0x48(s8)`) and never read again: that local
     // was last read at 0x80047820 to build the +0x4c argument. It is a DEAD STORE in the original.
     // It is reproduced below as a dead assignment rather than dropped, per rule 12 — the original's
-    // pointless work is the original's, not a bug to fix. The sibling FUN_80047a24 below, whose
+    // pointless work is the original's, not a bug to fix. The sibling DrawFighterShadow below, whose
     // marshalling is straight-line and unambiguous, independently confirms the eighteen-slot shape:
     // its last store is also sp+0x44 = DAT_1f800128.
     //
@@ -92,19 +92,16 @@ internal static class FighterMotion
     // they are kept separate anyway, because collapsing repeated loads is the kind of tidying rule
     // 1 and rule 7 forbid.
     //
-    // BLOCKED: the return value. The original stores DrawSpriteGroup's result into +0x13c
-    // (0x80047A00 `lw v1,0x68(s8)` / 0x80047A08 `sw v0,0x13c(v1)`) — a primitive/handle the drawer
-    // hands back. FighterCombat.DrawSpriteGroup is a no-op stub that returns `void`, so there is no
-    // handle to store and 0 is written instead. That is not a fabricated value: the workspace is
-    // zeroed from +0x114 up by FUN_800512cc, so +0x13c is already 0 on every frame this port has
-    // ever run, and the one reader of the field — FighterTask.FUN_80047b10's `0 < +0x13c` gate —
-    // therefore behaves exactly as it does today. When DrawSpriteGroup is really ported it must
-    // return its int and this store must carry it.
-    internal static void FUN_800477ec(int param_1, int param_2)
+    // THE RETURN VALUE IS +0x13C, FighterRecord.lastDrawDepthKey. The original stores DrawSpriteGroup's
+    // result there (0x80047A00 `lw v1,0x68(s8)` / 0x80047A08 `sw v0,0x13c(v1)`): the depth key
+    // 0x800 - averageZ of the last sprite the drawer added, -1 when that sprite was culled or the
+    // group was empty, 0 when the primitive pool was exhausted. DrawSpriteGroup is ported and returns
+    // it; UploadFighterTexture's `0 < +0x13c` gate is the field's one reader.
+    internal static void DrawFighterSprite(int fighter, int pos)
     {
-        // s8+0x48: (*(uint *)(param_1 + 0x134)) & 0xff, then read back as a halfword to build the
+        // s8+0x48: (*(uint *)(fighter + 0x134)) & 0xff, then read back as a halfword to build the
         // +0x4c argument. 0x800477FC..0x80047820.
-        int local_48 = PsxRam.ReadI32(param_1 + 0x134) & 0xff;
+        int local_48 = PsxRam.ReadI32(fighter + 0x134) & 0xff;
 
         // s8+0x4c: `sll v1,v0,0x8` then `and v0,v0,0xffffc000`, stored with `sh` and read back with
         // `lh` — a SIGNED halfword, which is why the value reaches the callee sign-extended.
@@ -117,14 +114,14 @@ internal static class FighterMotion
         _ = local_48;
 
         // s8+0x4e: 0x80047850..0x80047888, read back with `lhu` at 0x80047980.
-        short local_4e = (short)((PsxRam.ReadU16(param_1 + 0x156) >> 6)
-            + ((PsxRam.ReadU16(param_1 + 0x158) >> 8) & 0xffff) * 0x10);
+        short local_4e = (short)((PsxRam.ReadU16(fighter + 0x156) >> 6)
+            + ((PsxRam.ReadU16(fighter + 0x158) >> 8) & 0xffff) * 0x10);
 
         // s8+0x50 — Ghidra's local_18. 0x80047890..0x800478AC, read back with `lbu` at 0x8004798C.
-        short local_50 = (short)((PsxRam.ReadU16(param_1 + 0x156) & 0x3f) << 2);
+        short local_50 = (short)((PsxRam.ReadU16(fighter + 0x156) & 0x3f) << 2);
 
         // s8+0x52 — Ghidra's local_16. 0x800478B4..0x800478C8, read back with `lbu` at 0x80047998.
-        short local_52 = (short)(PsxRam.ReadU16(param_1 + 0x158) & 0xff);
+        short local_52 = (short)(PsxRam.ReadU16(fighter + 0x158) & 0xff);
 
         // s8+0x58 then s8+0x54, in that order, both 0x249. 0x800478CC..0x800478D8.
         int local_58 = 0x249;
@@ -134,30 +131,30 @@ internal static class FighterMotion
         // -table bucket it used. The store into +0x13C below carries that value instead of the 0 the
         // stub forced.
         int drawResult = SpriteDrawer.DrawSpriteGroup(
-            PsxRam.ReadI32(param_1 + 0x98),
-            (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
-            (short)PsxRam.ReadU16(param_2 + 2),
-            (short)(PsxRam.ReadU16(param_2 + 4) - (ushort)Scratchpad._DAT_1f8000bc),
+            PsxRam.ReadI32(fighter + 0x98),
+            (short)(PsxRam.ReadU16(pos) - (ushort)Scratchpad._DAT_1f8000b4),
+            (short)PsxRam.ReadU16(pos + 2),
+            (short)(PsxRam.ReadU16(pos + 4) - (ushort)Scratchpad._DAT_1f8000bc),
             (ushort)local_4c,
             0,
             0,
             local_54,
             local_58,
-            PsxRam.ReadI32(param_1 + 0x140),
-            (short)PsxRam.ReadU16(param_1 + 0x15a),
+            PsxRam.ReadI32(fighter + 0x140),
+            (short)PsxRam.ReadU16(fighter + 0x15a),
             local_4e,
             (sbyte)local_50,
             (sbyte)local_52,
-            PsxRam.ReadU8(param_1 + 0x150),
-            PsxRam.ReadU8(param_1 + 0x151),
-            PsxRam.ReadU8(param_1 + 0x152),
+            PsxRam.ReadU8(fighter + 0x150),
+            PsxRam.ReadU8(fighter + 0x151),
+            PsxRam.ReadU8(fighter + 0x152),
             VS_EXE_exe.DAT_1f800128);
 
-        PsxRam.WriteI32(param_1 + 0x13c, drawResult);
+        PsxRam.WriteI32(fighter + 0x13c, drawResult);
     }
 
-    // GHIDRA: FUN_80047a24 @ 0x80047A24 (VS.EXE)
-    // 236 bytes, 0x80047A24..0x80047B0F. The same six callers as FUN_800477ec, always immediately
+    // GHIDRA: DrawFighterShadow @ 0x80047A24 (VS.EXE)
+    // 236 bytes, 0x80047A24..0x80047B0F. The same six callers as DrawFighterSprite, always immediately
     // after it and with the same two arguments. Ported in full.
     //
     // Straight-line: no local, no branch, one call, no return value used. The whole body is the
@@ -176,17 +173,17 @@ internal static class FighterMotion
     //
     // DrawSpriteGroup returns an int here too and this caller discards it (no `sw` after the `jal`),
     // so the void stub costs this function nothing.
-    internal static void FUN_80047a24(int param_1, int param_2)
+    internal static void DrawFighterShadow(int fighter, int pos)
     {
-        // param_1 is unread by the original: 0x80047A30 stores it to s8+0x50 and nothing loads it
+        // fighter is unread by the original: 0x80047A30 stores it to s8+0x50 and nothing loads it
         // back. Every caller still passes the fighter. Kept in the signature for that reason.
-        _ = param_1;
+        _ = fighter;
 
         SpriteDrawer.DrawSpriteGroup(
             unchecked((int)0x8007F7B8),
-            (short)(PsxRam.ReadU16(param_2) - (ushort)Scratchpad._DAT_1f8000b4),
+            (short)(PsxRam.ReadU16(pos) - (ushort)Scratchpad._DAT_1f8000b4),
             0,
-            (short)(PsxRam.ReadU16(param_2 + 4) - (ushort)Scratchpad._DAT_1f8000bc),
+            (short)(PsxRam.ReadU16(pos + 4) - (ushort)Scratchpad._DAT_1f8000bc),
             0xb9c,
             0,
             0,

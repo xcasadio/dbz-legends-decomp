@@ -84,7 +84,7 @@ internal static class FighterInput
     //
     // Gated on bit 0x20 of the newest edge word. Then bit 30 of the flags (0x40000000) chooses
     // which of the two side face bits comes first: clear -> 0x8000 then 0x2000, set -> 0x2000 then
-    // 0x8000. FighterTask.FUN_8004FBFC is the writer of that bit, from a rotated-position compare
+    // 0x8000. FighterTask.UpdateFighterFacingFlag is the writer of that bit, from a rotated-position compare
     // of the two fighters, so the pair is swapped by which side the opponent is on.
     //
     // The first scan runs indices 0..3 and gives up at 4; the second continues from THAT index
@@ -1128,27 +1128,27 @@ internal static class FighterInput
     // param_2 selects a PORT into two pad-state pairs: `(&DAT_8008d3b8)[param_2]` and
     // `(&DAT_8008d3ac)[param_2]`. PadInput.cs declares all four as individual scalar fields rather
     // than arrays, so the index is expressed as a port selector against those fields.
-    internal static int ReadFighterPadCommand(int param_1, int param_2)
+    internal static int ReadFighterPadCommand(int fighter, int port)
     {
-        uint padState = param_2 == 0 ? PadInput.DAT_8008d3b8 : PadInput.DAT_8008d3bc;
-        uint padEdge = param_2 == 0 ? PadInput.DAT_8008d3ac : PadInput.DAT_8008d3b0;
-        PushFighterPadHistory(param_1, (int)padState, (int)padEdge);
+        uint padState = port == 0 ? PadInput.DAT_8008d3b8 : PadInput.DAT_8008d3bc;
+        uint padEdge = port == 0 ? PadInput.DAT_8008d3ac : PadInput.DAT_8008d3b0;
+        PushFighterPadHistory(fighter, (int)padState, (int)padEdge);
 
         int result;
-        if ((PsxRam.ReadI32(param_1 + 0x138) & 0x7f00) == 0)
+        if ((PsxRam.ReadI32(fighter + 0x138) & 0x7f00) == 0)
         {
-            if ((PsxRam.ReadI32(param_1 + 0x138) & 0x200ff) == 0)
+            if ((PsxRam.ReadI32(fighter + 0x138) & 0x200ff) == 0)
             {
-                result = DecodeCommandFlagsClear(param_1);
+                result = DecodeCommandFlagsClear(fighter);
             }
             else
             {
-                result = DecodeCommandFlags200FF(param_1);
+                result = DecodeCommandFlags200FF(fighter);
             }
         }
         else
         {
-            result = DecodeCommandFlags7F00(param_1);
+            result = DecodeCommandFlags7F00(fighter);
         }
 
         return result;

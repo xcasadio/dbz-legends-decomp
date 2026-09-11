@@ -60,7 +60,7 @@ struct FighterRecord {
     void     *binding_24;           /*   -> +0xB0 posMin          */
     void     *binding_28;           /*   -> +0xB8 posMax          */
     void     *binding_2c;           /*   -> +0x134 flagsB         */
-    void     *binding_30;           /*   -> +0x16B moveClass      */
+    void     *binding_30;           /*   -> +0x16B prevStateOpcode      */
     void     *binding_34;           /*   -> l enregistrement lui-meme */
     void     *binding_38;           /*   -> +0xF4                 */
     void     *binding_3c;           /*   -> +0x124                */
@@ -85,8 +85,8 @@ struct FighterRecord {
     void     *bankEntry6;
     void     *bankEntry7;
     void     *bankEntry12;
-    undefined4 field_94;
-    int      field_98;
+    byte     *frameImageBlob;       /* +0x94 : source LZSS de la frame, 1er argument de DecompressAndLoadImage (UploadFighterTexture) */
+    int      *spriteGroup;          /* +0x98 : 1er argument (record) de DrawSpriteGroup, lu par DrawFighterSprite */
     undefined1 pad_9c[8];
     int      field_a4;
     byte     field_a8;
@@ -129,30 +129,30 @@ struct FighterRecord {
     uint     field_128;
     uint     field_12c;
     uint     field_130;
-    int      flagsB;
-    int      flagsA;
-    undefined4 field_13c;
-    int      field_140;
+    uint     flagsB;                /* +0x134 : masques partout ; octet bas = code de vue (FUN_80055c6c) */
+    uint     flagsA;                /* +0x138 : masques partout, voir la table des bits ci-dessous */
+    int      lastDrawDepthKey;      /* +0x13C : retour de DrawSpriteGroup (0x800 - z moyen, -1 ecarte, 0 pool plein) */
+    int      otBias;                /* +0x140 : 10e argument (otBias) de DrawSpriteGroup */
     void     *characterData;        /* +0x144 = ctx->characterData[slot] */
     void     *characterBank;        /* +0x148 = characterData + *characterData */
-    undefined1 pad_14c[4];
-    byte     field_150;
-    byte     field_151;
-    byte     field_152;
+    byte     *uploadedImageBlob;    /* +0x14C : dernier frameImageBlob envoye en VRAM (UploadFighterTexture) */
+    byte     tintR;                 /* +0x150..+0x152 : les r,g,b types de DrawSpriteGroup ; 0x80 neutre, 0xFF vif */
+    byte     tintG;
+    byte     tintB;
     undefined1 pad_153[1];
     ushort   field_154;
-    ushort   field_156;
-    ushort   field_158;
+    ushort   texVramX;              /* +0x156/+0x158 : arithmetique GetTPage dans DrawFighterSprite, x/y de LoadImage */
+    ushort   texVramY;
     ushort   clutId;                /* +0x15A */
     undefined2 field_15c;
-    ushort   field_15e;
+    short    field_15e;             /* lu signe (lh) : compteur de frames a role multiple, non nomme */
     short    characterIndex;        /* +0x160, le 2e argument de CreateFighterTask */
     ushort   field_162;
     ushort   field_164;
     ushort   field_166;
     ushort   field_168;
     byte     stateOpcode;           /* +0x16A */
-    byte     moveClass;             /* +0x16B */
+    byte     prevStateOpcode;       /* +0x16B : FighterSetState y archive stateOpcode avant d ecrire le nouveau */
     undefined1 pad_16c[1];
     undefined1 field_16d;
     undefined1 pad_16e[2];
@@ -172,7 +172,7 @@ struct FighterRecord {
     byte     field_226;
     undefined1 pad_227[1];
     byte     field_228;
-    byte     field_229;
+    char     comboClearDelay;       /* +0x229 : 20 tant que flagsA & 0x40, sinon decremente ; < 0 => comboCount = 0 */
     short    opponentLockFrames;    /* +0x22A : SelectOpponentTask le pose a 0x3C au changement de cible, le decremente, le remet a 0 sous flagsA 0x30000000 */
     byte     inputFlags;            /* +0x22C */
     byte     archetypeIndex;        /* +0x22D = ctx->slotDisplay[slot][0xC] */
@@ -313,6 +313,31 @@ extern struct TaskNode *g_TaskListTail[21];     /* 0x80083B90, le noeud dont nex
 extern short            g_TaskListCount[21];    /* 0x80083BE4 */
 extern ushort          *g_AttackEffectStreams[20]; /* 0x800217F0 : indexee par le 4e argument de CreateAttackEventTask */
 
+/* LA LIGNE DE CRENEAU, une par combattant, douze dans le contexte a 0x15B0, foulee 0x14.
+ * Chaque colonne est nommee par la fonction qui lui donne un role :
+ *   status            +0x00 : bit 0x200 = creneau hors jeu ; RunBattleManagerFrame pose alors
+ *                             flagsA |= 0x4000000 sur son combattant
+ *   health            +0x02 : lu signe, borne a [0, 0x640] ; a zero, l etat 0x22 (KO) est pose
+ *   kiGauge           +0x04 : lu signe, plafond 16000, seuil 400 (DispatchFighterNeutralCommand)
+ *   gaugeContribution +0x08 : seul ecrivain AddSlotGaugeContribution ; RunBattleRound la somme
+ *   comboCount        +0x0A : +1 par coup porte (FUN_8004d694/FUN_8004d9f4), borne [0, 99],
+ *                             remis a zero par UpdateFighterComboTimer
+ *   targetSlotIndex   +0x10 : indice du creneau vise, index de fighterSlot[] (SelectOpponentTask)
+ */
+struct SlotRecord {
+    ushort   status;
+    short    health;
+    short    kiGauge;
+    undefined2 field_6;
+    short    gaugeContribution;
+    short    comboCount;
+    undefined2 field_c;
+    undefined2 field_e;
+    short    targetSlotIndex;
+    undefined2 field_12;
+};
+
+
 /* LE CONTEXTE DE COMBAT, ET IL PAVE DE BOUT EN BOUT.
  *
  * struct_fields.py ne rapporte que des decalages ; ce sont les APPARIEMENTS qui
@@ -350,14 +375,14 @@ extern ushort          *g_AttackEffectStreams[20]; /* 0x800217F0 : indexee par l
  */
 struct BattleContext {
     undefined1 pad_0[16];
-    int      field_10;                  /* teste par & 0x100000 en phase 8 (pilotage pad) */
+    uint     flags;                     /* +0x10 : champ de bits (0x100000 ouvre le marquage des creneaux actifs) */
     short    actingSlotTeamA;           /* 0..5   */
     short    actingSlotTeamB;           /* 6..11  */
     undefined1 pad_18[8];
     undefined1 slotDisplay[12][448];    /* 0x0020, foulee 0x1C0 : BuildSlotDigitQuads */
     struct TaskNode *fighterSlot[12];   /* 0x1520, un noeud par creneau ; ->context = FighterRecord */
     ushort   slotPose[12][4];           /* 0x1550, foulee 8, trois demi-mots utilises */
-    ushort   slotRecord[12][10];        /* 0x15B0, foulee 0x14, le +0 porte les drapeaux */
+    struct SlotRecord slotRecord[12];   /* 0x15B0, foulee 0x14 */
     void     *characterData[12];        /* 0x16A0 : ActivateFighterInSlot y lit fighter->characterData */
     undefined1 pad_16d0[5776];
     uint     roundRequest;              /* 0x2D60 */

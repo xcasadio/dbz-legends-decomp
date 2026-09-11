@@ -6,7 +6,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // DrawSpriteGroup is how VS.EXE puts anything on the screen that is not the battle HUD. Its five
 // callers between them account for every sprite in the mode: FUN_80022AB0 (7 call sites),
-// FUN_80023314 (6), FighterMotion.FUN_800477EC and FUN_80047A24 (the fighter's own body and its
+// FUN_80023314 (6), FighterMotion.DrawFighterSprite and DrawFighterShadow (the fighter's own body and its
 // shadow), and FighterCombat.UpdateAttackEventTask. Ghidra counts 136 references to the address in
 // total. While it did nothing, the port could run the whole battle machine and still show a bare
 // clear colour.
@@ -121,7 +121,7 @@ internal static class SpriteDrawer
             // JUSTIFICATION: C# language bridge only
             // RELATION: the original passes `&local_a8.pad` as RotTrans's flag sink -- the VECTOR's
             // own fourth word. C# cannot take the address of a field, so the call gets a throwaway
-            // one-element array, exactly as FighterTask.FUN_8004FBFC already does for the same
+            // one-element array, exactly as FighterTask.UpdateFighterFacingFlag already does for the same
             // callee. Nothing reads it back here either.
             LibGte.RotTrans(local_b0, local_a8, new int[1]);
         }

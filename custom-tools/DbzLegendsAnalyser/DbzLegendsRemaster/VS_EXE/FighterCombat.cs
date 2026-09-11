@@ -52,7 +52,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // original calls them.
 //
 // WAVE 2 — eight standalone leaves FighterTask.cs's own remaining stubs wait on, added below the
-// tier-1/tier-2 family above. Every one of the eight is reached from FUN_80047688 (FighterTask.cs's
+// tier-1/tier-2 family above. Every one of the eight is reached from StepFighterAnimAndProximity (FighterTask.cs's
 // own BLOCKED stub, step 9.5) except FUN_8004ffec, reached from FUN_800501b8 (step 7's arm); none
 // is otherwise called from anywhere already in this port. Two of the eight (FUN_80045998,
 // FUN_80045a38) are the push/unlink halves of one intrusive doubly-linked list anchored at
@@ -78,7 +78,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // FUN_80055dc0's own two callees, both genuine leaves (Ghidra shows zero callees for either), added
 // here so FUN_80055dc0 itself is not left calling into nothing.
 //
-// WAVE 3 — the callees of FighterTask.cs step 9.4's THIRD arm, FUN_8004cea0 (+0x138 bits
+// WAVE 3 — the callees of FighterTask.cs step 9.4's THIRD arm, DispatchFighterReactionState (+0x138 bits
 // 0x7F00 set; still a FighterTask.cs stub, not this file's to touch — this wave ports what it
 // calls, not the dispatcher itself). Six direct callees (FUN_8004c9cc, FUN_8004ca54,
 // FUN_8004cb24, FUN_8004cd84, FUN_8004cc64, FUN_8004c3e0) plus FUN_8004c300 (FUN_8004c3e0's own
@@ -678,7 +678,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004a97c @ 0x8004A97C (VS.EXE)
-    // 108 bytes, 5 callers: FUN_8004b098, FUN_8004b9cc, FUN_8004bd3c, FUN_8004c3e0 (none in this
+    // 108 bytes, 5 callers: DispatchFighterNeutralCommand, FUN_8004b9cc, FUN_8004bd3c, FUN_8004c3e0 (none in this
     // slice) and this file's own FUN_8004de90 below (twice). Every caller passes a state opcode
     // in the same 0..0x28 range FighterSetState's own callers use.
     //
@@ -921,8 +921,8 @@ internal static class FighterCombat
     // port keeps that name and reads it as settled rather than speculative (rule 6/11 — this is
     // not a name this port is proposing).
     //
-    // 148 bytes, 15 callers across the FUN_8004Axxx..FUN_8004Dxxx family plus FUN_80050514 and
-    // FUN_800507d0 (none in this slice), always with a literal FSM opcode as the second argument
+    // 148 bytes, 15 callers across the FUN_8004Axxx..FUN_8004Dxxx family plus UpdateHeldFighter and
+    // EnterFighterKoState (none in this slice), always with a literal FSM opcode as the second argument
     // (0x1c, 0x1f, 0x20, 0x21, 0x22, 0x2a, ...) — the same values FighterTask.cs and this file's
     // own switches test +0x16A against. Only the low byte of the ushort argument is stored.
     internal static void FighterSetState(int fighter, ushort state)
@@ -1176,7 +1176,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
-    // 1776 bytes. Two named callers (FUN_800501b8, once; FUN_80050824, twice — neither in this
+    // 1776 bytes. Two named callers (FUN_800501b8, once; UpdateOutOfPlayFighter, twice — neither in this
     // slice) plus the one FighterTask.cs itself carries, at its own step 9.6: `FUN_8004e758(iVar3,
     // 0);`, guarded there by +0x134 bit 31 set and bit 29 clear.
     //
@@ -1417,7 +1417,7 @@ internal static class FighterCombat
     // =====================================================================================
 
     // GHIDRA: FUN_80045814 @ 0x80045814 (VS.EXE)
-    // 388 bytes, zero callees. One caller, FUN_80047688 (FighterTask.cs's own BLOCKED stub, step
+    // 388 bytes, zero callees. One caller, StepFighterAnimAndProximity (FighterTask.cs's own BLOCKED stub, step
     // 9.5): `FUN_80045998(&DAT_80083cb4,param_1+0xf8,&DAT_80101ba4); FUN_80045814(param_1+0xf8);`
     // — so this runs against the SAME +0xf8 sub-record FUN_80045998/FUN_80045a38 below manage.
     //
@@ -1499,7 +1499,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80045998 @ 0x80045998 (VS.EXE)
-    // 160 bytes, zero callees. Three callers: FUN_80047688 (FighterTask.cs's own BLOCKED stub,
+    // 160 bytes, zero callees. Three callers: StepFighterAnimAndProximity (FighterTask.cs's own BLOCKED stub,
     // step 9.5) — `FUN_80045998(&DAT_80083cb4, param_1+0xf8, &DAT_80101ba4)`; FUN_80027340 and
     // FUN_800438c0 (neither in this slice).
     //
@@ -1538,7 +1538,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80045a38 @ 0x80045A38 (VS.EXE)
-    // 184 bytes, zero callees. Three callers: FUN_80047688 (FighterTask.cs's own BLOCKED stub,
+    // 184 bytes, zero callees. Three callers: StepFighterAnimAndProximity (FighterTask.cs's own BLOCKED stub,
     // step 9.5, immediately before its own FUN_800539d0 call below) —
     // `FUN_80045a38(&DAT_80083cb4, param_1+0xf8)`; FUN_80026d98 and FUN_800438c0 (neither in this
     // slice).
@@ -1576,7 +1576,7 @@ internal static class FighterCombat
     // 0x8005404C, 0x80055104, 0x800558F8, 0x80053AE8, 0x80053B1C, 0x80053F04, 0x800553E8,
     // 0x80054DA4. Ghidra has not analyzed ANY of the sixteen -- each resolves only to an
     // "UndefinedFunction" preview, not a real Function -- so none can be ported this wave; see
-    // DispatchHitStreamRecord below. Two callers this port sees: FUN_80047688 (FighterTask.cs's
+    // DispatchHitStreamRecord below. Two callers this port sees: StepFighterAnimAndProximity (FighterTask.cs's
     // own BLOCKED stub, step 9.5) — `FUN_800539d0(param_1)`, the fighter workspace itself, NOT the
     // +0xf8 sub-record FUN_80045998/FUN_80045a38 above use — and FUN_80027340 (not in this slice).
     //
@@ -1659,7 +1659,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80026a28 @ 0x80026A28 (VS.EXE)
-    // 64 bytes, zero callees. Three callers: FUN_800501b8, FUN_800507d0, FUN_80050824 --
+    // 64 bytes, zero callees. Three callers: FUN_800501b8, EnterFighterKoState, UpdateOutOfPlayFighter --
     // FighterTask.cs's own BLOCKED stubs for phases 7, 5(conditional half) and 5(unconditional
     // half) respectively.
     //
@@ -2163,7 +2163,7 @@ internal static class FighterCombat
     // body elsewhere, which is the defect check_function_addresses.py exists to catch.
 
     // ============================================================================================
-    // WAVE 3 — FighterTask.cs step 9.4's third arm (FUN_8004cea0) and everything it reaches.
+    // WAVE 3 — FighterTask.cs step 9.4's third arm (DispatchFighterReactionState) and everything it reaches.
     // See this file's own top-of-file header note for the shape of the whole cluster.
     // ============================================================================================
 
@@ -2174,7 +2174,7 @@ internal static class FighterCombat
     // cluster's own FUN_8004ca54 below is one of its two callers (state 0x17).
     //
     // GHIDRA: FUN_8004aa9c @ 0x8004AA9C (VS.EXE)
-    // 624 bytes. Three callers, all in this file: FighterTask.cs's own FUN_8004b098 (step 9.4's
+    // 624 bytes. Three callers, all in this file: FighterTask.cs's own DispatchFighterNeutralCommand (step 9.4's
     // default arm, state 0x1c) and this cluster's own FUN_8004cb24 / FUN_8004cc64 below (both
     // also state 0x1c).
     //
@@ -2277,7 +2277,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004c9cc @ 0x8004C9CC (VS.EXE)
-    // 136 bytes. One caller, FUN_8004cea0 (step 9.4's third arm — still a FighterTask.cs stub, not
+    // 136 bytes. One caller, DispatchFighterReactionState (step 9.4's third arm — still a FighterTask.cs stub, not
     // this file's to touch), gated on +0x138 bit 0x200. Only when the fighter has never taken
     // damage (+4, raw literal, reads 0) but +6 (raw literal) is non-zero: clears +0x138 bit 0x100
     // and re-issues state 0 through FUN_8004a638.
@@ -2291,7 +2291,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004ca54 @ 0x8004CA54 (VS.EXE)
-    // 208 bytes. One caller, FUN_8004cea0 (step 9.4's third arm; see FUN_8004c9cc's own header
+    // 208 bytes. One caller, DispatchFighterReactionState (step 9.4's third arm; see FUN_8004c9cc's own header
     // note above). param_2 == 0x17 clears +0x138 bit 0x200 and forces state 0x17 through
     // FUN_8004a910; otherwise the same +4/+6 guard FUN_8004c9cc above uses clears the same bit and
     // re-issues state 0 through FUN_8004a638. The two arms are mutually exclusive — param_2==0x17
@@ -2311,7 +2311,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004cd84 @ 0x8004CD84 (VS.EXE)
-    // 284 bytes. One caller, FUN_8004cea0's own final `else` arm (step 9.4's third arm; see
+    // 284 bytes. One caller, DispatchFighterReactionState's own final `else` arm (step 9.4's third arm; see
     // FUN_8004c9cc's own header note above). Counts down the halfword at +0x15e (raw literal; no
     // BattleState name covers it — the same field FUN_8004cb24 and FUN_8004cc64 below both read)
     // and, only on the frame it reaches (signed) zero, clears +0x138 bit 0x4000, re-issues state 0
@@ -2339,7 +2339,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004cc64 @ 0x8004CC64 (VS.EXE)
-    // 288 bytes. One caller, FUN_8004cea0 (step 9.4's third arm; see FUN_8004c9cc's own header
+    // 288 bytes. One caller, DispatchFighterReactionState (step 9.4's third arm; see FUN_8004c9cc's own header
     // note above). param_2 == 0x1c clears +0x138 bits 0x3800, sets bit 0x80000, and forces the
     // knockback through FUN_8004aa9c followed by the slot-broadcast in FUN_8004c7fc below.
     // Otherwise the same +4/+6 guard the rest of this cluster uses clears the same 0x3800 bits,
@@ -2370,7 +2370,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004cb24 @ 0x8004CB24 (VS.EXE)
-    // 320 bytes. One caller, FUN_8004cea0 (step 9.4's third arm; see FUN_8004c9cc's own header
+    // 320 bytes. One caller, DispatchFighterReactionState (step 9.4's third arm; see FUN_8004c9cc's own header
     // note above). Same shape as FUN_8004cc64 above — param_2==0x1c clears +0x138 bit 0x400 (not
     // 0x3800), sets bit 0x80000, and forces the knockback through FUN_8004aa9c, but WITHOUT the
     // FUN_8004c7fc slot broadcast that function's own 0x1c arm makes. Otherwise the same +4/+6
@@ -2447,7 +2447,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004c3e0 @ 0x8004C3E0 (VS.EXE)
-    // 1052 bytes, the largest of the third arm's callees. One caller, FUN_8004cea0 (step 9.4's
+    // 1052 bytes, the largest of the third arm's callees. One caller, DispatchFighterReactionState (step 9.4's
     // third arm — still a FighterTask.cs stub, not this file's to touch), called only when the
     // +0x138 bits-0x7C00 gate is set.
     //

@@ -24,14 +24,14 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   Prologue                      0x80050AE4
 //   1  guard on +0x144            0x80050B14   zero -> return -1, do nothing else
 //   2  position clamps            0x80050B38 .. 0x80050C84
-//   3  VM suspend gate            0x80050C90   set -> FUN_80050658 @ 0x80050658
+//   3  VM suspend gate            0x80050C90   set -> DrawFighter @ 0x80050658
 //   4  +0x138 & 0x80000000        0x80050CC4   set -> FUN_8005070c @ 0x8005070C
-//   5  +0x138 & 0x04000000        0x80050CF8   set -> FUN_800507d0 + FUN_80050824
-//   6  +0x134 & 0x04000000        0x80050D50   set -> FUN_80050514 @ 0x80050514
+//   5  +0x138 & 0x04000000        0x80050CF8   set -> EnterFighterKoState + UpdateOutOfPlayFighter
+//   6  +0x134 & 0x04000000        0x80050D50   set -> UpdateHeldFighter @ 0x80050514
 //   7  +0x134 & 0x02000000        0x80050D8C   set -> FUN_800501b8 @ 0x800501B8
 //   8  targeting flags            0x80050DC0 .. 0x80050EBC
 //   9  the main body              0x80050EC4 .. 0x80051170
-//   10 FUN_80050a14               0x8005117C   the tail, run on the main path only
+//   10 UpdateFighterComboTimer               0x8005117C   the tail, run on the main path only
 //
 // Phases 3..7 are five early outs, tested in that order; each returns 0 without touching the rest.
 // Phase 9's own nine steps are listed on the body below.
@@ -68,7 +68,7 @@ internal static class FighterTask
 
     // JUSTIFICATION: C# language bridge only
     // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. Step 9.4 reaches
-    // FUN_8004b098 -- the one dispatcher that forwards an attack command word to
+    // DispatchFighterNeutralCommand -- the one dispatcher that forwards an attack command word to
     // FighterCombat.FUN_8004a97c, the writer of +0x138 bit 0x08 -- only when +0x138 & 0x200FF is
     // zero. DiagRouter200ffAlways AND-accumulates that masked word across every visit, so a
     // non-zero result names exactly which bits are NEVER clear at the moment a command arrives.
@@ -274,13 +274,13 @@ internal static class FighterTask
                                 //   9.1 0x80050EC4  FUN_8004fa8c -> +0xAC, fall back to the running
                                 //                   task node; iVar2 is that node's workspace, and
                                 //                   +0x18 / +0x60 are re-pointed into it
-                                //   9.2 0x80050F4C  FUN_8004fbfc
+                                //   9.2 0x80050F4C  UpdateFighterFacingFlag
                                 //   9.3 0x80050F5C  SelectFighterCommand -> uStack_10, or 0, or +0x16A
-                                //   9.4 0x80050FB8  one of FUN_8004cea0 / FUN_8004c198 / FUN_8004b098
-                                //   9.5 0x80051038  FUN_80047688
+                                //   9.4 0x80050FB8  one of DispatchFighterReactionState / DispatchFighterActionState / DispatchFighterNeutralCommand
+                                //   9.5 0x80051038  StepFighterAnimAndProximity
                                 //   9.6 0x80051048  the +0x134 bit-31 arm
                                 //   9.7 0x800510F8  the +0x138 bit-27 gate
-                                //   9.8 0x80051110  FUN_80047740 and the four that follow it
+                                //   9.8 0x80051110  SetFighterTint and the four that follow it
                                 //   9.9 (falls through to phase 10)
 
                                 // 9.1 — FUN_8004fa8c resolves SOME OTHER task node and parks it in
@@ -307,7 +307,7 @@ internal static class FighterTask
                                 PsxRam.WriteI32(iVar3 + 0x60, iVar2 + 0xf8);
 
                                 // 9.2
-                                FUN_8004fbfc(iVar3);
+                                UpdateFighterFacingFlag(iVar3);
 
                                 // 9.3 — the frame's command word. Bit 25 of +0x138 suppresses the
                                 // call outright; a returned -1 falls back to the state byte +0x16A.
@@ -333,9 +333,9 @@ internal static class FighterTask
                                     DiagCommandWords[uStack_10]++;
                                 }
 
-                                // 9.4 — three-way, on +0x138: bits 8..14 pick FUN_8004cea0; failing
-                                // that, bits 0..7 or bit 17 pick FUN_8004c198; otherwise
-                                // FUN_8004b098. Only the first of the three is not handed iVar2.
+                                // 9.4 — three-way, on +0x138: bits 8..14 pick DispatchFighterReactionState; failing
+                                // that, bits 0..7 or bit 17 pick DispatchFighterActionState; otherwise
+                                // DispatchFighterNeutralCommand. Only the first of the three is not handed iVar2.
                                 int diagMasked = PsxRam.ReadI32(iVar3 + 0x138) & 0x200ff;
                                 DiagRouter200ffAlways &= diagMasked;
                                 if (diagMasked == 0)
@@ -348,20 +348,20 @@ internal static class FighterTask
                                     if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x200ff) == 0)
                                     {
                                         DiagFun8004b098Calls++;
-                                        FUN_8004b098(iVar3, uStack_10, iVar2);
+                                        DispatchFighterNeutralCommand(iVar3, uStack_10, iVar2);
                                     }
                                     else
                                     {
-                                        FUN_8004c198(iVar3, uStack_10, iVar2);
+                                        DispatchFighterActionState(iVar3, uStack_10, iVar2);
                                     }
                                 }
                                 else
                                 {
-                                    FUN_8004cea0(iVar3, uStack_10);
+                                    DispatchFighterReactionState(iVar3, uStack_10);
                                 }
 
                                 // 9.5
-                                FUN_80047688(iVar3);
+                                StepFighterAnimAndProximity(iVar3);
 
                                 // 9.6 — THE TEST IS ON iVar2, THE WRITE IS ON iVar3. The two are the
                                 // same workspace whenever FUN_8004fa8c returned 0, and different
@@ -390,16 +390,16 @@ internal static class FighterTask
                                 // +0x114, not the one +0x18 was just re-pointed at.
                                 if (((uint)PsxRam.ReadI32(iVar3 + 0x138) & 0x8000000) == 0)
                                 {
-                                    FUN_80047740(iVar3);
-                                    FighterMotion.FUN_800477ec(iVar3, iVar3 + 0x114);
-                                    FighterMotion.FUN_80047a24(iVar3, iVar3 + 0x114);
-                                    FUN_80047b10(iVar3);
+                                    SetFighterTint(iVar3);
+                                    FighterMotion.DrawFighterSprite(iVar3, iVar3 + 0x114);
+                                    FighterMotion.DrawFighterShadow(iVar3, iVar3 + 0x114);
+                                    UploadFighterTexture(iVar3);
                                     FighterMotion.DriveFighterAura(iVar3, iVar3 + 0x114);
                                 }
 
                                 // PHASE 10 @ 0x8005117C — the tail. Runs on the main path only; none
                                 // of the five early outs reaches it.
-                                FUN_80050a14(iVar3);
+                                UpdateFighterComboTimer(iVar3);
                                 uVar1 = 0;
                             }
                             else
@@ -410,7 +410,7 @@ internal static class FighterTask
                         }
                         else
                         {
-                            FUN_80050514(iVar3);
+                            UpdateHeldFighter(iVar3);
                             uVar1 = 0;
                         }
                     }
@@ -420,10 +420,10 @@ internal static class FighterTask
                         // number, not a character.
                         if ((sbyte)PsxRam.ReadU8(iVar3 + 0x16a) != 0x22)
                         {
-                            FUN_800507d0(iVar3);
+                            EnterFighterKoState(iVar3);
                         }
 
-                        FUN_80050824(iVar3);
+                        UpdateOutOfPlayFighter(iVar3);
                         uVar1 = 0;
                     }
                 }
@@ -435,7 +435,7 @@ internal static class FighterTask
             }
             else
             {
-                FUN_80050658(iVar3);
+                DrawFighter(iVar3);
                 uVar1 = 0;
             }
         }
@@ -455,22 +455,22 @@ internal static class FighterTask
     // shadows another slice's work.
     // =====================================================================================
 
-    // GHIDRA: FUN_80050658 @ 0x80050658 (VS.EXE)
+    // GHIDRA: DrawFighter @ 0x80050658 (VS.EXE)
     // CERTAIN, full decompilation, 180 bytes. Phase 3's arm — the whole body a fighter runs while
     // the animation VM's suspend bit is up, i.e. the frozen-frame path. All five callees are the
     // same +0x138-bit-27-gated quintet phase 9.7/9.8 already runs in the main body above, called
     // here on the SAME two arguments (fighter, fighter's own +0x114 position triple) — reached
     // through this file's own declarations of them, one of which (DriveFighterAura) is still its own
     // BLOCKED stub below.
-    private static void FUN_80050658(int param_1)
+    private static void DrawFighter(int fighter)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x8000000) == 0)
         {
-            FUN_80047740(param_1);
-            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
-            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
-            FUN_80047b10(param_1);
-            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
+            SetFighterTint(fighter);
+            FighterMotion.DrawFighterSprite(fighter, fighter + 0x114);
+            FighterMotion.DrawFighterShadow(fighter, fighter + 0x114);
+            UploadFighterTexture(fighter);
+            FighterMotion.DriveFighterAura(fighter, fighter + 0x114);
         }
     }
 
@@ -479,67 +479,67 @@ internal static class FighterTask
     // unconditional call to FighterCombat.FUN_80055dc0 @ 0x80055DC0 — Ghidra's own call site here
     // passes a second literal argument (0) that FUN_80055dc0's own body never reads, matching the
     // one-parameter signature FighterCombat.cs already exposes for it. The rest is the same
-    // +0x138-bit-27-gated quintet FUN_80050658 above runs.
+    // +0x138-bit-27-gated quintet DrawFighter above runs.
     private static void FUN_8005070c(int param_1)
     {
         FighterCombat.FUN_80055dc0(param_1);
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
-            FUN_80047740(param_1);
-            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
-            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
-            FUN_80047b10(param_1);
+            SetFighterTint(param_1);
+            FighterMotion.DrawFighterSprite(param_1, param_1 + 0x114);
+            FighterMotion.DrawFighterShadow(param_1, param_1 + 0x114);
+            UploadFighterTexture(param_1);
             FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
 
-    // GHIDRA: FUN_800507d0 @ 0x800507D0 (VS.EXE)
+    // GHIDRA: EnterFighterKoState @ 0x800507D0 (VS.EXE)
     // CERTAIN, full decompilation, 84 bytes. Phase 5's conditional half, skipped when the state
     // byte +0x16A is 0x22 (see the guard at the call site above). Both callees are now ported:
     // FighterSetState @ 0x80047C64 and FighterCombat.FUN_80026a28 @ 0x80026A28. The final store is
     // a plain overwrite of +0x138, not an OR — the original clobbers whatever the caller's own
     // targeting-flags step (phase 8) had just written there.
-    private static void FUN_800507d0(int param_1)
+    private static void EnterFighterKoState(int fighter)
     {
-        FighterCombat.FighterSetState(param_1, 0x22);
-        FighterCombat.FUN_80026a28(param_1);
-        PsxRam.WriteI32(param_1 + 0x138, 0x4000000);
+        FighterCombat.FighterSetState(fighter, 0x22);
+        FighterCombat.FUN_80026a28(fighter);
+        PsxRam.WriteI32(fighter + 0x138, 0x4000000);
     }
 
-    // GHIDRA: FUN_80050824 @ 0x80050824 (VS.EXE)
+    // GHIDRA: UpdateOutOfPlayFighter @ 0x80050824 (VS.EXE)
     // CERTAIN, full decompilation, 496 bytes. Phase 5's unconditional half — runs on every frame
-    // phase 5 is reached, regardless of the state-byte-0x22 guard that gates FUN_800507d0 above.
+    // phase 5 is reached, regardless of the state-byte-0x22 guard that gates EnterFighterKoState above.
     //
     // Bit 25 of +0x134 (0x2000000) opens a block that clears/sets a run of +0x134/+0x138 bits,
-    // stamps the same three +0x150/+0x151/+0x152 bytes FUN_800507d0 and FighterCombat's own
-    // FUN_80047740 already touch, and calls FighterCombat.FUN_80026a28. Then, unconditionally,
-    // FUN_80047688 runs, followed by a +0x134-bit-31 arm — on bit 29 clear, calls
+    // stamps the same three +0x150/+0x151/+0x152 bytes EnterFighterKoState and FighterCombat's own
+    // SetFighterTint already touch, and calls FighterCombat.FUN_80026a28. Then, unconditionally,
+    // StepFighterAnimAndProximity runs, followed by a +0x134-bit-31 arm — on bit 29 clear, calls
     // FighterCombat.FUN_8004e758(fighter, 0) exactly as step 9.6 of the main body does; on bit 29
     // set, that call is skipped but +0xec and +0xdc are still both zeroed (step 9.6 in the main
     // body only ever zeroes +0xdc, never +0xec — this is a distinct write, not a repeat). The tail
     // is the same +0x138-bit-27-gated quintet the other phase arms already run.
-    private static void FUN_80050824(int param_1)
+    private static void UpdateOutOfPlayFighter(int fighter)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x2000000) != 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x134) & 0x2000000) != 0)
         {
-            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0xfdffffff));
-            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) | 0x4000000));
-            PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x5fffffff));
-            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
-            PsxRam.WriteU8(param_1 + 0x152, 0x80);
-            PsxRam.WriteU8(param_1 + 0x151, 0x80);
-            PsxRam.WriteU8(param_1 + 0x150, 0x80);
-            FighterCombat.FUN_80026a28(param_1);
+            PsxRam.WriteI32(fighter + 0x134, (int)((uint)PsxRam.ReadI32(fighter + 0x134) & 0xfdffffff));
+            PsxRam.WriteI32(fighter + 0x134, (int)((uint)PsxRam.ReadI32(fighter + 0x134) | 0x4000000));
+            PsxRam.WriteI32(fighter + 0x134, (int)((uint)PsxRam.ReadI32(fighter + 0x134) & 0x5fffffff));
+            PsxRam.WriteI32(fighter + 0x138, (int)((uint)PsxRam.ReadI32(fighter + 0x138) & 0xe000000));
+            PsxRam.WriteU8(fighter + 0x152, 0x80);
+            PsxRam.WriteU8(fighter + 0x151, 0x80);
+            PsxRam.WriteU8(fighter + 0x150, 0x80);
+            FighterCombat.FUN_80026a28(fighter);
         }
 
-        FUN_80047688(param_1);
+        StepFighterAnimAndProximity(fighter);
 
-        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x80000000) != 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x134) & 0x80000000) != 0)
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x20000000) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x134) & 0x20000000) == 0)
             {
-                FighterCombat.FUN_8004e758(param_1, 0);
+                FighterCombat.FUN_8004e758(fighter, 0);
                 
                 // AND AGAIN WITH 1. Two calls, not one, and the second was dropped by a first
                 // version of this port. The bytes at 0x80050940 are unambiguous:
@@ -550,58 +550,58 @@ internal static class FighterTask
                 //     34050001  ori a1,zero,1          ; param_2 = 1
                 //     0C0139D6  jal 0x8004E758
                 // The two are NOT redundant: FUN_8004e758 indexes its attack record at
-                // param_1 + param_2 * 0x10 + 0xDC, so 0 and 1 resolve the fighter's two SEPARATE
+                // fighter + param_2 * 0x10 + 0xDC, so 0 and 1 resolve the fighter's two SEPARATE
                 // record slots at +0xDC and +0xEC. That is also why this function zeroes BOTH of
                 // them afterwards while its sibling FUN_800501b8 -- which genuinely makes one call
                 // -- zeroes only +0xDC. The asymmetry between the two was the tell.
-                FighterCombat.FUN_8004e758(param_1, 1);
+                FighterCombat.FUN_8004e758(fighter, 1);
             }
 
-            PsxRam.WriteI32(param_1 + 0xec, 0);
-            PsxRam.WriteI32(param_1 + 0xdc, 0);
+            PsxRam.WriteI32(fighter + 0xec, 0);
+            PsxRam.WriteI32(fighter + 0xdc, 0);
         }
 
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x8000000) == 0)
         {
-            FUN_80047740(param_1);
-            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
-            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
-            FUN_80047b10(param_1);
-            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
+            SetFighterTint(fighter);
+            FighterMotion.DrawFighterSprite(fighter, fighter + 0x114);
+            FighterMotion.DrawFighterShadow(fighter, fighter + 0x114);
+            UploadFighterTexture(fighter);
+            FighterMotion.DriveFighterAura(fighter, fighter + 0x114);
         }
     }
 
-    // GHIDRA: FUN_80050514 @ 0x80050514 (VS.EXE)
+    // GHIDRA: UpdateHeldFighter @ 0x80050514 (VS.EXE)
     // CERTAIN, full decompilation, 324 bytes. Phase 6's arm, on +0x134 bit 26. Re-derives the
     // same +0x18/+0x60 re-point step 9.1 above performs — through FighterTaskNode (+0xAC) rather
     // than FUN_8004fa8c's own resolution — then, only when the frame counter at +4 is zero,
     // re-stamps the CURRENT state via FighterSetState (the same "re-stamp with current state"
     // pattern FighterCombat's own FighterSetState header note documents for state 2/10). The tail
-    // is FUN_80047688 followed by the same +0x138-bit-27-gated quintet, and a reset of the +0x22A
+    // is StepFighterAnimAndProximity followed by the same +0x138-bit-27-gated quintet, and a reset of the +0x22A
     // frame counter FUN_8004fa8c (step 9.1) itself owns and decrements.
-    private static void FUN_80050514(int param_1)
+    private static void UpdateHeldFighter(int fighter)
     {
-        int iVar1 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8);
-        PsxRam.WriteI32(param_1 + 0x18, iVar1 + 0x114);
-        PsxRam.WriteI32(param_1 + 0x60, iVar1 + 0xf8);
+        int iVar1 = PsxRam.ReadI32(PsxRam.ReadI32(fighter + BattleState.FighterTaskNode) + 8);
+        PsxRam.WriteI32(fighter + 0x18, iVar1 + 0x114);
+        PsxRam.WriteI32(fighter + 0x60, iVar1 + 0xf8);
 
-        if ((short)PsxRam.ReadU16(param_1 + 4) == 0)
+        if ((short)PsxRam.ReadU16(fighter + 4) == 0)
         {
-            FighterCombat.FighterSetState(param_1, (ushort)PsxRam.ReadU8(param_1 + 0x16a));
+            FighterCombat.FighterSetState(fighter, (ushort)PsxRam.ReadU8(fighter + 0x16a));
         }
 
-        FUN_80047688(param_1);
+        StepFighterAnimAndProximity(fighter);
 
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x8000000) == 0)
         {
-            FUN_80047740(param_1);
-            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
-            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
-            FUN_80047b10(param_1);
-            FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
+            SetFighterTint(fighter);
+            FighterMotion.DrawFighterSprite(fighter, fighter + 0x114);
+            FighterMotion.DrawFighterShadow(fighter, fighter + 0x114);
+            UploadFighterTexture(fighter);
+            FighterMotion.DriveFighterAura(fighter, fighter + 0x114);
         }
 
-        PsxRam.WriteU16(param_1 + 0x22a, 0);
+        PsxRam.WriteU16(fighter + 0x22a, 0);
     }
 
     // GHIDRA: FUN_800501b8 @ 0x800501B8 (VS.EXE)
@@ -623,10 +623,10 @@ internal static class FighterTask
     // FighterCombat.FUN_8004a638(fighter, 0) again — these are independent ifs, not an if/else
     // chain, matching Ghidra's own four separate branches. The tail is the same +0x134-bit-31 arm
     // and +0x138-bit-27-gated quintet the other phase arms already run, except this one zeroes only
-    // +0xdc (not +0xec, unlike FUN_80050824 above) — that asymmetry is the original's.
+    // +0xdc (not +0xec, unlike UpdateOutOfPlayFighter above) — that asymmetry is the original's.
     //
     // The four state values are left as raw hex with the char Ghidra prints them as, per this
-    // file's own precedent at FUN_800507d0's 0x22 guard: 0x21 '!', 0x20 ' ', 0x1c, 0x2a '*' — state
+    // file's own precedent at EnterFighterKoState's 0x22 guard: 0x21 '!', 0x20 ' ', 0x1c, 0x2a '*' — state
     // numbers, not characters.
     private static void FUN_800501b8(int param_1)
     {
@@ -677,7 +677,7 @@ internal static class FighterTask
             FighterCombat.FUN_8004a638(param_1, 0);
         }
 
-        FUN_80047688(param_1);
+        StepFighterAnimAndProximity(param_1);
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x80000000) != 0)
         {
@@ -691,10 +691,10 @@ internal static class FighterTask
 
         if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000000) == 0)
         {
-            FUN_80047740(param_1);
-            FighterMotion.FUN_800477ec(param_1, param_1 + 0x114);
-            FighterMotion.FUN_80047a24(param_1, param_1 + 0x114);
-            FUN_80047b10(param_1);
+            SetFighterTint(param_1);
+            FighterMotion.DrawFighterSprite(param_1, param_1 + 0x114);
+            FighterMotion.DrawFighterShadow(param_1, param_1 + 0x114);
+            UploadFighterTexture(param_1);
             FighterMotion.DriveFighterAura(param_1, param_1 + 0x114);
         }
     }
@@ -709,7 +709,7 @@ internal static class FighterTask
     // 0x8004fa8c, because Ghidra's own decompilation groups assembly fragments onto the wrong
     // source lines here (a rendering quirk of this MCP session, not a fact about the binary):
     //   * +0x22a's guard compare ("0 < *(short*)...") is `lh` (a genuine signed 16-bit load, no
-    //     extra truncation needed — unlike the byte case FUN_80050a14 below, a halfword sign-load
+    //     extra truncation needed — unlike the byte case UpdateFighterComboTimer below, a halfword sign-load
     //     is already the full signed value);
     //   * +0x22a's reload for the decrement is `lhu`, but since the result is stored straight
     //     back with `sh` the signedness of that particular load cannot change the outcome;
@@ -764,7 +764,7 @@ internal static class FighterTask
         return iVar1;
     }
 
-    // GHIDRA: FUN_8004fbfc @ 0x8004FBFC (VS.EXE)
+    // GHIDRA: UpdateFighterFacingFlag @ 0x8004FBFC (VS.EXE)
     // 296 bytes, 0x8004FBFC..0x8004FD23. Step 9.2, run unconditionally between the node resolution
     // and the command word. It sits immediately after FUN_8004fa8c in the address space and
     // immediately before DriveFighterAura, the three of them one compilation unit.
@@ -804,14 +804,14 @@ internal static class FighterTask
     // cannot take the address of a field, so each call here gets its own throwaway one-element
     // array. Nothing reads either array afterward, matching the original: neither call site's
     // `alStack_10` is read again once both RotTrans calls return.
-    private static void FUN_8004fbfc(int param_1)
+    private static void UpdateFighterFacingFlag(int fighter)
     {
         LibGte.SVECTOR svec1 = new();
-        svec1.vx = (short)PsxRam.ReadU16(param_1 + 0x114);
-        svec1.vy = (short)PsxRam.ReadU16(param_1 + 0x116);
-        svec1.vz = (short)PsxRam.ReadU16(param_1 + 0x118);
+        svec1.vx = (short)PsxRam.ReadU16(fighter + 0x114);
+        svec1.vy = (short)PsxRam.ReadU16(fighter + 0x116);
+        svec1.vz = (short)PsxRam.ReadU16(fighter + 0x118);
 
-        int iVar3 = PsxRam.ReadI32(PsxRam.ReadI32(param_1 + BattleState.FighterTaskNode) + 8);
+        int iVar3 = PsxRam.ReadI32(PsxRam.ReadI32(fighter + BattleState.FighterTaskNode) + 8);
 
         LibGte.SVECTOR svec2 = new();
         svec2.vx = (short)PsxRam.ReadU16(iVar3 + 0x114);
@@ -828,11 +828,11 @@ internal static class FighterTask
 
         if (local_20.vx - local_30.vx < 0)
         {
-            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xbfffffff));
+            PsxRam.WriteI32(fighter + 0x138, (int)((uint)PsxRam.ReadI32(fighter + 0x138) & 0xbfffffff));
         }
         else
         {
-            PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) | 0x40000000));
+            PsxRam.WriteI32(fighter + 0x138, (int)((uint)PsxRam.ReadI32(fighter + 0x138) | 0x40000000));
         }
     }
 
@@ -858,24 +858,24 @@ internal static class FighterTask
     // `DAT_801FF100 < 2` arm covers the value 0 and then FALLS THROUGH to `uVar1 = 0xffffffff` for
     // any other value below 2, and the `== 2` arm returns before reaching it. Written the other way
     // round, values below 2 that are not 0 would take the wrong exit.
-    internal static uint SelectFighterCommand(int param_1)
+    internal static uint SelectFighterCommand(int fighter)
     {
         uint uVar1;
 
         short handover = SharedHighRam.SHORT_ARRAY_801ff000[Dat801ff100ShortIndex];
-        DiagFighterFlagsEverSeen |= (uint)PsxRam.ReadI32(param_1 + 0x138);
+        DiagFighterFlagsEverSeen |= (uint)PsxRam.ReadI32(fighter + 0x138);
 
         if (handover == 1)
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10000000) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x10000000) == 0)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
             }
             else
             {
                 DiagCommandSourceCalls[0]++;
-                uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 0);
+                uVar1 = (uint)FighterInput.ReadFighterPadCommand(fighter, 0);
             }
         }
         else
@@ -884,29 +884,29 @@ internal static class FighterTask
             {
                 if (handover == 0)
                 {
-                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10000000) != 0)
+                    if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x10000000) != 0)
                     {
                         DiagCommandSourceCalls[0]++;
-                uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 0);
+                uVar1 = (uint)FighterInput.ReadFighterPadCommand(fighter, 0);
                         return uVar1;
                     }
 
-                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x20000000) != 0)
+                    if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x20000000) != 0)
                     {
                         DiagCommandSourceCalls[1]++;
-                        uVar1 = (uint)FighterInput.ReadFighterPadCommand(param_1, 1);
+                        uVar1 = (uint)FighterInput.ReadFighterPadCommand(fighter, 1);
                         return uVar1;
                     }
 
                     DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
                     return uVar1;
                 }
             }
             else if (handover == 2)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(param_1);
+                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
                 return uVar1;
             }
 
@@ -931,7 +931,7 @@ internal static class FighterTask
     // reaches it by qualified name; while a stub for the same address sat in THIS file, C# bound
     // these three call sites to the stub and the real body would have been dead code.
 
-    // GHIDRA: FUN_8004b098 @ 0x8004B098 (VS.EXE)
+    // GHIDRA: DispatchFighterNeutralCommand @ 0x8004B098 (VS.EXE)
     // CERTAIN, full decompilation, 676 bytes. Step 9.4's default arm, taken when neither +0x138
     // bits 8..14 nor bits 0..7/17 are set. param_3 is iVar2 from the caller's step 9.1 -- the
     // OTHER fighter workspace step 9.1 may have re-pointed to, or this fighter itself in the
@@ -958,17 +958,17 @@ internal static class FighterTask
     //      param_2).
     //
     // +0x16b and +0x15e are not named anywhere else in this port and are left as raw offsets.
-    private static void FUN_8004b098(int param_1, uint param_2, int param_3)
+    private static void DispatchFighterNeutralCommand(int fighter, uint command, int opponent)
     {
         if ((short)PsxRam.ReadU16(
-                PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
-                    + PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) * BattleState.CtxSlotRecordStride
+                PsxRam.ReadI32(fighter + BattleState.FighterBattleContext)
+                    + PsxRam.ReadU8(fighter + BattleState.FighterSlotIndex) * BattleState.CtxSlotRecordStride
                     + BattleState.CtxKiGauge)
             < 400)
         {
-            FighterAction.FUN_8004ad0c(param_1);
-            PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfffbffff));
-            PsxRam.WriteU16(param_1 + 0x15e, 0x3c);
+            FighterAction.FUN_8004ad0c(fighter);
+            PsxRam.WriteI32(fighter + 0x138, PsxRam.ReadI32(fighter + 0x138) & unchecked((int)0xfffbffff));
+            PsxRam.WriteU16(fighter + 0x15e, 0x3c);
         }
         // CORRECTED: THESE TWO ARMS WERE THE WRONG WAY ROUND, and this is step 9.4's default
         // dispatch -- the arm taken on nearly every ordinary frame -- so the error was not a corner
@@ -977,98 +977,98 @@ internal static class FighterTask
         //     0x8004B1A4  10620007  beq v1,v0,+7       ; +0x16B == 0x1C -> jump to the dispatch
         //     0x8004B1B4  0C01298E  jal 0x8004A638     ; reached ONLY by falling through
         //     0x8004B1BC  08012CC9  j   0x8004B324     ; and then skipping the dispatch entirely
-        // So ANY of the four conditions selects the DISPATCH, and the bare FUN_8004a638(param_1, 0)
+        // So ANY of the four conditions selects the DISPATCH, and the bare FUN_8004a638(fighter, 0)
         // runs only when none of them holds. The first version had it exactly inverted, and its
         // header comment described the inverted version, so the misreading came before the code.
         //
         // The test is negated here rather than the two bodies being moved: the dispatch block below
         // is long, and inverting the condition changes the one thing that was wrong.
-        else if (!((((uint)PsxRam.ReadI32(param_3 + 0x138) & 0xe0) == 0)
-            || (PsxRam.ReadI32(param_3 + BattleState.FighterTaskNode) != TaskSystem.g_CurrentTask)
-            || (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x80000) != 0)
-            || ((sbyte)PsxRam.ReadU8(param_1 + 0x16b) == 0x1c)))
+        else if (!((((uint)PsxRam.ReadI32(opponent + 0x138) & 0xe0) == 0)
+            || (PsxRam.ReadI32(opponent + BattleState.FighterTaskNode) != TaskSystem.g_CurrentTask)
+            || (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x80000) != 0)
+            || ((sbyte)PsxRam.ReadU8(fighter + 0x16b) == 0x1c)))
         {
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.FUN_8004a638(fighter, 0);
         }
         else
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x8000) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x8000) == 0)
             {
-                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x800000) == 0)
+                if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x800000) == 0)
                 {
-                    if (param_2 == 0x26 || param_2 == 0x27 || param_2 == 0x28)
+                    if (command == 0x26 || command == 0x27 || command == 0x28)
                     {
-                        FighterCombat.FUN_8004a97c(param_1, (int)param_2);
+                        FighterCombat.FUN_8004a97c(fighter, (int)command);
                     }
-                    else if (param_2 == 0x21)
+                    else if (command == 0x21)
                     {
-                        FighterAction.FUN_8004aa44(param_1);
-                        FighterAction.FUN_8004bf50(param_1);
+                        FighterAction.FUN_8004aa44(fighter);
+                        FighterAction.FUN_8004bf50(fighter);
                     }
-                    else if (param_2 == 0x13 || param_2 == 0x14)
+                    else if (command == 0x13 || command == 0x14)
                     {
-                        FighterAction.FUN_8004a910(param_1, (int)param_2);
+                        FighterAction.FUN_8004a910(fighter, (int)command);
                     }
-                    else if (param_2 == 0x1c)
+                    else if (command == 0x1c)
                     {
-                        FighterCombat.FUN_8004aa9c(param_1);
-                        FighterAction.FUN_8004ad80(param_1);
+                        FighterCombat.FUN_8004aa9c(fighter);
+                        FighterAction.FUN_8004ad80(fighter);
                     }
                     else
                     {
-                        FighterCombat.FUN_8004a638(param_1, (int)param_2);
+                        FighterCombat.FUN_8004a638(fighter, (int)command);
                     }
                 }
                 else
                 {
-                    FighterAction.FUN_8004ad80(param_1);
+                    FighterAction.FUN_8004ad80(fighter);
                 }
             }
             else
             {
-                FighterAction.FUN_8004b024(param_1);
+                FighterAction.FUN_8004b024(fighter);
             }
         }
     }
 
-    // GHIDRA: FUN_8004c198 @ 0x8004C198 (VS.EXE)
+    // GHIDRA: DispatchFighterActionState @ 0x8004C198 (VS.EXE)
     // CERTAIN, full decompilation, 272 bytes. Step 9.4's arm for +0x138 & 0x200FF -- a five-way
     // dispatch purely on +0x138 bits 0x20/8/0x10/6, all five arms already ported in
     // FighterAction.cs.
-    private static void FUN_8004c198(int param_1, uint param_2, int param_3)
+    private static void DispatchFighterActionState(int fighter, uint command, int opponent)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x20) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x20) == 0)
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 8) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x138) & 8) == 0)
             {
-                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x10) == 0)
+                if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x10) == 0)
                 {
-                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 6) == 0)
+                    if (((uint)PsxRam.ReadI32(fighter + 0x138) & 6) == 0)
                     {
-                        FighterAction.FUN_8004b8a0(param_1, (int)param_2, param_3);
+                        FighterAction.FUN_8004b8a0(fighter, (int)command, opponent);
                     }
                     else
                     {
-                        FighterAction.FUN_8004bf50(param_1);
+                        FighterAction.FUN_8004bf50(fighter);
                     }
                 }
                 else
                 {
-                    FighterAction.FUN_8004bd3c(param_1, param_2);
+                    FighterAction.FUN_8004bd3c(fighter, command);
                 }
             }
             else
             {
-                FighterAction.FUN_8004bb70(param_1, (int)param_2);
+                FighterAction.FUN_8004bb70(fighter, (int)command);
             }
         }
         else
         {
-            FighterAction.FUN_8004b9cc(param_1);
+            FighterAction.FUN_8004b9cc(fighter);
         }
     }
 
-    // GHIDRA: FUN_8004cea0 @ 0x8004CEA0 (VS.EXE)
+    // GHIDRA: DispatchFighterReactionState @ 0x8004CEA0 (VS.EXE)
     // CERTAIN, full decompilation, 604 bytes. Step 9.4's arm for +0x138 & 0x7F00, and the only one
     // of the three that is NOT handed iVar2 -- it takes the fighter and the command word alone.
     //
@@ -1084,21 +1084,21 @@ internal static class FighterTask
     // opposing team's. Each filled slot entry is read as a task-node pointer, exactly like the
     // caller's own step 9.1 (+8 gives the task's workspace pointer), and that workspace's own
     // +0x138 bit 0x20000 is tested -- the SAME bit the caller's step 9.4 dispatch already uses to
-    // route to this function's sibling FUN_8004c198. If NO scanned slot has that bit set,
+    // route to this function's sibling DispatchFighterActionState. If NO scanned slot has that bit set,
     // FighterCombat.FUN_8004c3e0(param_1) runs; its bool return is discarded here exactly as the
     // original discards it.
     //
     // PART 2 -- unconditional, a five-way dispatch on +0x138 bits 0x4000 / 0x3800 / 0x400 / 0x200,
     // all five arms already ported in FighterCombat.cs.
-    private static void FUN_8004cea0(int param_1, uint param_2)
+    private static void DispatchFighterReactionState(int fighter, uint command)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x30000000) != 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x30000000) != 0)
         {
             bool bVar1 = false;
             int local_18;
             int iVar2;
 
-            if (PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) < 6)
+            if (PsxRam.ReadU8(fighter + BattleState.FighterSlotIndex) < 6)
             {
                 local_18 = 0;
                 iVar2 = local_18;
@@ -1112,7 +1112,7 @@ internal static class FighterTask
             for (; local_18 < iVar2 + 6; local_18 = local_18 + 1)
             {
                 int slotPtr = PsxRam.ReadI32(
-                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
+                    PsxRam.ReadI32(fighter + BattleState.FighterBattleContext)
                         + BattleState.CtxFighterSlots + local_18 * 4);
 
                 if (slotPtr != 0
@@ -1124,45 +1124,45 @@ internal static class FighterTask
 
             if (!bVar1)
             {
-                FighterCombat.FUN_8004c3e0(param_1);
+                FighterCombat.FUN_8004c3e0(fighter);
             }
         }
 
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x4000) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x4000) == 0)
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x3800) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x3800) == 0)
             {
-                if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x400) == 0)
+                if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x400) == 0)
                 {
-                    if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x200) == 0)
+                    if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x200) == 0)
                     {
-                        FighterCombat.FUN_8004c9cc(param_1);
+                        FighterCombat.FUN_8004c9cc(fighter);
                     }
                     else
                     {
-                        FighterCombat.FUN_8004ca54(param_1, (int)param_2);
+                        FighterCombat.FUN_8004ca54(fighter, (int)command);
                     }
                 }
                 else
                 {
-                    FighterCombat.FUN_8004cb24(param_1, (int)param_2);
+                    FighterCombat.FUN_8004cb24(fighter, (int)command);
                 }
             }
             else
             {
-                FighterCombat.FUN_8004cc64(param_1, (int)param_2);
+                FighterCombat.FUN_8004cc64(fighter, (int)command);
             }
         }
         else
         {
-            FighterCombat.FUN_8004cd84(param_1);
+            FighterCombat.FUN_8004cd84(fighter);
         }
     }
 
-    // GHIDRA: FUN_80047688 @ 0x80047688 (VS.EXE)
+    // GHIDRA: StepFighterAnimAndProximity @ 0x80047688 (VS.EXE)
     // CERTAIN, full decompilation, 184 bytes. Step 9.5, unconditional, immediately after whichever
     // of the trio ran. First of the five functions this body reaches in the 0x80047xxx block, and
-    // also called by the four early-out arms above (FUN_80050514/824/501b8) and by FUN_8005070c —
+    // also called by the four early-out arms above (UpdateHeldFighter/824/501b8) and by FUN_8005070c —
     // it clears +0x134 bit 31 and then pushes/pops the fighter's own +0xf8 sub-record on the
     // DAT_80083cb4 chain FighterCombat's own FUN_80045998/FUN_80045a38 already document, and runs
     // the keyframe-stream scanner FighterCombat.FUN_800539d0.
@@ -1173,17 +1173,17 @@ internal static class FighterTask
     // project's duplicate-symbol rule forbids redeclaring the same Ghidra address under a second
     // name, so both addresses are used here as raw literals with this comment rather than through
     // a shared constant.
-    private static void FUN_80047688(int param_1)
+    private static void StepFighterAnimAndProximity(int fighter)
     {
-        PsxRam.WriteI32(param_1 + 0x134, (int)((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x7fffffff));
+        PsxRam.WriteI32(fighter + 0x134, (int)((uint)PsxRam.ReadI32(fighter + 0x134) & 0x7fffffff));
 
         // &DAT_80083cb4 -- the list-head record FighterCombat.FUN_80045998/FUN_80045a38 use.
-        FighterCombat.FUN_80045a38(unchecked((int)0x80083cb4), param_1 + 0xf8);
-        FighterCombat.FUN_800539d0(param_1);
+        FighterCombat.FUN_80045a38(unchecked((int)0x80083cb4), fighter + 0xf8);
+        FighterCombat.FUN_800539d0(fighter);
 
         // &DAT_80083cb4 (list head) and &DAT_80101ba4 (opaque payload address).
-        FighterCombat.FUN_80045998(unchecked((int)0x80083cb4), param_1 + 0xf8, unchecked((int)0x80101ba4));
-        FighterCombat.FUN_80045814(param_1 + 0xf8);
+        FighterCombat.FUN_80045998(unchecked((int)0x80083cb4), fighter + 0xf8, unchecked((int)0x80101ba4));
+        FighterCombat.FUN_80045814(fighter + 0xf8);
     }
 
     // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
@@ -1195,42 +1195,42 @@ internal static class FighterTask
     // kind: it compiles, it runs, and the work silently does not happen.
     // The declaration is removed and the call site qualified. See FighterCombat.FUN_8004e758.
 
-    // GHIDRA: FUN_80047740 @ 0x80047740 (VS.EXE)
+    // GHIDRA: SetFighterTint @ 0x80047740 (VS.EXE)
     // CERTAIN, full decompilation, 172 bytes. Step 9.8, first of the five behind the +0x138
     // bit-27 gate. Sets three consecutive bytes at +0x150/+0x151/+0x152 to one of two fixed
     // values, gated on +0x134 bit 26 and, inside that, +0x138 bit 18. No callee, no loop, no
     // open question — the three fields themselves are not named anywhere else in this port, so
     // they are left as raw offsets.
-    private static void FUN_80047740(int param_1)
+    private static void SetFighterTint(int fighter)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x4000000) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x134) & 0x4000000) == 0)
         {
-            if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x40000) == 0)
+            if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x40000) == 0)
             {
-                PsxRam.WriteU8(param_1 + 0x152, 0x80);
-                PsxRam.WriteU8(param_1 + 0x151, 0x80);
-                PsxRam.WriteU8(param_1 + 0x150, 0x80);
+                PsxRam.WriteU8(fighter + 0x152, 0x80);
+                PsxRam.WriteU8(fighter + 0x151, 0x80);
+                PsxRam.WriteU8(fighter + 0x150, 0x80);
             }
             else
             {
-                PsxRam.WriteU8(param_1 + 0x150, 0xff);
-                PsxRam.WriteU8(param_1 + 0x152, 0xff);
-                PsxRam.WriteU8(param_1 + 0x151, 0xff);
+                PsxRam.WriteU8(fighter + 0x150, 0xff);
+                PsxRam.WriteU8(fighter + 0x152, 0xff);
+                PsxRam.WriteU8(fighter + 0x151, 0xff);
             }
         }
     }
 
-    // GHIDRA: FUN_800477ec @ 0x800477EC (VS.EXE)
+    // GHIDRA: DrawFighterSprite @ 0x800477EC (VS.EXE)
     // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
     // reach it by qualified name: an empty stub in the enclosing class silently beats a real
     // body elsewhere, which is what check_function_addresses.py exists to catch.
 
-    // GHIDRA: FUN_80047a24 @ 0x80047A24 (VS.EXE)
+    // GHIDRA: DrawFighterShadow @ 0x80047A24 (VS.EXE)
     // NO LONGER DECLARED HERE. Closed in VS_EXE/FighterMotion.cs. The call sites in this file
     // reach it by qualified name: an empty stub in the enclosing class silently beats a real
     // body elsewhere, which is what check_function_addresses.py exists to catch.
 
-    // GHIDRA: FUN_80047b10 @ 0x80047B10 (VS.EXE)
+    // GHIDRA: UploadFighterTexture @ 0x80047B10 (VS.EXE)
     // CERTAIN, full decompilation, 340 bytes, 0x80047B10..0x80047C63. Step 9.8. VS_EXE/FileIo.cs
     // already named this address in a comment as one of FileIo.DecompressAndLoadImage's five call
     // sites — "a pointer field and a width already shifted right by 2" — and that call is what
@@ -1248,12 +1248,12 @@ internal static class FighterTask
     // `lh` (signed); the sign extension is invisible here because the value only ever feeds
     // DecompressAndLoadImage's `ushort` parameter, so it is ported the same unsigned way every
     // other +0x156/+0x158 access in this port already reads them.
-    private static void FUN_80047b10(int param_1)
+    private static void UploadFighterTexture(int fighter)
     {
-        if (PsxRam.ReadI32(param_1 + 0x94) != PsxRam.ReadI32(param_1 + 0x14c)
-            && 0 < PsxRam.ReadI32(param_1 + 0x13c))
+        if (PsxRam.ReadI32(fighter + 0x94) != PsxRam.ReadI32(fighter + 0x14c)
+            && 0 < PsxRam.ReadI32(fighter + 0x13c))
         {
-            int iVar2 = PsxRam.ReadI32(param_1 + 0x98);
+            int iVar2 = PsxRam.ReadI32(fighter + 0x98);
             ushort uVar1 = (ushort)(PsxRam.ReadU16(iVar2 + 0xa) >> 9);
             ushort local_a = (ushort)(uVar1 & 0x78);
             ushort local_c = local_a;
@@ -1267,14 +1267,14 @@ internal static class FighterTask
             local_c = (ushort)(local_c >> 2);
 
             FileIo.DecompressAndLoadImage(
-                PsxRam.ReadI32(param_1 + 0x94),
-                PsxRam.ReadU16(param_1 + 0x156),
-                PsxRam.ReadU16(param_1 + 0x158),
+                PsxRam.ReadI32(fighter + 0x94),
+                PsxRam.ReadU16(fighter + 0x156),
+                PsxRam.ReadU16(fighter + 0x158),
                 (short)local_c,
                 (short)local_a,
                 0);
 
-            PsxRam.WriteI32(param_1 + 0x14c, PsxRam.ReadI32(param_1 + 0x94));
+            PsxRam.WriteI32(fighter + 0x14c, PsxRam.ReadI32(fighter + 0x94));
         }
     }
 
@@ -1283,7 +1283,7 @@ internal static class FighterTask
     // reach it by qualified name: an empty stub in the enclosing class silently beats a real
     // body elsewhere, which is what check_function_addresses.py exists to catch.
 
-    // GHIDRA: FUN_80050a14 @ 0x80050A14 (VS.EXE)
+    // GHIDRA: UpdateFighterComboTimer @ 0x80050A14 (VS.EXE)
     // CERTAIN, full decompilation, 208 bytes. Phase 10, the tail — and it ends at 0x80050AE3, one
     // byte below this callback's own entry point, so the two are adjacent in the same compilation
     // unit.
@@ -1307,24 +1307,24 @@ internal static class FighterTask
     // ctx+slotIndex*0x14+0x15BA — FighterBattleContext (+0xF0) and FighterSlotIndex (+0x173) are
     // BattleState's; the table itself and its +0x15BA row are not named anywhere in this port and
     // are left as a raw offset, reported upward rather than guessed at.
-    private static void FUN_80050a14(int param_1)
+    private static void UpdateFighterComboTimer(int fighter)
     {
-        if (((uint)PsxRam.ReadI32(param_1 + 0x138) & 0x40) == 0)
+        if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x40) == 0)
         {
-            sbyte cVar1 = (sbyte)(PsxRam.ReadU8(param_1 + 0x229) - 1);
-            PsxRam.WriteU8(param_1 + 0x229, unchecked((byte)cVar1));
+            sbyte cVar1 = (sbyte)(PsxRam.ReadU8(fighter + 0x229) - 1);
+            PsxRam.WriteU8(fighter + 0x229, unchecked((byte)cVar1));
 
             if (cVar1 < 0)
             {
                 PsxRam.WriteU16(
-                    PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext)
-                        + PsxRam.ReadU8(param_1 + BattleState.FighterSlotIndex) * 0x14 + 0x15ba,
+                    PsxRam.ReadI32(fighter + BattleState.FighterBattleContext)
+                        + PsxRam.ReadU8(fighter + BattleState.FighterSlotIndex) * 0x14 + 0x15ba,
                     0);
             }
         }
         else
         {
-            PsxRam.WriteU8(param_1 + 0x229, 0x14);
+            PsxRam.WriteU8(fighter + 0x229, 0x14);
         }
     }
 }

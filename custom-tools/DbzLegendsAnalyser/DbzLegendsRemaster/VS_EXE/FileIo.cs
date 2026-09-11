@@ -213,7 +213,7 @@ internal static class FileIo
     //
     // Five call sites, all discarding the result: main @ 0x800620F4 twice (0x801D20A0 and
     // 0x801D555C, both 0x40 x 0x100), FUN_80034d98 @ 0x80034D98 once (&DAT_80081828, 0x10 x 0x40),
-    // FUN_80047b10 @ 0x80047B10 once with a pointer field and a width already shifted right by 2,
+    // UploadFighterTexture @ 0x80047B10 once with a pointer field and a width already shifted right by 2,
     // and 0x80037EC4.
     internal static uint DecompressAndLoadImage(int buffer, ushort x, ushort y, short w, short h,
         byte isClut)

@@ -207,7 +207,10 @@ internal static class BattleState
     internal const int FighterBlockD0 = 0xD0;
 
     // GHIDRA: fighter + 0xAC, + 0x104 (VS.EXE)
-    // Its own task node, stored twice.
+    // +0xAC is FighterRecord.opponentTaskNode: CreateFighterTask seeds it with the fighter's own node,
+    // and UpdateFighter rewrites it EVERY FRAME from SelectOpponentTask (own node again when that
+    // returns null). +0x104 is ownTaskNode and is never rewritten. The constant names below predate
+    // that reading and are kept only because every call site spells them.
     internal const int FighterTaskNode = 0xAC;
 
     internal const int FighterTaskNodeAlias = 0x104;

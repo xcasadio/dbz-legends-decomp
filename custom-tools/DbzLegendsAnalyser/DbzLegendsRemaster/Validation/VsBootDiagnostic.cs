@@ -417,12 +417,12 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine();
         Console.WriteLine();
-        Console.WriteLine("  LE ROUTEUR DE L ETAPE 9.4 (il faut +0x138 & 0x200FF == 0 pour FUN_8004b098):");
+        Console.WriteLine("  LE ROUTEUR DE L ETAPE 9.4 (il faut +0x138 & 0x200FF == 0 pour DispatchFighterNeutralCommand):");
         Console.WriteLine(
             $"   visites ou le masque valait zero : {FighterTask.DiagRouter200ffEverZero}"
             + $"   bits JAMAIS clairs : 0x{(FighterTask.DiagRouter200ffAlways == -1 ? 0 : FighterTask.DiagRouter200ffAlways):X5}");
         Console.WriteLine(
-            $"   FUN_8004b098 appelee : {FighterTask.DiagFun8004b098Calls}"
+            $"   DispatchFighterNeutralCommand appelee : {FighterTask.DiagFun8004b098Calls}"
             + $"   FUN_8004a97c (ecrivain du bit 0x08) appelee : {FighterCombat.DiagFun8004a97cCalls}"
             + $"   opcodes vus : 0x{FighterCombat.DiagA97cOpcodes:X16}"
             + $" (dernier 0x{FighterCombat.DiagA97cLastOpcode:X})");
