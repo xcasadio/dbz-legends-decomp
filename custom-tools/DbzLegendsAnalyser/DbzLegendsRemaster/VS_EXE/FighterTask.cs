@@ -613,14 +613,14 @@ internal static class FighterTask
     // simplified. Inside it, +0x134 has bit 25 cleared, bit 26 set, then is ANDed with 0x07F8FFFF
     // — which clears bits 31/30/29/28 along with bit 25, among others; NOTE THIS FOR THE GATE
     // FINDING: this path CLEARS +0x134 bit 31, it does not set it. The same three +0x150..+0x152
-    // bytes are stamped 0x80, then FighterCombat.FUN_8004a638(fighter, 0) and
+    // bytes are stamped 0x80, then FighterCombat.ApplyFighterCommandState(fighter, 0) and
     // FighterCombat.FUN_80026a28(fighter) run.
     //
     // FighterCombat.FUN_8004ffec then runs unconditionally (its own uint result is discarded here,
     // exactly as the original computes but never consumes it). Four more single-state arms follow,
     // each testing the SAME state byte +0x16A against one fixed value and, on a match, clearing a
     // small per-state flag field, masking +0x138 down to 0x0E000000, and calling
-    // FighterCombat.FUN_8004a638(fighter, 0) again — these are independent ifs, not an if/else
+    // FighterCombat.ApplyFighterCommandState(fighter, 0) again — these are independent ifs, not an if/else
     // chain, matching Ghidra's own four separate branches. The tail is the same +0x134-bit-31 arm
     // and +0x138-bit-27-gated quintet the other phase arms already run, except this one zeroes only
     // +0xdc (not +0xec, unlike UpdateOutOfPlayFighter above) — that asymmetry is the original's.
@@ -640,7 +640,7 @@ internal static class FighterTask
             PsxRam.WriteU8(param_1 + 0x152, 0x80);
             PsxRam.WriteU8(param_1 + 0x151, 0x80);
             PsxRam.WriteU8(param_1 + 0x150, 0x80);
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
             FighterCombat.FUN_80026a28(param_1);
         }
 
@@ -651,7 +651,7 @@ internal static class FighterTask
         {
             PsxRam.WriteU8(param_1 + 0x224, 0);
             PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
 
         // 0x20 ' '
@@ -659,7 +659,7 @@ internal static class FighterTask
         {
             PsxRam.WriteU16(param_1 + 0x15e, 0);
             PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
 
         // 0x1c
@@ -667,14 +667,14 @@ internal static class FighterTask
         {
             PsxRam.WriteU8(param_1 + 0x228, 0);
             PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
 
         // 0x2a '*'
         if ((sbyte)PsxRam.ReadU8(param_1 + 0x16a) == 0x2a)
         {
             PsxRam.WriteI32(param_1 + 0x138, (int)((uint)PsxRam.ReadI32(param_1 + 0x138) & 0xe000000));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
 
         StepFighterAnimAndProximity(param_1);
@@ -870,7 +870,7 @@ internal static class FighterTask
             if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x10000000) == 0)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
+                uVar1 = (uint)FighterAi.SelectAiFighterCommand(fighter);
             }
             else
             {
@@ -899,14 +899,14 @@ internal static class FighterTask
                     }
 
                     DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
+                uVar1 = (uint)FighterAi.SelectAiFighterCommand(fighter);
                     return uVar1;
                 }
             }
             else if (handover == 2)
             {
                 DiagCommandSourceCalls[2]++;
-                uVar1 = (uint)FighterAi.FUN_80023890(fighter);
+                uVar1 = (uint)FighterAi.SelectAiFighterCommand(fighter);
                 return uVar1;
             }
 
@@ -925,7 +925,7 @@ internal static class FighterTask
     // rule cares about.
     private const int Dat801ff100ShortIndex = 0x80;
 
-    // GHIDRA: FUN_80023890 @ 0x80023890 (VS.EXE)
+    // GHIDRA: SelectAiFighterCommand @ 0x80023890 (VS.EXE)
     // NO LONGER DECLARED HERE. THE CPU CONTROLLER IS CLOSED, in VS_EXE/FighterAi.cs, together with
     // its nine callees -- 5096 bytes of root plus about 5600 of subtree. SelectFighterCommand below
     // reaches it by qualified name; while a stub for the same address sat in THIS file, C# bound
@@ -941,20 +941,20 @@ internal static class FighterTask
     //   1. This fighter's own battle-context Ki gauge (BattleState.CtxKiGauge, read through its
     //      own slot, the SAME "ctx + slot*CtxSlotRecordStride + CtxKiGauge" address
     //      FighterCombat.DeliverPendingHitEvent already reads for the identical "< 400" gate) below 400
-    //      forces state 0x20 (FighterAction.FUN_8004ad0c), clears +0x138 bit 0x40000, and stamps
+    //      forces state 0x20 (FighterAction.EnterFighterState20), clears +0x138 bit 0x40000, and stamps
     //      +0x15e = 0x3c -- an out-of-Ki lockout timer, not named further here.
-    //   2. Failing that, a four-way OR falls back to FighterCombat.FUN_8004a638(param_1, 0) when:
+    //   2. Failing that, a four-way OR falls back to FighterCombat.ApplyFighterCommandState(param_1, 0) when:
     //      param_3's own +0x138 bits 5..7 (0xe0) are all clear, OR param_3's own FighterTaskNode
     //      (+0xac) is not the currently running task (TaskSystem.g_CurrentTask, VS.EXE's
     //      DAT_8008d16c -- the SAME "+0xac == g_CurrentTask" test DeliverPendingHitEvent already makes, here
     //      negated), OR this fighter's own +0x138 bit 0x80000 is set, OR this fighter's own state
     //      byte at +0x16b is 0x1c.
     //   3. Otherwise: +0x138 bit 0x8000 routes to FighterAction.FUN_8004b024; failing that, bit
-    //      0x800000 routes to FighterAction.FUN_8004ad80; failing THAT, param_2 (the frame's
+    //      0x800000 routes to FighterAction.UpdateFighterState1C; failing THAT, param_2 (the frame's
     //      command word) picks one of five arms: 0x26/0x27/0x28 -> FighterCombat.FUN_8004a97c;
     //      0x21 -> FighterAction.FUN_8004aa44 then FighterAction.FUN_8004bf50; 0x13/0x14 ->
-    //      FighterAction.FUN_8004a910; 0x1c -> FighterCombat.FUN_8004aa9c then
-    //      FighterAction.FUN_8004ad80; anything else -> FighterCombat.FUN_8004a638(param_1,
+    //      FighterAction.FUN_8004a910; 0x1c -> FighterCombat.EnterFighterState1C then
+    //      FighterAction.UpdateFighterState1C; anything else -> FighterCombat.ApplyFighterCommandState(param_1,
     //      param_2).
     //
     // +0x16b and +0x15e are not named anywhere else in this port and are left as raw offsets.
@@ -966,7 +966,7 @@ internal static class FighterTask
                     + BattleState.CtxKiGauge)
             < 400)
         {
-            FighterAction.FUN_8004ad0c(fighter);
+            FighterAction.EnterFighterState20(fighter);
             PsxRam.WriteI32(fighter + 0x138, PsxRam.ReadI32(fighter + 0x138) & unchecked((int)0xfffbffff));
             PsxRam.WriteU16(fighter + 0x15e, 0x3c);
         }
@@ -977,7 +977,7 @@ internal static class FighterTask
         //     0x8004B1A4  10620007  beq v1,v0,+7       ; +0x16B == 0x1C -> jump to the dispatch
         //     0x8004B1B4  0C01298E  jal 0x8004A638     ; reached ONLY by falling through
         //     0x8004B1BC  08012CC9  j   0x8004B324     ; and then skipping the dispatch entirely
-        // So ANY of the four conditions selects the DISPATCH, and the bare FUN_8004a638(fighter, 0)
+        // So ANY of the four conditions selects the DISPATCH, and the bare ApplyFighterCommandState(fighter, 0)
         // runs only when none of them holds. The first version had it exactly inverted, and its
         // header comment described the inverted version, so the misreading came before the code.
         //
@@ -988,7 +988,7 @@ internal static class FighterTask
             || (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x80000) != 0)
             || ((sbyte)PsxRam.ReadU8(fighter + 0x16b) == 0x1c)))
         {
-            FighterCombat.FUN_8004a638(fighter, 0);
+            FighterCombat.ApplyFighterCommandState(fighter, 0);
         }
         else
         {
@@ -1011,17 +1011,17 @@ internal static class FighterTask
                     }
                     else if (command == 0x1c)
                     {
-                        FighterCombat.FUN_8004aa9c(fighter);
-                        FighterAction.FUN_8004ad80(fighter);
+                        FighterCombat.EnterFighterState1C(fighter);
+                        FighterAction.UpdateFighterState1C(fighter);
                     }
                     else
                     {
-                        FighterCombat.FUN_8004a638(fighter, (int)command);
+                        FighterCombat.ApplyFighterCommandState(fighter, (int)command);
                     }
                 }
                 else
                 {
-                    FighterAction.FUN_8004ad80(fighter);
+                    FighterAction.UpdateFighterState1C(fighter);
                 }
             }
             else

@@ -386,7 +386,7 @@ internal static class VsBootDiagnostic
 
         Console.WriteLine(anyCommand ? string.Empty : "   AUCUN mot de commande n'a ete produit.");
 
-        Console.Write("   les sorties precoces de l'IA (FUN_80023890) :");
+        Console.Write("   les sorties precoces de l'IA (SelectAiFighterCommand) :");
         {
             string[] names =
             {

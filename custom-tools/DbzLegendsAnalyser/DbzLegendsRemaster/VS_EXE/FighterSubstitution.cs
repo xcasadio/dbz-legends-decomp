@@ -404,7 +404,7 @@ internal static class FighterSubstitution
     //   4. THE GUARD PHASE 1 TESTS: fighter +0x144 = ctx + 0x16A0 + slot*4, the loaded character
     //      data. Everything after this reads through that pointer.
     //   5. The AI profile index: fighter +0x22D = the slot's sub-record +0x0C. That is the byte
-    //      FUN_80023890 uses to pick a behaviour profile row out of PTR_DAT_800807A4.
+    //      SelectAiFighterCommand uses to pick a behaviour profile row out of PTR_DAT_800807A4.
     //   6. The VRAM row for this fighter (DAT_80080A80, six rows by +0x160) into +0x156/+0x158,
     //      and a 32x1 CLUT uploaded at the row's second pair; the returned id goes to +0x15A.
     //   7. Relocate five pointers out of the data's own sub-header at data + *data: +0x84 from

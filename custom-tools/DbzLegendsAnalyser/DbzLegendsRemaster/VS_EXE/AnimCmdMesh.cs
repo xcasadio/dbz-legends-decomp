@@ -1516,7 +1516,7 @@ internal static class AnimCmdMesh
     // GHIDRA: DistanceBetweenPositions @ 0x80045CF4 (VS.EXE)
     // 400 bytes, one callee (libgte's SquareRoot0). SIX callers, and they are why it lives here
     // rather than in any one of them: four inside RunBattleCameraTask @ 0x80027670, one inside the
-    // CPU controller FUN_80023890, and one at 0x80054DE0. It is placed beside
+    // CPU controller SelectAiFighterCommand, and one at 0x80054DE0. It is placed beside
     // ComputeYawPitchToTarget below because the two are neighbours in the image (0x80045CF4 and
     // 0x80045F34, 0x240 bytes apart) and every caller of one is a caller of the other.
     //

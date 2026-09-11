@@ -97,10 +97,9 @@ struct FighterRecord {
     SVECTOR  posMin;                /* +0xB0 : (-480, -768, -480), ou (-20000, -3000, -20000) en mode 1 */
     SVECTOR  posMax;                /* +0xB8 : ( 480,  120,  480), ou ( 20000,   120,  20000) en mode 1 */
     undefined1 pad_c0[8];           /* +0xC0/+0xC4 recoivent field_50/field_54 de l evenement au coup */
-    undefined2 field_c8;
-    undefined2 field_ca;
-    undefined2 field_cc;
-    undefined1 pad_ce[14];
+    SVECTOR  state1cAngles;         /* +0xC8 : trois angles 12 bits ecrits par EnterFighterState1C / UpdateFighterState1C
+                                       et passes a RotateVectorByAngles ; seuls ecrivains dans l image */
+    undefined1 pad_d0[12];          /* +0xD0 : bloc VM de 16 octets (binding_20), dont pendingHitRequest0 est le dernier mot */
     uint     pendingHitRequest0;    /* +0xDC : dernier mot du bloc VM de 16 octets a +0xD0 (binding_20) ; octet 1 = sorte du coup, 0x80 = cible alternative */
     undefined1 pad_e0[12];
     uint     pendingHitRequest1;    /* +0xEC : idem pour le bloc a +0xE0 (binding_44) ; seule UpdateOutOfPlayFighter livre l indice 1 */
@@ -148,7 +147,9 @@ struct FighterRecord {
     undefined2 field_15c;
     short    field_15e;             /* lu signe (lh) : compteur de frames a role multiple, non nomme */
     short    characterIndex;        /* +0x160, le 2e argument de CreateFighterTask */
-    ushort   field_162;
+    short    field_162;             /* +0x162 : rampe des etats 2/10 (ApplyFighterCommandState) : +cap/4 par appel jusqu a
+                                       g_State2RampCap/g_State10RampCap[id] (x1.5 en boost), 50 a l entree de 0x1C ;
+                                       AUCUN lecteur dans VS.EXE, seule la VM le voit par binding_4c : pas nomme */
     ushort   field_164;
     ushort   field_166;
     ushort   field_168;
@@ -199,7 +200,11 @@ struct FighterRecord {
  *                  `flagsA &= 0x0E000000` le CONSERVENT (ils gardent 25/26/27), c est ce qui le rend collant
  *   0x02000000 [F] commande figee : command = 0, SelectFighterCommand non appele (ActivateFighterInSlot, gestionnaire)
  *   0x00100000 [?] jamais pose dans VS.EXE, seulement efface
- *   0x00040000 [D] teinte vive : SetFighterTint ecrit 0xFF au lieu de 0x80
+ *   0x00040000 [D] MODE BOOST DE KI (aura) : SpendFighterKi le facture chaque frame (colonne 8 de g_FighterKiCostTable,
+ *                  35..64 ki, contre +300 par appel de AddFighterKiCharge) ; vitesse de rampe x1.5, teinte 0xFF,
+ *                  aura maintenue par DriveFighterAura, colonne de contribution alternee (n -> n+6), immunite
+ *                  au chancellement ; arme par le bouton d action tenu ou l IA, desarme par le meme bouton,
+ *                  l etat 0x1D (charge de ki), certains coups recus (sorte 3), ou ki < 400
  *   0x00007F00 [F] un etat de reaction est en cours -> DispatchFighterReactionState
  *   0x000200FF [F] une action de base est en cours -> DispatchFighterActionState
  *   0x00027FFF [F] masque « occupe » de SelectOpponentTask : la cible est gardee
@@ -221,6 +226,21 @@ struct FighterRecord {
  * FUN_80045998 / FUN_80045a38 / FUN_80045814 / FUN_80045130 : +0 listNext, +4 listPrev, +8 hitAttackerTaskNode,
  * +0xC ownTaskNode, +0x10 hitHullTable, +0x14 cellX, +0x16 cellZ, +0x18 hitStamp, +0x1C pos.vx, +0x20 pos.vz.
  * Il chevauche des champs deja nommes : la disposition reste plate, seuls cellX/cellZ ont quitte le padding.
+ *
+ * LES ETATS (stateOpcode) que le passage ApplyFighterCommandState a fermes :
+ *   0x1D [D] charge de ki : seul producteur DecodeCommandFlagsClear (bouton d action tenu, boost eteint), seul
+ *            consommateur le bras 0x1D d ApplyFighterCommandState (+300 ki, boost efface) ; aucun handler dedie
+ *   0x22 [D] KO (EnterFighterKoState, health == 0)
+ *   2, 10 [F] deux etats a rampe (field_162, tables par personnage) produits par deux bits logiques du pad
+ *            (0x1000 -> 2, 0x4000 -> 10) : leur direction n est PAS derivable de VS.EXE (table de remap hors image)
+ *   0x1C [F] entree EnterFighterState1C (angles state1cAngles sous flagsA & 0x80000, state1cFrames 5 ou 15),
+ *            tick UpdateFighterState1C ; « dash » est une lecture, pas une preuve
+ *   0x20 [?] entree EnterFighterState20 (flagsA &= 0xFA640000, |= 0x4000) ; trois appelants, un seul lie au ki
+ *
+ * LES TABLES PAR PERSONNAGE (index = TaskNode.id, pose par ActivateFighterInSlot) :
+ *   g_State2RampCap  0x8008302C ushort[40]   } plafond et source du pas (cap/4) de field_162 ;
+ *   g_State10RampCap 0x8008307C ushort[40]   } entree 0 factice = 40, 1..38 vivantes, 39 = 0
+ *   g_FighterKiCostTable 0x80083968 byte[40][12] : colonnes de cout de SpendFighterKi, la 8 est celle du boost (/28)
  */
 
 /* L ENREGISTREMENT D EVENEMENT D ATTAQUE, lu chez son createur.

@@ -220,8 +220,8 @@ internal static class FighterMotion
     // FighterAction.cs already read that same field as `(short)PsxRam.ReadU16(param_1 + 4)`, and
     // the same form is used here.
     //
-    // FUN_8004a108 IS CALLED WITH TWO ARGUMENTS AND READS ONE. 0x8004FF58 loads +0x16a into v1 and
-    // 0x8004FF5C moves it into a1 before the `jal`, but FighterCombat.FUN_8004a108's own header
+    // SpendFighterKi IS CALLED WITH TWO ARGUMENTS AND READS ONE. 0x8004FF58 loads +0x16a into v1 and
+    // 0x8004FF5C moves it into a1 before the `jal`, but FighterCombat.SpendFighterKi's own header
     // note records that no path through that body reads a1 — Ghidra's callee-side signature is
     // one-parameter and that is settled analysis. The second argument's LOAD is a plain read with
     // no side effect, so it is simply not issued here; nothing is dropped.
@@ -256,7 +256,7 @@ internal static class FighterMotion
 
             if ((AnimVm.DAT_800b305a & 1) == 0)
             {
-                FighterCombat.FUN_8004a108(fighter);
+                FighterCombat.SpendFighterKi(fighter);
             }
         }
 

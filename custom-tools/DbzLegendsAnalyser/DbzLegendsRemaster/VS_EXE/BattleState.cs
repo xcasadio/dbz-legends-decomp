@@ -275,7 +275,7 @@ internal static class BattleState
     // DecodeCommandFlagsClear stores here) and MatchStateGatedRepeatedFace @ 0x80049008 (which
     // writes through the `param_1 + 0x220` pointer DecodeCommandFlags7F00 hands it).
     //
-    // Read by FighterCombat.FUN_8004aa9c and FighterAction.FUN_8004ad80, which both switch on it
+    // Read by FighterCombat.EnterFighterState1C and FighterAction.UpdateFighterState1C, which both switch on it
     // to pick a knockback direction triple at +0xC8/+0xCA/+0xCC. Both of those already carried a
     // "raw literal; no BattleState name covers +0x220" note; this constant is that name.
     internal const int FighterRepeatedFaceButton = 0x220;

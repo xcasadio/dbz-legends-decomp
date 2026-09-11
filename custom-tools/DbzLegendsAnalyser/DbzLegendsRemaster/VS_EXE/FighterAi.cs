@@ -7,12 +7,12 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // WHAT THIS FAMILY IS FOR. FighterTask.SelectFighterCommand produces the frame's COMMAND WORD for
 // every fighter. For a fighter marked pad-driven it calls FighterInput.ReadFighterPadCommand; for
-// every other fighter it calls FUN_80023890 below, and the two return values live in the SAME
+// every other fighter it calls SelectAiFighterCommand below, and the two return values live in the SAME
 // vocabulary — step 9.4 of the fighter task routes on them without knowing which side produced
 // them. The opcodes this file returns are exactly the ones FighterInput.cs's header enumerates:
 // 0x13/0x14, 0x17, 0x1c, 0x1d, 0x21, 0x23..0x28, 0x2a, plus 2, 10 and 0 and the "no command" -1.
 //
-// THE THREE-LEVEL BEHAVIOUR TABLE. FUN_80023890 picks nine byte-table pointers per frame:
+// THE THREE-LEVEL BEHAVIOUR TABLE. SelectAiFighterCommand picks nine byte-table pointers per frame:
 //
 //   row      = *(int*)(0x800807A4 + fighter[0x22D] * 4)        -- one 12-byte profile row
 //   ptr[k]   = *(int*)(tableBase[k] + row[k] * 4),  k = 0..8
@@ -20,7 +20,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //                 0x8008027C, 0x80080294, 0x800802AC, 0x800802C4 }
 //
 // fighter+0x22D is the AI profile index FighterSubstitution.cs documents (its step 5: "the slot's
-// sub-record +0x0C ... the byte FUN_80023890 uses to pick a behaviour profile row out of
+// sub-record +0x0C ... the byte SelectAiFighterCommand uses to pick a behaviour profile row out of
 // PTR_DAT_800807A4"). FighterCombat.FUN_80025F38 already walks the FIRST TWO levels of the same
 // structure, and reads them straight through PsxRam at the raw addresses rather than embedding
 // them; this file does the same, for the reason spelled out under WHAT IS NOT EMBEDDED below.
@@ -46,7 +46,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 // PSX address, which VS_EXE_exe.ResolveAddress answers from PsxExeImage — the image's own .data,
 // the same bytes the console reads. Nothing about a length has to be decided to do that.
 //
-// THE 48-BYTE ARGUMENT BLOCK, and why one C# struct is the faithful shape. FUN_80023890's locals
+// THE 48-BYTE ARGUMENT BLOCK, and why one C# struct is the faithful shape. SelectAiFighterCommand's locals
 // local_4c, local_48[2] and local_44[13] occupy sp+0x4C onward, and the decompilation contains TEN
 // identical do/while loops that each copy 48 bytes (sp+0x4C..sp+0x7B) to sp+0x10. sp+0x10 is the
 // MIPS o32 OUTGOING-ARGUMENT AREA: arguments 1..4 travel in a0..a3 and everything past them is
@@ -67,20 +67,20 @@ namespace DbzLegendsRemaster.VS_EXE;
 // storage for 0x8008D518 and is reached through PadInput, not re-declared.
 //
 // DUPLICATE-ADDRESS NOTE, reported rather than fixed because this wave may write only this file:
-// FighterTask.cs still carries its own `private static int FUN_80023890(int param_1)` BLOCKED stub
-// (annotated `// GHIDRA: FUN_80023890 @ 0x80023890 (VS.EXE)`). Because C# binds the unqualified
+// FighterTask.cs still carries its own `private static int SelectAiFighterCommand(int param_1)` BLOCKED stub
+// (annotated `// GHIDRA: SelectAiFighterCommand @ 0x80023890 (VS.EXE)`). Because C# binds the unqualified
 // calls inside FighterTask.SelectFighterCommand to the enclosing class first, THAT STUB STILL WINS
 // and this file is dead code until it is deleted and the three call sites are re-pointed at
-// FighterAi.FUN_80023890. That is precisely the defect the address checker exists to catch, and it
+// FighterAi.SelectAiFighterCommand. That is precisely the defect the address checker exists to catch, and it
 // will report it.
 internal static class FighterAi
 {
     // JUSTIFICATION: C# language bridge only
-    // RELATION: the 48-byte MIPS o32 outgoing-argument block at sp+0x10..sp+0x3B that FUN_80023890
+    // RELATION: the 48-byte MIPS o32 outgoing-argument block at sp+0x10..sp+0x3B that SelectAiFighterCommand
     // builds from its own sp+0x4C..sp+0x7B locals before each of its ten calls, and that
     // FUN_80024C78 passes on unchanged to FUN_80025570.
     //
-    // The field names are FUN_80023890's own Ghidra locals, because FUN_80023890 is the only writer
+    // The field names are SelectAiFighterCommand's own Ghidra locals, because SelectAiFighterCommand is the only writer
     // of them. Each field's comment gives the offset the CALLEES see it at, which is how their own
     // in_stack_000000XX names map onto it:
     //
@@ -100,7 +100,7 @@ internal static class FighterAi
         // sp+0x14, low half: the absolute difference of the two fighters' +0x116 halfwords.
         public ushort local_48_0;
 
-        // sp+0x14, high half. NEVER WRITTEN by FUN_80023890 — the original leaves whatever the
+        // sp+0x14, high half. NEVER WRITTEN by SelectAiFighterCommand — the original leaves whatever the
         // stack held. No callee reads it (they all take offset 0x14 as a `short`).
         public ushort local_48_1;
 
@@ -116,12 +116,12 @@ internal static class FighterAi
         public uint local_44_8;
 
         // DEVIATION: sp+0x3C. local_44[9] is inside the 48 bytes every copy loop moves but is
-        // NEVER WRITTEN by FUN_80023890, so on the console it is uninitialised stack. No callee
+        // NEVER WRITTEN by SelectAiFighterCommand, so on the console it is uninitialised stack. No callee
         // reads offset 0x3C, so it is inert; C# forces it to 0 where the original forces nothing.
         public uint local_44_9;
     }
 
-    // GHIDRA: FUN_80023890 @ 0x80023890 (VS.EXE)
+    // GHIDRA: SelectAiFighterCommand @ 0x80023890 (VS.EXE)
     // 5096 bytes, 629 decompiled lines, ten callees. THE CPU CONTROLLER. Its three call sites are
     // all inside FighterTask.SelectFighterCommand, and param_1 is the fighter workspace.
     //
@@ -155,7 +155,7 @@ internal static class FighterAi
     //   [4] own 0x200FF and 0x20  [5] own bit 19  [6] the +0x22C warm-up  [7] reached the body
     internal static readonly int[] DiagAiExits = new int[8];
 
-    internal static int FUN_80023890(int param_1)
+    internal static int SelectAiFighterCommand(int param_1)
     {
         DiagAiExits[0]++;
         short sVar1;
@@ -882,7 +882,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_80024c78 @ 0x80024C78 (VS.EXE)
-    // 2076 bytes. One caller, FUN_80023890's decoder-3 exit above. The RANGE DECODER: it splits on
+    // 2076 bytes. One caller, SelectAiFighterCommand's decoder-3 exit above. The RANGE DECODER: it splits on
     // the distance (param_5's low half) at 0x30 / 0x60 / 0x200 and rolls one `rand() % 101` against
     // a cumulative run of percentage bytes to pick the command.
     //
@@ -1123,7 +1123,7 @@ internal static class FighterAi
     LAB_800253c4:
         // The +0x22C bit-7 REMAP. When that bit is set, three of the picked opcodes are rewritten:
         // 0x26 -> 0x17, 0x28 -> 0x1D, and 10 -> 0x13/0x14 at long range. 0x21 additionally runs
-        // FUN_80025DC4 and becomes 0x1C — the same pairing FUN_80023890's own decoder-1 exit makes.
+        // FUN_80025DC4 and becomes 0x1C — the same pairing SelectAiFighterCommand's own decoder-1 exit makes.
         if ((PsxRam.ReadU8(param_1 + 0x22c) & 0x80) != 0)
         {
             if (iVar9 == 0x26)
@@ -1218,12 +1218,12 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_80025494 @ 0x80025494 (VS.EXE)
-    // 220 bytes. Three callers, all in FUN_80023890's decoder-3 switch (cases 0/1/0x29, case 0x17,
+    // 220 bytes. Three callers, all in SelectAiFighterCommand's decoder-3 switch (cases 0/1/0x29, case 0x17,
     // and the default arm). Returns nothing — a pure side effect on +0x22C bit 2 and +0x138 bit 18.
     // in_stack_00000010 = local_4c, in_stack_00000020 = local_44_2.
     //
     // This is the same "clear +0x22C bit 2, then maybe clear +0x138 bit 0x40000" pair that
-    // FUN_80023890 open-codes at the head of its decoder 1 and decoder 2, and again in the switch's
+    // SelectAiFighterCommand open-codes at the head of its decoder 1 and decoder 2, and again in the switch's
     // 2/10/0x1B arm — four columns of the same table (offsets 0/1, 2/3, 4/5, and here 6/7 of
     // local_44_2). Note the guard shape differs from the open-coded copies: here the +0x22C store
     // happens INSIDE the `if`, after the distance test, where in the open-coded copies it happens
@@ -1315,7 +1315,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_8002575c @ 0x8002575C (VS.EXE)
-    // 736 bytes. Two callers, both in FUN_80023890's decoder 2 (the +0x138 bit 4 arm and the bit 3
+    // 736 bytes. Two callers, both in SelectAiFighterCommand's decoder 2 (the +0x138 bit 4 arm and the bit 3
     // arm). Returns 0x1D, 10, or -1. in_stack_00000024/28/2c/30 = local_44_3/4/5/6.
     //
     // The four distance bands here are the SAME 0x30 / 0x60 / 0x200 splits FUN_80024C78 uses, but
@@ -1444,7 +1444,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_80025a3c @ 0x80025A3C (VS.EXE)
-    // 212 bytes. Two callers, both in FUN_80023890's decoder 2. A single percentage roll whose
+    // 212 bytes. Two callers, both in SelectAiFighterCommand's decoder 2. A single percentage roll whose
     // COLUMN is chosen by the slot record's own byte at ctx + slot*0x14 + 0x15BA — that is
     // BattleState.CtxKiGauge + 6, and BattleState has no name for it, so it stays a raw literal.
     // in_stack_00000034 = local_44_7.
@@ -1485,7 +1485,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_80025b10 @ 0x80025B10 (VS.EXE)
-    // 692 bytes. One caller, FUN_80023890's decoder-1 exit (LAB_8002411C), whose non-zero result
+    // 692 bytes. One caller, SelectAiFighterCommand's decoder-1 exit (LAB_8002411C), whose non-zero result
     // becomes command 0x1C after FUN_80025DC4. in_stack_00000018 = local_44_0.
     //
     // TWO INDEPENDENT PARTS, and the second runs whatever the first decided:
@@ -1633,7 +1633,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_80025dc4 @ 0x80025DC4 (VS.EXE)
-    // 372 bytes. Two callers: FUN_80023890's decoder-1 exit and FUN_80024C78's 0x21 remap. Both
+    // 372 bytes. Two callers: SelectAiFighterCommand's decoder-1 exit and FUN_80024C78's 0x21 remap. Both
     // pair it with command 0x1C, so this is the state change that command carries.
     //
     // It stamps state byte 5 at +0x228, rewrites +0x138 to `(flags & 0xFFFD8000) | 0x80000`, and
@@ -1736,7 +1736,7 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_8002631c @ 0x8002631C (VS.EXE)
-    // 264 bytes. Seven callers: the six in FUN_80023890's decoder-2 0x23/0x25/0x26/0x27/0x28/other
+    // 264 bytes. Seven callers: the six in SelectAiFighterCommand's decoder-2 0x23/0x25/0x26/0x27/0x28/other
     // ladder, and one at 0x80026304 inside FUN_800261EC, now closed in VS_EXE/FighterAction.cs --
     // which is why this method is `internal` rather than `private`.
     //
@@ -1788,11 +1788,11 @@ internal static class FighterAi
     }
 
     // GHIDRA: FUN_800264d8 @ 0x800264D8 (VS.EXE)
-    // 608 bytes. One caller, FUN_80023890's early `(&DAT_801FF058)[fighter index] == -0x32` gate.
+    // 608 bytes. One caller, SelectAiFighterCommand's early `(&DAT_801FF058)[fighter index] == -0x32` gate.
     //
     // A DEBUG / CHEAT HOOK, and read that way from its shape rather than named: it consults ONE raw
     // pad word and, on six different button combinations, forces the +0x22C bit-6 / bit-7 pair on
-    // either fighter — the very bits that make FUN_80023890 abandon the profile tables for the two
+    // either fighter — the very bits that make SelectAiFighterCommand abandon the profile tables for the two
     // override rows at 0x80080A38 / 0x80080A5C, and that make FUN_80024C78 remap its opcodes. It
     // then plays one of two sounds and burns three frames. Nothing else in this port writes
     // 0x801FF058, and SharedHighRam records that the six bytes are written "when a pad holds the

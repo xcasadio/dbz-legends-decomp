@@ -354,6 +354,38 @@ qui refute l'ancien `moveClass`, `uploadedImageBlob` a +0x14C qui etait declare 
 `FUN_` a dessein : FUN_800501b8 et FUN_8005070c, dont les enqueteurs ont refuse de nommer
 le role faute de preuve decisive, ce que les refuteurs ont approuve.
 
+## FUN_8004a638 : UNE FONCTION, QUATRE NOMS, ET CE QUE LES REFUTEURS ONT REFUSE
+
+Quatre enqueteurs (la fonction, son callee FUN_8004a518, les etats 2/10 avec leurs tables,
+le bit 0x40000), huit refuteurs, une fusion. Les quatre ont decrit la meme mecanique et
+propose quatre noms differents pour la fonction ; c'est la session principale qui tranche
+(`ApplyFighterCommandState`), pas la fusion, qui a consigne le conflit sans choisir.
+
+Ce qui est ferme : la transition d'etat au-dessus de `FighterSetState`, la rampe de
+`field_162` vers un plafond par personnage (deux tables de 40 demi-mots, x1.5 en boost),
+l'etat 0x1D = charge de ki (`AddFighterKiCharge`, +300 plafonne a 16000, puis le boost
+s'eteint), et le bit 0x40000 = mode boost de ki, dont les roles convergent depuis six
+fonctions independantes (cout par frame, vitesse, teinte, aura, contribution, immunite).
+
+Ce que les refuteurs ont refuse, et pourquoi le miroir garde des numeros :
+
+- `moveSpeed` pour +0x162 : aucun lecteur dans VS.EXE ; sa seule sortie est la variable
+  VM `binding_4c`, consommee par des scripts hors image. Un role suppose n'est pas un role ;
+- `MoveUp`/`MoveDown` pour les etats 2 et 10 : les seuls champs directionnels (+0xC8) ne
+  sont ecrits que par les fonctions de l'etat 0x1C, et l'identite physique des boutons
+  depend d'une table de remap hors image ;
+- `Dash` pour 0x1C et `KiExhausted` pour `FUN_8004ad0c` : le premier est une lecture, le
+  second une inference depuis un appelant sur trois (le corps ne touche pas au ki). Les
+  trois fonctions concernees sont nommees par leur seul corps : `EnterFighterState1C`,
+  `UpdateFighterState1C`, `EnterFighterState20` ;
+- « seul ecrivain / exactement N » : encore sous-comptes partout (45 sites pour le bit 18,
+  102 stores sur +0x138, six ecrivains de +0x162 dans FUN_80035030 oublies).
+
+Deux corrections a porter : `SpendFighterKi` (FUN_8004a108) a un second parametre mort,
+spille par ses six appelants et jamais relu ; et la table de contribution a 0x800835E4
+n'a pas de ligne 0 (ses 16 premiers octets appartiennent a une autre table), donc elle
+n'a pas ete etiquetee.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les

@@ -15,7 +15,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //   0x8004AA44 (88B), 0x8004A910 (108B), 0x8004AD0C (116B), 0x8004B024 (116B),
 //   0x8004B3D0 (212B), 0x8004B5AC (216B), 0x8004B4A4 (264B), 0x8004B8A0 (300B).
 // All eight are genuine leaves or call only functions FighterCombat.cs already exposes
-// (FighterSetState, FUN_8004a108, FUN_8004a638) — cross-referenced there by address per this
+// (FighterSetState, SpendFighterKi, ApplyFighterCommandState) — cross-referenced there by address per this
 // project's duplicate-symbol rule, never redeclared here.
 //
 // ONE ADDITIONAL LEAF NOT AMONG THE EIGHT: FUN_8004a9e8 (92 bytes). FUN_8004b8a0's own body
@@ -29,16 +29,16 @@ namespace DbzLegendsRemaster.VS_EXE;
 // file.
 //
 // A SECOND WAVE through this file, ported after the eight above, adds five more leaves —
-// FUN_8004b9cc, FUN_8004bb70, FUN_8004bd3c, FUN_8004bf50, FUN_8004ad80 — plus one more decisive
+// FUN_8004b9cc, FUN_8004bb70, FUN_8004bd3c, FUN_8004bf50, UpdateFighterState1C — plus one more decisive
 // supporting leaf (FUN_8004b33c) and two addresses left to other slices at the time (FUN_800261ec, since closed in this file; FUN_8004b68c, closed in FighterMotion.cs) for callees
 // this file's own scope does not reach. See the "WAVE 2" header comment further down, right
 // before FUN_8004b9cc, for the full account, including why a sixth address named in that wave's
-// brief (FUN_8004aa9c) is deliberately absent from this file.
+// brief (EnterFighterState1C) is deliberately absent from this file.
 //
 // WHAT IS DELIBERATELY LEFT OPEN. FUN_8004b3d0, FUN_8004b5ac and FUN_8004b4a4 all walk a small
 // table at fighter+0x1D0 (a fighter's own command/attack-slot buffer — confirmed only by the
 // arithmetic that locates it, the same way FighterCombat.cs's own header note documents for the
-// tables AddSlotGaugeContribution and FUN_8004a108 read) testing bits 0x20/0xa000/0x8000/0x2000
+// tables AddSlotGaugeContribution and SpendFighterKi read) testing bits 0x20/0xa000/0x8000/0x2000
 // per slot. What those bits MEAN (a button held? a combo window? an input buffered this frame?)
 // is not established beyond the arithmetic that tests them — the callers that would give that
 // context (FUN_80048e88, FUN_8004b68c) are out of this slice, read only far enough to fix each
@@ -61,41 +61,41 @@ internal static class FighterAction
     // GHIDRA: FUN_8004a910 @ 0x8004A910 (VS.EXE)
     // 108 bytes. Two callers: DispatchFighterNeutralCommand (`FUN_8004a910(param_1,param_2);`) and FUN_8004ca54
     // (`FUN_8004a910(param_1,0x17);`, after clearing +0x138 bit 9). Stamps the given state, sets
-    // +0x138 bit 0 (0x1), then calls FighterCombat.FUN_8004a108 — the Ki-gauge decrement. Ghidra
-    // prints that call with param_2 forwarded (`FUN_8004a108(param_1,param_2)`), but
-    // FUN_8004a108's own header note in FighterCombat.cs already closes that as a rendering
+    // +0x138 bit 0 (0x1), then calls FighterCombat.SpendFighterKi — the Ki-gauge decrement. Ghidra
+    // prints that call with param_2 forwarded (`SpendFighterKi(param_1,param_2)`), but
+    // SpendFighterKi's own header note in FighterCombat.cs already closes that as a rendering
     // artifact of the call site: the real body reads only one argument.
     internal static void FUN_8004a910(int param_1, int param_2)
     {
         FighterCombat.FighterSetState(param_1, (ushort)param_2);
         PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) | 1);
-        FighterCombat.FUN_8004a108(param_1);
+        FighterCombat.SpendFighterKi(param_1);
     }
 
-    // GHIDRA: FUN_8004ad0c @ 0x8004AD0C (VS.EXE)
-    // 116 bytes. Three callers: DispatchFighterNeutralCommand, FUN_8004cb24, FUN_8004cc64 (all `else { FUN_8004ad0c
+    // GHIDRA: EnterFighterState20 @ 0x8004AD0C (VS.EXE)
+    // 116 bytes. Three callers: DispatchFighterNeutralCommand, FUN_8004cb24, FUN_8004cc64 (all `else { EnterFighterState20
     // (param_1); }` or equivalent — none in this slice). Forces state 0x20, then masks +0x138
     // with 0xfa640000 (confirmed against the raw `lui v1,0xfa64 / and a0,a0,v1` pair — the value
     // is a genuine `lui`-built constant, not a decompiler artifact) before setting bit 14
     // (0x4000).
-    internal static void FUN_8004ad0c(int param_1)
+    internal static void EnterFighterState20(int fighter)
     {
-        FighterCombat.FighterSetState(param_1, 0x20);
-        PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfa640000));
-        PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) | 0x4000);
+        FighterCombat.FighterSetState(fighter, 0x20);
+        PsxRam.WriteI32(fighter + 0x138, PsxRam.ReadI32(fighter + 0x138) & unchecked((int)0xfa640000));
+        PsxRam.WriteI32(fighter + 0x138, PsxRam.ReadI32(fighter + 0x138) | 0x4000);
     }
 
     // GHIDRA: FUN_8004b024 @ 0x8004B024 (VS.EXE)
     // 116 bytes. One caller, DispatchFighterNeutralCommand (`else { FUN_8004b024(param_1); }`). When the fighter's
-    // +4 halfword is zero, clears +0x138 bit 15 (0x8000) and calls FighterCombat.FUN_8004a638
+    // +4 halfword is zero, clears +0x138 bit 15 (0x8000) and calls FighterCombat.ApplyFighterCommandState
     // (fighter, 0) — the same "re-stamp current state, opcode 0" call shape FighterCombat.cs's
-    // own header note documents for FUN_8004a638's other callers.
+    // own header note documents for ApplyFighterCommandState's other callers.
     internal static void FUN_8004b024(int param_1)
     {
         if ((short)PsxRam.ReadU16(param_1 + 4) == 0)
         {
             PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xffff7fff));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
     }
 
@@ -228,7 +228,7 @@ internal static class FighterAction
     // Two independent arms:
     //   +4 halfword == 0: clears +0x138 bit 0 and +0x134 bit 29 (0xdfffffff, the same mask
     //     FighterCombat.cs's own AddSlotGaugeContribution note already uses for +0x134), then
-    //     calls FighterCombat.FUN_8004a638(param_1, 0).
+    //     calls FighterCombat.ApplyFighterCommandState(param_1, 0).
     //   otherwise, when param_3's own +0x138 bit 8 (0x100) is set AND param_2 is 0x23, 0x24 or
     //     0x25: clears +0x138 bit 0 on param_1, then calls FUN_8004a9e8(param_1, param_2) —
     //     param_2 narrowed to ushort, matching FUN_8004a9e8's own parameter type above.
@@ -241,7 +241,7 @@ internal static class FighterAction
         {
             PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfffffffe));
             PsxRam.WriteI32(param_1 + 0x134, PsxRam.ReadI32(param_1 + 0x134) & unchecked((int)0xdfffffff));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
         else if (((PsxRam.ReadI32(param_3 + 0x138) & 0x100) != 0) &&
                  ((param_2 == 0x25 || param_2 == 0x23) || param_2 == 0x24))
@@ -258,7 +258,7 @@ internal static class FighterAction
     //   0x8004AA9C (624B), is SKIPPED here: FighterCombat.cs already carries it as a real body —
     //   its own header note there counts this file's DispatchFighterNeutralCommand as one of its three callers —
     //   so porting it again here would be exactly the duplicate-declaration defect this
-    //   project's own rules call out. It is cross-referenced as FighterCombat.FUN_8004aa9c,
+    //   project's own rules call out. It is cross-referenced as FighterCombat.EnterFighterState1C,
     //   never redeclared.
     //
     // TWO MORE CALLEES ADDED FOR THE SAME REASON FUN_8004a9e8 WAS IN WAVE 1: FUN_8004b9cc's own
@@ -266,7 +266,7 @@ internal static class FighterAction
     // at nothing is either a build break or a dropped call, both defect classes this repo has
     // already shipped. Both are themselves substantial state machines over the fighter's
     // +0x1d0 command-slot buffer (304 and 484 bytes respectively — bigger than every one of
-    // this wave's own five ported targets except FUN_8004ad80), squarely the "read only far
+    // this wave's own five ported targets except UpdateFighterState1C), squarely the "read only far
     // enough for context, not ported" territory WAVE 1's own header note already draws around
     // FUN_8004b68c by name. They are declared below as BLOCKED stubs, matching the precedent
     // FighterCombat.cs sets for its own FUN_80049a24/FUN_800496a8/FUN_80049534: the call site is
@@ -287,7 +287,7 @@ internal static class FighterAction
     // -1; otherwise, when +0x138 bits 0x30000000 are BOTH clear, the slot comes from
     // FUN_800261ec(fighter) (below, BLOCKED); when either bit is set, the slot comes from
     // FighterMotion.FUN_8004b68c(fighter) instead (also below, BLOCKED). A slot of -1 re-stamps the current
-    // state via FighterCombat.FUN_8004a638(fighter, 0); any other slot instead sets +0x138 bit
+    // state via FighterCombat.ApplyFighterCommandState(fighter, 0); any other slot instead sets +0x138 bit
     // 0x40 and, only when the slot is in 0x23..0x28, dispatches it onward: 0x23..0x25 ->
     // FUN_8004a9e8(fighter, slot) (above, this file); 0x26..0x28 ->
     // FighterCombat.FUN_8004a97c(fighter, slot). A slot of 0x22 or below, or 0x29 and above,
@@ -319,7 +319,7 @@ internal static class FighterAction
             DiagLocal10EverSeen = local_10;
             if (local_10 == -1)
             {
-                FighterCombat.FUN_8004a638(param_1, 0);
+                FighterCombat.ApplyFighterCommandState(param_1, 0);
             }
             else
             {
@@ -343,7 +343,7 @@ internal static class FighterAction
     // 304 bytes, one caller: FUN_8004b9cc above, as FUN_800261ec(fighter) when the fighter's
     // +0x138 bits 0x30000000 are both clear.
     //
-    // WHAT IT IS: the SHORT form of the archetype walk FighterAi.FUN_80023890 does in full. That
+    // WHAT IT IS: the SHORT form of the archetype walk FighterAi.SelectAiFighterCommand does in full. That
     // function reads all nine bytes of the twelve-byte row and resolves nine leaf pointers; this
     // one reads only BYTE [8] and resolves only the ninth, then offsets into it by the current
     // move class and hands the result to the same FighterAi.FUN_8002631c roll. So nothing about
@@ -464,7 +464,7 @@ internal static class FighterAction
     //     0xfffdff37) and +0x134 bit 0x20000000 (0xdfffffff, this file's usual mask); when the
     //     fighter's own state (+0x16a) is 0x27 AND +0x116 is less than +0xb2 (both raw literals;
     //     no BattleState name covers either), copies +0xb2 onto +0x116; then calls
-    //     FighterCombat.FUN_8004a638(fighter, 0) unconditionally.
+    //     FighterCombat.ApplyFighterCommandState(fighter, 0) unconditionally.
     //   otherwise, gated on +0x138 bit 0x100000 being set AND a slot-table lookup — the SAME
     //     `*(int*)(param_1+0xf0) + slotIndex*0x14 + 0x15b4` chain FUN_8004bd3c below also reads,
     //     slotIndex being BattleState.FighterSlotIndex, neither +0xf0 nor +0x15b4 named anywhere
@@ -485,7 +485,7 @@ internal static class FighterAction
                 PsxRam.WriteU16(param_1 + 0x116, PsxRam.ReadU16(param_1 + 0xb2));
             }
 
-            FighterCombat.FUN_8004a638(param_1, 0);
+            FighterCombat.ApplyFighterCommandState(param_1, 0);
         }
         else if ((PsxRam.ReadI32(param_1 + 0x138) & 0x100000) != 0
             && 399 < (short)PsxRam.ReadU16(PsxRam.ReadI32(param_1 + BattleState.FighterBattleContext) // +0x15b4 below is the unnamed half
@@ -512,7 +512,7 @@ internal static class FighterAction
     // 0x25 — i.e. param_2 in 0x26..0x28. Then: if param_2 equals the fighter's own current state
     // (+0x16a) OR local_10 is still the sentinel, and the +4 halfword is zero, clears +0x138
     // bits 0x10/0x40 (mask 0xffffffaf) and +0x134 bit 0x20000000 (0xdfffffff), then calls
-    // FighterCombat.FUN_8004a638(fighter, 0). OTHERWISE (param_2 differs from the current state
+    // FighterCombat.ApplyFighterCommandState(fighter, 0). OTHERWISE (param_2 differs from the current state
     // AND local_10 got the overwrite): clears +0x138 bits 0x10/0x100000 (mask 0xffefffef) and
     // +0x134 bit 0x20000000, sets +0x138 bit 0x40, and — the same 0x22 < slot < 0x29 dispatch
     // FUN_8004b9cc above already carries out — 0x23..0x25 -> FUN_8004a9e8(fighter, slot);
@@ -536,7 +536,7 @@ internal static class FighterAction
             {
                 PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xffffffaf));
                 PsxRam.WriteI32(param_1 + 0x134, PsxRam.ReadI32(param_1 + 0x134) & unchecked((int)0xdfffffff));
-                FighterCombat.FUN_8004a638(param_1, 0);
+                FighterCombat.ApplyFighterCommandState(param_1, 0);
             }
         }
         else
@@ -570,15 +570,15 @@ internal static class FighterAction
     //     negative -> step equals the SAME value (so the field below jumps straight to 0 in one
     //     call rather than decrementing by 1 — reproduced exactly, not a gap); positive -> step
     //     1. Stores the step to +0x226, subtracts it from +0x225, then calls
-    //     FighterCombat.FUN_8004a108(fighter) (Ghidra prints a second argument, 0x21, but
-    //     FUN_8004a108's own header note in FighterCombat.cs already closes that as a rendering
+    //     FighterCombat.SpendFighterKi(fighter) (Ghidra prints a second argument, 0x21, but
+    //     SpendFighterKi's own header note in FighterCombat.cs already closes that as a rendering
     //     artifact — the real body reads one argument). When the fighter's +4 halfword is zero,
     //     also zeroes +0x224/+0x226, clears +0x138 bit 2 (0x4, mask 0xfffffffb) and +0x134 bit
-    //     0x20000000 (0xdfffffff), then calls FighterCombat.FUN_8004a638(fighter, 0).
+    //     0x20000000 (0xdfffffff), then calls FighterCombat.ApplyFighterCommandState(fighter, 0).
     //   SET: increments the signed byte at +0x224 (clamped to at most 0x28), then re-derives
     //     +0x225 from a raw-literal table (DAT_800835cb, no BattleState/name covers it) indexed
     //     by the CURRENT TASK's own Id field — `*DAT_8008d16c`, the same TaskSystem.g_CurrentTask
-    //     dereference FighterCombat.cs's own FUN_8004a638 header note already documents —
+    //     dereference FighterCombat.cs's own ApplyFighterCommandState header note already documents —
     //     multiplied by the (now-clamped) +0x224 and divided by 0x28; when that comes out 0,
     //     forces it to 1.
     internal static void FUN_8004bf50(int param_1)
@@ -603,7 +603,7 @@ internal static class FighterAction
             PsxRam.WriteU8(param_1 + 0x226, step);
             PsxRam.WriteU8(param_1 + 0x225, (byte)(v225 - (sbyte)step));
 
-            FighterCombat.FUN_8004a108(param_1);
+            FighterCombat.SpendFighterKi(param_1);
 
             if ((short)PsxRam.ReadU16(param_1 + 4) == 0)
             {
@@ -611,7 +611,7 @@ internal static class FighterAction
                 PsxRam.WriteU8(param_1 + 0x226, 0);
                 PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xfffffffb));
                 PsxRam.WriteI32(param_1 + 0x134, PsxRam.ReadI32(param_1 + 0x134) & unchecked((int)0xdfffffff));
-                FighterCombat.FUN_8004a638(param_1, 0);
+                FighterCombat.ApplyFighterCommandState(param_1, 0);
             }
         }
         else
@@ -636,71 +636,71 @@ internal static class FighterAction
         }
     }
 
-    // GHIDRA: FUN_8004ad80 @ 0x8004AD80 (VS.EXE)
+    // GHIDRA: UpdateFighterState1C @ 0x8004AD80 (VS.EXE)
     // 676 bytes, the largest of this wave's ported targets. One caller, DispatchFighterNeutralCommand (out of
     // this slice), reached from TWO different call sites in step 9.4's own body: once bare
-    // (`else { FUN_8004ad80(param_1); }`) and once right after FighterCombat.FUN_8004aa9c
-    // (`FUN_8004aa9c(param_1); FUN_8004ad80(param_1);`).
+    // (`else { UpdateFighterState1C(param_1); }`) and once right after FighterCombat.EnterFighterState1C
+    // (`EnterFighterState1C(param_1); UpdateFighterState1C(param_1);`).
     //
     // TWO INDEPENDENT ARMS:
     //   +4 halfword == 0 AND +6 halfword != 0: clears +0x138 bits 0x80000/0x800000 (mask
-    //     0xff77ffff), then calls FighterCombat.FUN_8004a638(fighter, 0). Unlike every other
+    //     0xff77ffff), then calls FighterCombat.ApplyFighterCommandState(fighter, 0). Unlike every other
     //     leaf in this family, this arm touches only +0x138 — no +0x134 mask here.
     //   otherwise: decrements the signed byte at +0x228 (raw literal; no BattleState name covers
     //     it) by 1. Then, only when +0x138 bit 0x80000 is CLEAR, reads the SAME +0x220 selector
-    //     FighterCombat.FUN_8004aa9c already switches on (raw literal; no BattleState name
+    //     FighterCombat.EnterFighterState1C already switches on (raw literal; no BattleState name
     //     covers it) and writes the SAME +0xc8/+0xca/+0xcc knockback direction/timer triple (raw
     //     literals) that function's own header note documents — but with DIFFERENT constants for
     //     the 0x4000 case (+0xca copies +0x11e unchanged rather than zeroing it, and +0xcc is set
     //     to 0xfa00/64000 rather than 0x400; the 0x2000/0x1000/0x8000 cases match
-    //     FUN_8004aa9c's own byte-for-byte) — any other selector value writes nothing, reproduced
+    //     EnterFighterState1C's own byte-for-byte) — any other selector value writes nothing, reproduced
     //     exactly. Finally, when +0x138 bit 0x40000 is ALSO clear, zeroes +0x228 back out.
-    internal static void FUN_8004ad80(int param_1)
+    internal static void UpdateFighterState1C(int fighter)
     {
-        if ((short)PsxRam.ReadU16(param_1 + 4) == 0 && (short)PsxRam.ReadU16(param_1 + 6) != 0)
+        if ((short)PsxRam.ReadU16(fighter + 4) == 0 && (short)PsxRam.ReadU16(fighter + 6) != 0)
         {
-            PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xff77ffff));
-            FighterCombat.FUN_8004a638(param_1, 0);
+            PsxRam.WriteI32(fighter + 0x138, PsxRam.ReadI32(fighter + 0x138) & unchecked((int)0xff77ffff));
+            FighterCombat.ApplyFighterCommandState(fighter, 0);
         }
         else
         {
-            PsxRam.WriteU8(param_1 + 0x228, (byte)((sbyte)PsxRam.ReadU8(param_1 + 0x228) - 1));
+            PsxRam.WriteU8(fighter + 0x228, (byte)((sbyte)PsxRam.ReadU8(fighter + 0x228) - 1));
 
-            if ((PsxRam.ReadI32(param_1 + 0x138) & 0x80000) == 0)
+            if ((PsxRam.ReadI32(fighter + 0x138) & 0x80000) == 0)
             {
-                uint uVar1 = (uint)PsxRam.ReadI32(param_1 + 0x220); // raw literal; no BattleState name covers +0x220
+                uint uVar1 = (uint)PsxRam.ReadI32(fighter + 0x220); // raw literal; no BattleState name covers +0x220
 
                 if (uVar1 == 0x2000)
                 {
-                    PsxRam.WriteU16(param_1 + 0xc8, 0);
-                    PsxRam.WriteU16(param_1 + 0xca, unchecked((ushort)((short)PsxRam.ReadU16(param_1 + 0x11e) + 0x400)));
-                    PsxRam.WriteU16(param_1 + 0xcc, 0);
+                    PsxRam.WriteU16(fighter + 0xc8, 0);
+                    PsxRam.WriteU16(fighter + 0xca, unchecked((ushort)((short)PsxRam.ReadU16(fighter + 0x11e) + 0x400)));
+                    PsxRam.WriteU16(fighter + 0xcc, 0);
                 }
                 else if (uVar1 < 0x2001)
                 {
                     if (uVar1 == 0x1000)
                     {
-                        PsxRam.WriteU16(param_1 + 0xc8, 0);
-                        PsxRam.WriteU16(param_1 + 0xca, 0);
-                        PsxRam.WriteU16(param_1 + 0xcc, 0xfc00);
+                        PsxRam.WriteU16(fighter + 0xc8, 0);
+                        PsxRam.WriteU16(fighter + 0xca, 0);
+                        PsxRam.WriteU16(fighter + 0xcc, 0xfc00);
                     }
                 }
                 else if (uVar1 == 0x4000)
                 {
-                    PsxRam.WriteU16(param_1 + 0xc8, 0);
-                    PsxRam.WriteU16(param_1 + 0xca, PsxRam.ReadU16(param_1 + 0x11e));
-                    PsxRam.WriteU16(param_1 + 0xcc, 0xfa00); // 64000
+                    PsxRam.WriteU16(fighter + 0xc8, 0);
+                    PsxRam.WriteU16(fighter + 0xca, PsxRam.ReadU16(fighter + 0x11e));
+                    PsxRam.WriteU16(fighter + 0xcc, 0xfa00); // 64000
                 }
                 else if (uVar1 == 0x8000)
                 {
-                    PsxRam.WriteU16(param_1 + 0xc8, 0);
-                    PsxRam.WriteU16(param_1 + 0xca, unchecked((ushort)((short)PsxRam.ReadU16(param_1 + 0x11e) - 0x400)));
-                    PsxRam.WriteU16(param_1 + 0xcc, 0);
+                    PsxRam.WriteU16(fighter + 0xc8, 0);
+                    PsxRam.WriteU16(fighter + 0xca, unchecked((ushort)((short)PsxRam.ReadU16(fighter + 0x11e) - 0x400)));
+                    PsxRam.WriteU16(fighter + 0xcc, 0);
                 }
 
-                if ((PsxRam.ReadI32(param_1 + 0x138) & 0x40000) == 0)
+                if ((PsxRam.ReadI32(fighter + 0x138) & 0x40000) == 0)
                 {
-                    PsxRam.WriteU8(param_1 + 0x228, 0);
+                    PsxRam.WriteU8(fighter + 0x228, 0);
                 }
             }
         }
