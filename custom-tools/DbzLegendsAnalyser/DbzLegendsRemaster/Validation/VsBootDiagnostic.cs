@@ -455,7 +455,7 @@ internal static class VsBootDiagnostic
             + $"   frames ou il etait NEGATIF (la porte de la racine A) : {FighterCombat.DiagAttackEventNegative}");
         Console.WriteLine($"   UpdateFighter (la tache combattant) : {FighterTask.DiagUpdateFighterCalls}");
         Console.WriteLine($"   FUN_8004ee48 (racine A) appelee : {FighterCombat.DiagEe48Calls}");
-        Console.WriteLine($"   FUN_8004e758 (racine B) appelee : {FighterCombat.DiagE758Calls}");
+        Console.WriteLine($"   DeliverPendingHitEvent (racine B) appelee : {FighterCombat.DiagE758Calls}");
         Console.WriteLine($"   AddSlotGaugeContribution (le semeur) appelee: {FighterCombat.DiagE108Calls}");
 
         Console.WriteLine();

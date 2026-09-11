@@ -101,18 +101,19 @@ struct FighterRecord {
     undefined2 field_ca;
     undefined2 field_cc;
     undefined1 pad_ce[14];
-    undefined4 field_dc;
+    uint     pendingHitRequest0;    /* +0xDC : dernier mot du bloc VM de 16 octets a +0xD0 (binding_20) ; octet 1 = sorte du coup, 0x80 = cible alternative */
     undefined1 pad_e0[12];
-    undefined4 field_ec;
+    uint     pendingHitRequest1;    /* +0xEC : idem pour le bloc a +0xE0 (binding_44) ; seule UpdateOutOfPlayFighter livre l indice 1 */
     struct BattleContext *battleContext;   /* +0xF0, le 1er argument de CreateFighterTask */
-    int      field_f4;
+    void     *hitTargetLink;        /* +0xF4 : pointe sur le listNext (+0xF8) d un autre combattant (FUN_80055dfc le compare a opponent->listNext) ; AUCUN ecrivain dans VS.EXE */
     void     *listNext;             /* +0xF8/+0xFC : maillon de la liste ancree a DAT_80083CB4 */
     void     *listPrev;
-    undefined1 pad_100[4];
+    struct TaskNode *hitAttackerTaskNode; /* +0x100 : g_CurrentTask tampon par DeliverPendingHitEvent sur la cible ; aucun lecteur trouve */
     struct TaskNode *ownTaskNode;   /* +0x104 : le noeud propre, jamais reecrit */
-    void     *listPayload;          /* +0x108 : 3e argument de FUN_80045998 */
-    undefined1 pad_10c[4];
-    ushort   field_110;
+    short    *hitHullTable;         /* +0x108 : charge du noeud de proximite = 0x80101BA4, coque statique (6 normales, 24 coins) lue par FUN_80045130 */
+    short    cellX;                 /* +0x10C/+0x10E : cle de grille = pos.x >> 9, pos.z >> 9 (FUN_80045814), phase large de FUN_80045130 */
+    short    cellZ;
+    ushort   hitStamp;              /* +0x110 : recoit le demi-mot de requete du coup livre (DeliverPendingHitEvent) et le tampon 0x40 de FUN_80045130 */
     undefined1 pad_112[2];
     SVECTOR  pos;                   /* +0x114 : bornee par posMin/posMax dans UpdateFighter ;
                                        vy <= 0 toujours, et >= posMin.vy quand stateOpcode == 0 ;
@@ -167,11 +168,11 @@ struct FighterRecord {
     uint     padStateHistory[20];   /* +0x180 : les anneaux de FighterInput.cs, passes aux dix */
     uint     padEdgeHistory[20];    /* +0x1D0 :   decodeurs 0x80047E18..0x8004C300 ; pavent 0x220 */
     int      repeatedFaceButton;    /* +0x220 */
-    byte     field_224;
+    char     state21Frames;         /* +0x224 : compteur de l etat 0x21, +1 par frame borne a 40 (FUN_8004bf50), lu signe */
     byte     field_225;
     byte     field_226;
-    undefined1 pad_227[1];
-    byte     field_228;
+    char     effectSlotCount;       /* +0x227 : entrees vivantes de la table d effets 0x8008D610 (30 x 0x24), plafond 5 ; +1 allocation, -1 retrait, 0 par FUN_80026a28 */
+    byte     state1cFrames;         /* +0x228 : compte a rebours de l etat 0x1C, 5 ou 15 selon flagsA & 0x80000 (FUN_8004aa9c), -1 par frame (FUN_8004ad80) */
     char     comboClearDelay;       /* +0x229 : 20 tant que flagsA & 0x40, sinon decremente ; < 0 => comboCount = 0 */
     short    opponentLockFrames;    /* +0x22A : SelectOpponentTask le pose a 0x3C au changement de cible, le decremente, le remet a 0 sous flagsA 0x30000000 */
     byte     inputFlags;            /* +0x22C */
@@ -185,6 +186,42 @@ struct FighterRecord {
     ushort   field_238;
     undefined1 pad_23a[6];          /* jusqu a 0x240, la taille passee a CreateTask */
 };
+
+/* LES BITS DE flagsA (+0x138), tels que le passage UpdateFighter les a etablis, ecrivains a l appui.
+ * Le degre est celui des refuteurs : [D] decisif, [F] fort, [?] non etabli.
+ *
+ *   0x80000000 [D] gel par le gestionnaire de combat (RunBattleManagerFrame) : la frame se reduit a FUN_8005070c
+ *   0x40000000 [D] orientation : pose par UpdateFighterFacingFlag quand l adversaire est a droite en espace vue
+ *   0x20000000 [D] creneau actif de l equipe B cette frame   } miroir de actingSlotTeamA/B, ecrit par
+ *   0x10000000 [D] creneau actif de l equipe A cette frame   } UpdateFighter seul, sous ctx->flags & 0x100000
+ *   0x08000000 [D] ne pas dessiner : le quintet SetFighterTint..DriveFighterAura est saute
+ *   0x04000000 [D] KO / hors jeu : pose par RunBattleManagerFrame (status & 0x200, health == 0) ; les masques
+ *                  `flagsA &= 0x0E000000` le CONSERVENT (ils gardent 25/26/27), c est ce qui le rend collant
+ *   0x02000000 [F] commande figee : command = 0, SelectFighterCommand non appele (ActivateFighterInSlot, gestionnaire)
+ *   0x00100000 [?] jamais pose dans VS.EXE, seulement efface
+ *   0x00040000 [D] teinte vive : SetFighterTint ecrit 0xFF au lieu de 0x80
+ *   0x00007F00 [F] un etat de reaction est en cours -> DispatchFighterReactionState
+ *   0x000200FF [F] une action de base est en cours -> DispatchFighterActionState
+ *   0x00027FFF [F] masque « occupe » de SelectOpponentTask : la cible est gardee
+ *   0x00000040 [F] enchainement : +1 comboCount par coup porte, comboClearDelay maintenu a 20
+ *
+ * LES BITS DE flagsB (+0x134) :
+ *   0x80000000 [F] un coup a ete leve pendant le pas d animation ; efface en tete de StepFighterAnimAndProximity,
+ *                  teste juste apres ; l ecrivain passe par binding_2c (deplacement 0), pas par +0x134
+ *   0x20000000 [D] le coup en attente a deja ete livre (DeliverPendingHitEvent, seul poseur)
+ *   0x04000000 [D] tenu en attente : UpdateHeldFighter ; SetFighterTint ne touche plus la teinte ;
+ *                  relache avec le bit 25 par RunBattleRound (0xF9FFFFFF) en fin de manche
+ *   0x02000000 [D] demande de passage au corps reduit, consommee par FUN_800501b8 / UpdateOutOfPlayFighter
+ *   0x000000C0 [D] bits 6/7 -> drapeaux 0x4000/0x8000 de DrawSpriteGroup (retournement vertical / horizontal)
+ *   0x000000BF [D] octet bas = code de vue compacte : bits 0..4 index de vue, bit 7 miroir (FUN_80055c6c)
+ *
+ * ctx->flags (+0x10) 0x100000 [F] autorise le marquage des creneaux actifs ; transition 22 -> 20 -> 21 a 0x80056F74.
+ *
+ * LE NOEUD DE PROXIMITE. +0xF8..+0x11B est aussi lu comme un noeud de liste intrusive (tete 0x80083CB4) par
+ * FUN_80045998 / FUN_80045a38 / FUN_80045814 / FUN_80045130 : +0 listNext, +4 listPrev, +8 hitAttackerTaskNode,
+ * +0xC ownTaskNode, +0x10 hitHullTable, +0x14 cellX, +0x16 cellZ, +0x18 hitStamp, +0x1C pos.vx, +0x20 pos.vz.
+ * Il chevauche des champs deja nommes : la disposition reste plate, seuls cellX/cellZ ont quitte le padding.
+ */
 
 /* L ENREGISTREMENT D EVENEMENT D ATTAQUE, lu chez son createur.
  *

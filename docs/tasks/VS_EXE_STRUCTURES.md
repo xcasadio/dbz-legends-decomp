@@ -317,6 +317,43 @@ Quatre tables par personnage, fermées par pavage (39 entrées chacune, 0x800811
 `g_MotionAuraScale`, `g_UprightAuraScale` (`VECTOR[39]`). Le miroir
 `docs/types/DbzLegendsTypes.h` porte la structure et la machine à phases.
 
+## LE PASSAGE UpdateFighter : VINGT FONCTIONS, UN ENQUETEUR ET DEUX REFUTEURS CHACUNE
+
+La demande « analyse UpdateFighter et tous ses callees » a ete traitee par un workflow :
+vingt enqueteurs (le corps, dix-sept callees anonymes, deux nommes a auditer), chacun suivi
+de deux refuteurs a lentille differente (unites/largeur/signe ; flux de donnees/role), puis
+une fusion. La limite hebdomadaire a fait tomber dix-huit agents en route ; la reprise
+(`resumeFromRunId`) a rejoue les quarante-trois termines depuis le cache et n'a execute
+que les manquants. Pendant la reprise ReVa etait injoignable : les dix-sept refuteurs ont
+travaille **depuis les octets seuls** (mips.py, struct_fields.py, balayages de deplacement
+sur toute l'image), ce qui s'est revele plus fort que le decompilateur pour ce qu'ils
+verifiaient. Cote session principale, la connexion MCP de ReVa etant tombee, l'ecriture
+dans Ghidra est passee par un pont JSON-RPC direct sur son endpoint
+(`scratchpad/reva.py`) : memes 88 outils, meme programme.
+
+Ce que les refuteurs ont attrape, et qu'un seul passage n'aurait pas vu :
+
+- **une inversion de valeurs** : l'enquete de SetFighterTint attribuait 0x80 au bit 18 pose
+  et 0xFF a l'inverse ; les octets disent le contraire (bit 18 pose -> 0xFF). Le portage
+  etait juste, l'enquete non ;
+- **une polarite de masque** : `flagsA &= 0x0E000000` presente comme « efface le bit 26 » ;
+  c'est un masque de CONSERVATION (25/26/27 gardes), la raison meme pour laquelle le KO est
+  collant ;
+- **une structure impossible** : deux « creneaux de 0x10 octets » a +0xDC et +0xEC auraient
+  chevauche battleContext et listNext ; le createur montre deux blocs lies a la VM a +0xD0
+  et +0xE0 (binding_20, binding_44), dont le mot de requete est le dernier ;
+- **des recensements « exactement N »** presque tous sous-comptes (effaceurs, sites de test,
+  lecteurs) : la lecon est de ne jamais ecrire « seul ecrivain » sans balayer aussi les
+  masques portes par registre (`lui`/`or`) et les affectations du mot entier.
+
+Ce qui en sort : `SlotRecord` (la ligne de creneau du contexte, six colonnes nommees),
+vingt-quatre champs de `FighterRecord` nommes ou retypes — dont `prevStateOpcode` a +0x16B
+qui refute l'ancien `moveClass`, `uploadedImageBlob` a +0x14C qui etait declare padding,
+`hitTargetLink` a +0xF4 qui n'a AUCUN ecrivain dans VS.EXE — la table des bits de
+`flagsA`/`flagsB` du miroir, et seize fonctions nommees d'apres leur role. Deux restent
+`FUN_` a dessein : FUN_800501b8 et FUN_8005070c, dont les enqueteurs ont refuse de nommer
+le role faute de preuve decisive, ce que les refuteurs ont approuve.
+
 ## LA SUITE
 
 1. **Le contre-contrôle portage/image.** Extraire, pour chaque fonction, les

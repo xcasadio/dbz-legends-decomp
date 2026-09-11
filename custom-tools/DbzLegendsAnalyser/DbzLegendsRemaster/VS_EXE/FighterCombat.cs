@@ -16,7 +16,7 @@ namespace DbzLegendsRemaster.VS_EXE;
 //
 // THE TWO ROOTS THEMSELVES are also in this file now, at the bottom, in the order the task that
 // asked for them named them: FUN_8004ee48 (applies one attack-event record to its target, then
-// reaches AddSlotGaugeContribution through its own +0x3c/+0x8 attacker chain) and FUN_8004e758 (the larger
+// reaches AddSlotGaugeContribution through its own +0x3c/+0x8 attacker chain) and DeliverPendingHitEvent (the larger
 // dispatcher FighterTask.cs's own step 9.6 calls — see that function's header note for the empty
 // duplicate declaration still sitting in FighterTask.cs, which this file's real body replaces
 // but cannot remove, since FighterTask.cs is not this file's to edit).
@@ -107,7 +107,7 @@ internal static class FighterCombat
     internal static int DiagEe48Calls;
 
     // GHIDRA: AddSlotGaugeContribution @ 0x8004E108 (VS.EXE)
-    // 1144 bytes. Two callers: FUN_8004e758 (`AddSlotGaugeContribution(param_1,0)`) and FUN_8004ee48
+    // 1144 bytes. Two callers: DeliverPendingHitEvent (`AddSlotGaugeContribution(param_1,0)`) and FUN_8004ee48
     // (`AddSlotGaugeContribution(*(int*)(*(int*)(param_1+0x3c)+8), 1)` — a task-node +8 workspace resolved
     // off ANOTHER node, not param_1 itself). Both callers are in this file, below.
     //
@@ -233,7 +233,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004e580 @ 0x8004E580 (VS.EXE)
-    // 80 bytes. Two callers, FUN_8004e758 and FUN_8004ee48 (both in this file, below), both calling
+    // 80 bytes. Two callers, DeliverPendingHitEvent and FUN_8004ee48 (both in this file, below), both calling
     // it unconditionally alongside their own AddSlotGaugeContribution call. Shared cleanup: drop +0x134 bit
     // 0x20000000 and zero the byte at +0x224. Neither offset is named in BattleState.
     internal static void FUN_8004e580(int param_1)
@@ -244,7 +244,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004e5d0 @ 0x8004E5D0 (VS.EXE)
-    // 392 bytes. One caller, FUN_8004e758 (now in this file, below), taken when the hit descriptor's
+    // 392 bytes. One caller, DeliverPendingHitEvent (now in this file, below), taken when the hit descriptor's
     // high byte is 0x80 — the alternate-target hit path the family's inventory names it for.
     //
     // GHIDRA DECLARES THIS AS FOUR PARAMETERS (param_1..param_4), BUT ONLY TWO ARE REAL. Its one
@@ -293,9 +293,9 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004d0fc @ 0x8004D0FC (VS.EXE)
-    // 552 bytes. One caller, FUN_8004e758 (now in this file, below): `local_10 = FUN_8004d0fc(uVar4,
-    // param_1);` where uVar4 is a fighter workspace FUN_8004e758 resolves through its own
-    // +0xf4/+0xc task-node chain (the OPPOSING side) and param_1 is FUN_8004e758's own first
+    // 552 bytes. One caller, DeliverPendingHitEvent (now in this file, below): `local_10 = FUN_8004d0fc(uVar4,
+    // param_1);` where uVar4 is a fighter workspace DeliverPendingHitEvent resolves through its own
+    // +0xf4/+0xc task-node chain (the OPPOSING side) and param_1 is DeliverPendingHitEvent's own first
     // argument (the ACTING fighter). So here param_1 is the opposing fighter (whose +0x1d0 table
     // and +0x138 flags are read) and param_2 is the acting fighter (whose +0x16a state byte
     // selects which bit the scan tests for).
@@ -358,7 +358,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80025f38 @ 0x80025F38 (VS.EXE)
-    // 692 bytes. One caller, FUN_8004e758 (now in this file, below): `local_10 = FUN_80025f38(uVar4,
+    // 692 bytes. One caller, DeliverPendingHitEvent (now in this file, below): `local_10 = FUN_80025f38(uVar4,
     // param_1);`, gated on `(*(uint*)(uVar4+0x138) & 0x30000000) == 0`. Same argument order as
     // FUN_8004d0fc, deduced the same way: param_1 is the OPPOSING fighter (whose +0x22c/+0x22d
     // character-lookup bytes drive the roll), param_2 is the ACTING fighter (whose ki gauge,
@@ -808,9 +808,9 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004de90 @ 0x8004DE90 (VS.EXE)
-    // 308 bytes. One caller, FUN_8004e758 (now in this file, below): `FUN_8004de90(uVar4,bVar3);`,
+    // 308 bytes. One caller, DeliverPendingHitEvent (now in this file, below): `FUN_8004de90(uVar4,bVar3);`,
     // where uVar4 is the OPPOSING fighter (the same variable FUN_8004d0fc's header note already
-    // closes — FUN_8004e758 resolves it once, through its own +0xf4/+0xc task-node chain, and
+    // closes — DeliverPendingHitEvent resolves it once, through its own +0xf4/+0xc task-node chain, and
     // reuses it across every callee in that stretch). So this function's param_1 is the fighter
     // BEING HIT, not the one attacking.
     //
@@ -851,8 +851,8 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_8004dfc4 @ 0x8004DFC4 (VS.EXE)
-    // 324 bytes. One caller, FUN_8004e758 (now in this file, below): `FUN_8004dfc4(param_1,uVar4)`,
-    // where param_1 is FUN_8004e758's own first argument (the ACTING fighter, same naming
+    // 324 bytes. One caller, DeliverPendingHitEvent (now in this file, below): `FUN_8004dfc4(param_1,uVar4)`,
+    // where param_1 is DeliverPendingHitEvent's own first argument (the ACTING fighter, same naming
     // FUN_8004d0fc's header note already closes) and uVar4 is the OPPOSING fighter it resolves
     // through its own +0xf4/+0xc task-node chain. So here param_1 is the acting fighter and
     // param_2 is the target.
@@ -1020,7 +1020,7 @@ internal static class FighterCombat
     // resolves (one dereference) to a task node this function stamps the record onto, and, one
     // MORE hop via that node's own +0xc/+8, to the TARGET FIGHTER; param_1+0x3c resolves (one hop
     // via +8) to the ACTING fighter — the "attacker" the workflow that asked for this function
-    // names. Neither chain is the already-documented "+0xf4/+0xc" shape FUN_8004e758's own
+    // names. Neither chain is the already-documented "+0xf4/+0xc" shape DeliverPendingHitEvent's own
     // callees below use — this record has its own, unrelated "+0x70/+0xc" and "+0x3c/+0x8" pair
     // of chains — so neither gets that name here.
     //
@@ -1051,7 +1051,7 @@ internal static class FighterCombat
     // unconditionally, then, unless the target's own state (+0x16A) is 0x17, calls
     // AddSlotGaugeContribution(attacker, 1) — THE gauge-contribution seed this whole workflow exists to
     // reach — and, when the target's own +0x138 bits 0x30000000 are clear, stamps the target's
-    // own +0xac/+0x22a "current task" bookkeeping pair the same way FUN_8004e758 does below.
+    // own +0xac/+0x22a "current task" bookkeeping pair the same way DeliverPendingHitEvent does below.
     //
     // THE LWL/LWR/SWL/SWR BLOCKS collapse to plain word copies for a stronger reason than the
     // alignment argument FUN_8004e5d0's own header note gives: an LWL into a register followed by
@@ -1175,21 +1175,21 @@ internal static class FighterCombat
         return 0;
     }
 
-    // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
+    // GHIDRA: DeliverPendingHitEvent @ 0x8004E758 (VS.EXE)
     // 1776 bytes. Two named callers (FUN_800501b8, once; UpdateOutOfPlayFighter, twice — neither in this
-    // slice) plus the one FighterTask.cs itself carries, at its own step 9.6: `FUN_8004e758(iVar3,
+    // slice) plus the one FighterTask.cs itself carries, at its own step 9.6: `DeliverPendingHitEvent(iVar3,
     // 0);`, guarded there by +0x134 bit 31 set and bit 29 clear.
     //
     // FIGHTERTASK.CS STILL DECLARES AN EMPTY STUB FOR THIS SAME ADDRESS. That file is not this
     // one's to edit (see this port's own file-level mandate), so the real body lives HERE, under
     // its own GHIDRA annotation, called by FighterTask.cs's existing (out-of-file) call site
     // exactly as before. FighterTask.cs's copy at its own `private static void
-    // FUN_8004e758(int param_1, int param_2) { _ = param_1; _ = param_2; }` is now a stale
+    // DeliverPendingHitEvent(int param_1, int param_2) { _ = param_1; _ = param_2; }` is now a stale
     // duplicate declaration of this same address and needs removing by whoever owns that file —
     // flagged here, not fixed here, the same way this project treats every other intra-VS
     // duplicate.
     //
-    // GHIDRA DECLARES FOUR PARAMETERS (`uint FUN_8004e758(int param_1,int param_2,undefined4
+    // GHIDRA DECLARES FOUR PARAMETERS (`uint DeliverPendingHitEvent(int param_1,int param_2,undefined4
     // param_3,uint param_4)`), BUT ONLY TWO ARE REAL. param_3 is never read anywhere in this
     // body; param_4 only feeds one LWL/LWR unaligned-load pair, the same architecture-level
     // artifact FUN_8004ee48's own header note above closes. Every observed call site (the three
@@ -1249,37 +1249,37 @@ internal static class FighterCombat
     // that mask was nonzero (local_10 keeps that masked value rather than the fighter's address).
     // None of this function's four real callers inspect the return value, so this port keeps it
     // faithfully rather than simplifying it to void.
-    internal static int FUN_8004e758(int param_1, int param_2)
+    internal static int DeliverPendingHitEvent(int attacker, int eventSlot)
     {
         DiagE758Calls++;
 
-        byte bVar3 = (byte)((uint)PsxRam.ReadI32(param_1 + param_2 * 0x10 + 0xdc) >> 8);
+        byte bVar3 = (byte)((uint)PsxRam.ReadI32(attacker + eventSlot * 0x10 + 0xdc) >> 8);
 
-        if (PsxRam.ReadU8(param_1 + param_2 * 0x10 + 0xdc) == 0 && bVar3 == 0)
+        if (PsxRam.ReadU8(attacker + eventSlot * 0x10 + 0xdc) == 0 && bVar3 == 0)
         {
             return -1;
         }
 
         if (bVar3 == 0x80)
         {
-            FUN_8004e5d0(param_1, param_2);
+            FUN_8004e5d0(attacker, eventSlot);
             return 0;
         }
 
-        int uVar4 = PsxRam.ReadI32(PsxRam.ReadI32(PsxRam.ReadI32(param_1 + 0xf4) + 0xc) + 8);
+        int uVar4 = PsxRam.ReadI32(PsxRam.ReadI32(PsxRam.ReadI32(attacker + 0xf4) + 0xc) + 8);
 
         if ((PsxRam.ReadI32(uVar4 + 0x138) & 0x80000) != 0)
         {
-            if ((PsxRam.ReadI32(param_1 + 0x138) & 0x10) != 0)
+            if ((PsxRam.ReadI32(attacker + 0x138) & 0x10) != 0)
             {
-                PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xffefffaf));
-                FUN_8004a638(param_1, 0);
+                PsxRam.WriteI32(attacker + 0x138, PsxRam.ReadI32(attacker + 0x138) & unchecked((int)0xffefffaf));
+                FUN_8004a638(attacker, 0);
             }
 
             return -1;
         }
 
-        if ((PsxRam.ReadI32(uVar4 + 0x138) & 0x8000) != 0 && (PsxRam.ReadI32(param_1 + 0x138) & 0x60) == 0)
+        if ((PsxRam.ReadI32(uVar4 + 0x138) & 0x8000) != 0 && (PsxRam.ReadI32(attacker + 0x138) & 0x60) == 0)
         {
             return -1;
         }
@@ -1295,22 +1295,22 @@ internal static class FighterCombat
         }
 
         if ((PsxRam.ReadI32(uVar4 + 0x138) & 0x3800) != 0
-            && (PsxRam.ReadI32(param_1 + 0x138) & 0x10) == 0
-            && (PsxRam.ReadI32(param_1 + 0x138) & 0x40) == 0)
+            && (PsxRam.ReadI32(attacker + 0x138) & 0x10) == 0
+            && (PsxRam.ReadI32(attacker + 0x138) & 0x40) == 0)
         {
             return -1;
         }
 
-        PsxRam.WriteI32(param_1 + 0x134, PsxRam.ReadI32(param_1 + 0x134) | 0x20000000);
+        PsxRam.WriteI32(attacker + 0x134, PsxRam.ReadI32(attacker + 0x134) | 0x20000000);
         PsxRam.WriteI32(uVar4 + 0x100, TaskSystem.g_CurrentTask);
-        PsxRam.WriteU16(uVar4 + 0x110, PsxRam.ReadU16(param_1 + param_2 * 0x10 + 0xdc));
+        PsxRam.WriteU16(uVar4 + 0x110, PsxRam.ReadU16(attacker + eventSlot * 0x10 + 0xdc));
 
         // Block copy: acting fighter's own +0x124..+0x133 attack descriptor (four words) onto
         // the opposing fighter's SAME relative offsets. See FUN_8004ee48's block-copy note.
-        PsxRam.WriteI32(uVar4 + 0x124, PsxRam.ReadI32(param_1 + 0x124));
-        PsxRam.WriteI32(uVar4 + 0x128, PsxRam.ReadI32(param_1 + 0x128));
-        PsxRam.WriteI32(uVar4 + 0x12c, PsxRam.ReadI32(param_1 + 0x12c));
-        PsxRam.WriteI32(uVar4 + 0x130, PsxRam.ReadI32(param_1 + 0x130));
+        PsxRam.WriteI32(uVar4 + 0x124, PsxRam.ReadI32(attacker + 0x124));
+        PsxRam.WriteI32(uVar4 + 0x128, PsxRam.ReadI32(attacker + 0x128));
+        PsxRam.WriteI32(uVar4 + 0x12c, PsxRam.ReadI32(attacker + 0x12c));
+        PsxRam.WriteI32(uVar4 + 0x130, PsxRam.ReadI32(attacker + 0x130));
 
         // THE SAME TWO SOURCE WORDS GO TO A SECOND DESTINATION, and a first version of this port
         // dropped them. They are unconditional and sit in the same straight-line run as the four
@@ -1325,8 +1325,8 @@ internal static class FighterCombat
         // resolve to the same aligned word here, so each pair is one plain 32-bit move. The sibling
         // FUN_8004ee48 already carries this identical second-destination copy, which is what made
         // the omission visible: the same shape appeared in one function and not the other.
-        PsxRam.WriteI32(uVar4 + 0xc0, PsxRam.ReadI32(param_1 + 0x124));
-        PsxRam.WriteI32(uVar4 + 0xc4, PsxRam.ReadI32(param_1 + 0x128));
+        PsxRam.WriteI32(uVar4 + 0xc0, PsxRam.ReadI32(attacker + 0x124));
+        PsxRam.WriteI32(uVar4 + 0xc4, PsxRam.ReadI32(attacker + 0x128));
 
         int local_10 = 0;
 
@@ -1340,11 +1340,11 @@ internal static class FighterCombat
         {
             if ((PsxRam.ReadI32(uVar4 + 0x138) & 0x30000000) == 0)
             {
-                local_10 = FUN_80025f38(uVar4, param_1) ? 1 : 0;
+                local_10 = FUN_80025f38(uVar4, attacker) ? 1 : 0;
             }
             else
             {
-                local_10 = FUN_8004d0fc(uVar4, param_1) ? 1 : 0;
+                local_10 = FUN_8004d0fc(uVar4, attacker) ? 1 : 0;
             }
 
             if (local_10 != 0)
@@ -1355,7 +1355,7 @@ internal static class FighterCombat
 
         if (local_10 == 0)
         {
-            FUN_8004dfc4(param_1, uVar4);
+            FUN_8004dfc4(attacker, uVar4);
 
             if (PsxRam.ReadU8(uVar4 + 0x16a) != 0x17)
             {
@@ -1370,19 +1370,19 @@ internal static class FighterCombat
 
         if (local_10 == 0 && PsxRam.ReadU8(uVar4 + 0x16a) != 0x17)
         {
-            AddSlotGaugeContribution(param_1, 0);
+            AddSlotGaugeContribution(attacker, 0);
         }
 
         if (local_10 == 0)
         {
             if (PsxRam.ReadU8(uVar4 + 0x16a) != 0x17 && (bVar3 == 5 || bVar3 == 6 || bVar3 == 4))
             {
-                PsxRam.WriteI32(param_1 + 0x134, PsxRam.ReadI32(param_1 + 0x134) | 0x8000000);
+                PsxRam.WriteI32(attacker + 0x134, PsxRam.ReadI32(attacker + 0x134) | 0x8000000);
             }
         }
         else
         {
-            PsxRam.WriteI32(param_1 + 0x138, PsxRam.ReadI32(param_1 + 0x138) & unchecked((int)0xffefffff));
+            PsxRam.WriteI32(attacker + 0x138, PsxRam.ReadI32(attacker + 0x138) & unchecked((int)0xffefffff));
         }
 
         if (local_10 == 0)
@@ -1417,8 +1417,8 @@ internal static class FighterCombat
     // =====================================================================================
 
     // GHIDRA: FUN_80045814 @ 0x80045814 (VS.EXE)
-    // 388 bytes, zero callees. One caller, StepFighterAnimAndProximity (FighterTask.cs's own BLOCKED stub, step
-    // 9.5): `FUN_80045998(&DAT_80083cb4,param_1+0xf8,&DAT_80101ba4); FUN_80045814(param_1+0xf8);`
+    // 388 bytes, zero callees. Two callers in the image: StepFighterAnimAndProximity (ported in
+    // FighterTask.cs, step 9.5, jal at 0x80047720) and 0x80040284. At the first: `FUN_80045998(&DAT_80083cb4,param_1+0xf8,&DAT_80101ba4); FUN_80045814(param_1+0xf8);`
     // — so this runs against the SAME +0xf8 sub-record FUN_80045998/FUN_80045a38 below manage.
     //
     // TWO INDEPENDENT, IDENTICALLY-SHAPED CONVERSIONS: +0x1C -> +0x14, and +0x20 -> +0x16. Each
@@ -1576,8 +1576,8 @@ internal static class FighterCombat
     // 0x8005404C, 0x80055104, 0x800558F8, 0x80053AE8, 0x80053B1C, 0x80053F04, 0x800553E8,
     // 0x80054DA4. Ghidra has not analyzed ANY of the sixteen -- each resolves only to an
     // "UndefinedFunction" preview, not a real Function -- so none can be ported this wave; see
-    // DispatchHitStreamRecord below. Two callers this port sees: StepFighterAnimAndProximity (FighterTask.cs's
-    // own BLOCKED stub, step 9.5) — `FUN_800539d0(param_1)`, the fighter workspace itself, NOT the
+    // DispatchHitStreamRecord below. Nine jal sites in the image; the two this port names: StepFighterAnimAndProximity (ported in
+    // FighterTask.cs, step 9.5) — `FUN_800539d0(param_1)`, the fighter workspace itself, NOT the
     // +0xf8 sub-record FUN_80045998/FUN_80045a38 above use — and FUN_80027340 (not in this slice).
     //
     // A KEYFRAME-STREAM SCANNER against a record array whose cursor lives at fighter+8, walked one
@@ -1793,7 +1793,7 @@ internal static class FighterCombat
     }
 
     // GHIDRA: FUN_80055dc0 @ 0x80055DC0 (VS.EXE)
-    // 60 bytes. One caller, FUN_8005070c (FighterTask.cs's own BLOCKED stub, phase 4's arm on
+    // 60 bytes. One caller, FUN_8005070c (ported in FighterTask.cs, phase 4's arm on
     // +0x138 bit 31): `FUN_80055dc0(param_1, 0)` -- Ghidra's own signature here is ONE parameter
     // (`void FUN_80055dc0(int param_1)`); the caller's second literal argument (0) is never read
     // by this body, matching this port's existing convention of exposing the signature the body
@@ -1817,7 +1817,7 @@ internal static class FighterCombat
     // own slot (FighterSlotIndex) and any empty slot. For each OTHER slot with a live fighter
     // pointer AND bit 0x200 set in a per-slot ushort at ctx+slot*CtxSlotRecordStride+0x15B0 (no
     // BattleState name; raw literal, four bytes before CtxKiGauge at the same stride), resolves
-    // that slot's fighter through its own task-node +8 hop (the same shape FUN_8004e758's own
+    // that slot's fighter through its own task-node +8 hop (the same shape DeliverPendingHitEvent's own
     // header note already documents) and, ONLY when THAT fighter's own +0x138 bit 26 is CLEAR,
     // ANDs a running accumulator (seeded 0x4000000, i.e. bit 26 set) with that fighter's own +0x134
     // word -- then, only when that SAME fighter's own +0x134 bit 26 is SET, calls
@@ -1933,7 +1933,7 @@ internal static class FighterCombat
     // RELATION: diagnostic probes, read only by Validation/VsBootDiagnostic.cs. FUN_8004ee48 --
     // the gauge root the bench calls "racine A" -- has exactly ONE caller, UpdateAttackEventTask at
     // 0x800429A8, and it is gated on the event record's +0x78 being NEGATIVE. That is a completely
-    // different path from the +0x134 bit 31 that gates FUN_8004e758, and it is the one an attack
+    // different path from the +0x134 bit 31 that gates DeliverPendingHitEvent, and it is the one an attack
     // actually travels: an attack animation registers an event task, the task runs each frame, and
     // when its +0x78 goes negative the hit resolves and seeds the gauge. These four counters say
     // which of those three steps is missing.

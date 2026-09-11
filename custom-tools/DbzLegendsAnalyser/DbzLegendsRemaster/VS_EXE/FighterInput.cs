@@ -834,7 +834,7 @@ internal static class FighterInput
     // 372 bytes. One caller, ReadFighterPadCommand below, taken when +0x138 bits 0x7F00 are set.
     //
     // Two outcomes. Command 0x1c when ALL THREE of: +0x138 bits 0x3C00 set, this fighter's own Ki
-    // gauge (context + slot*0x14 + 0x15B4, the same address FighterCombat.FUN_8004e758 gates on)
+    // gauge (context + slot*0x14 + 0x15B4, the same address FighterCombat.DeliverPendingHitEvent gates on)
     // at least 400, and MatchStateGatedRepeatedFace returning 1. Otherwise: clear +0x138 bit
     // 0x40000 if it is set and the newest edge word carries bit 0x10, then command 0x17 if the
     // newest STATE word carries bit 0x40, else -1.

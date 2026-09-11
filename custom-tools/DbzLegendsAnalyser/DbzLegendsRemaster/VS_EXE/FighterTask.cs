@@ -80,7 +80,7 @@ internal static class FighterTask
     internal static int DiagFun8004b098Calls;
 
     // JUSTIFICATION: C# language bridge only
-    // RELATION: diagnostic probe only. Step 9.6 calls the gauge root FighterCombat.FUN_8004e758
+    // RELATION: diagnostic probe only. Step 9.6 calls the gauge root FighterCombat.DeliverPendingHitEvent
     // only when +0x134 bit 31 is set, so the cumulative OR of that word says whether the bit is
     // ever raised at all -- the same question, one field over, that DiagFighterFlagsEverSeen
     // answers for +0x138.
@@ -373,7 +373,7 @@ internal static class FighterTask
                                 {
                                     if (((uint)PsxRam.ReadI32(iVar3 + 0x134) & 0x20000000) == 0)
                                     {
-                                        FighterCombat.FUN_8004e758(iVar3, 0);
+                                        FighterCombat.DeliverPendingHitEvent(iVar3, 0);
                                     }
 
                                     PsxRam.WriteI32(iVar3 + 0xdc, 0);
@@ -460,8 +460,8 @@ internal static class FighterTask
     // the animation VM's suspend bit is up, i.e. the frozen-frame path. All five callees are the
     // same +0x138-bit-27-gated quintet phase 9.7/9.8 already runs in the main body above, called
     // here on the SAME two arguments (fighter, fighter's own +0x114 position triple) — reached
-    // through this file's own declarations of them, one of which (DriveFighterAura) is still its own
-    // BLOCKED stub below.
+    // through this file's own declarations of them; all five are ported (DriveFighterAura lives in
+    // FighterMotion.cs).
     private static void DrawFighter(int fighter)
     {
         if (((uint)PsxRam.ReadI32(fighter + 0x138) & 0x8000000) == 0)
@@ -515,7 +515,7 @@ internal static class FighterTask
     // stamps the same three +0x150/+0x151/+0x152 bytes EnterFighterKoState and FighterCombat's own
     // SetFighterTint already touch, and calls FighterCombat.FUN_80026a28. Then, unconditionally,
     // StepFighterAnimAndProximity runs, followed by a +0x134-bit-31 arm — on bit 29 clear, calls
-    // FighterCombat.FUN_8004e758(fighter, 0) exactly as step 9.6 of the main body does; on bit 29
+    // FighterCombat.DeliverPendingHitEvent(fighter, 0) exactly as step 9.6 of the main body does; on bit 29
     // set, that call is skipped but +0xec and +0xdc are still both zeroed (step 9.6 in the main
     // body only ever zeroes +0xdc, never +0xec — this is a distinct write, not a repeat). The tail
     // is the same +0x138-bit-27-gated quintet the other phase arms already run.
@@ -539,7 +539,7 @@ internal static class FighterTask
         {
             if (((uint)PsxRam.ReadI32(fighter + 0x134) & 0x20000000) == 0)
             {
-                FighterCombat.FUN_8004e758(fighter, 0);
+                FighterCombat.DeliverPendingHitEvent(fighter, 0);
                 
                 // AND AGAIN WITH 1. Two calls, not one, and the second was dropped by a first
                 // version of this port. The bytes at 0x80050940 are unambiguous:
@@ -549,12 +549,12 @@ internal static class FighterTask
                 //     8FC40018  lw a0,0x18(s8)
                 //     34050001  ori a1,zero,1          ; param_2 = 1
                 //     0C0139D6  jal 0x8004E758
-                // The two are NOT redundant: FUN_8004e758 indexes its attack record at
+                // The two are NOT redundant: DeliverPendingHitEvent indexes its attack record at
                 // fighter + param_2 * 0x10 + 0xDC, so 0 and 1 resolve the fighter's two SEPARATE
                 // record slots at +0xDC and +0xEC. That is also why this function zeroes BOTH of
                 // them afterwards while its sibling FUN_800501b8 -- which genuinely makes one call
                 // -- zeroes only +0xDC. The asymmetry between the two was the tell.
-                FighterCombat.FUN_8004e758(fighter, 1);
+                FighterCombat.DeliverPendingHitEvent(fighter, 1);
             }
 
             PsxRam.WriteI32(fighter + 0xec, 0);
@@ -683,7 +683,7 @@ internal static class FighterTask
         {
             if (((uint)PsxRam.ReadI32(param_1 + 0x134) & 0x20000000) == 0)
             {
-                FighterCombat.FUN_8004e758(param_1, 0);
+                FighterCombat.DeliverPendingHitEvent(param_1, 0);
             }
 
             PsxRam.WriteI32(param_1 + 0xdc, 0);
@@ -940,13 +940,13 @@ internal static class FighterTask
     // THREE-WAY TOP LEVEL:
     //   1. This fighter's own battle-context Ki gauge (BattleState.CtxKiGauge, read through its
     //      own slot, the SAME "ctx + slot*CtxSlotRecordStride + CtxKiGauge" address
-    //      FighterCombat.FUN_8004e758 already reads for the identical "< 400" gate) below 400
+    //      FighterCombat.DeliverPendingHitEvent already reads for the identical "< 400" gate) below 400
     //      forces state 0x20 (FighterAction.FUN_8004ad0c), clears +0x138 bit 0x40000, and stamps
     //      +0x15e = 0x3c -- an out-of-Ki lockout timer, not named further here.
     //   2. Failing that, a four-way OR falls back to FighterCombat.FUN_8004a638(param_1, 0) when:
     //      param_3's own +0x138 bits 5..7 (0xe0) are all clear, OR param_3's own FighterTaskNode
     //      (+0xac) is not the currently running task (TaskSystem.g_CurrentTask, VS.EXE's
-    //      DAT_8008d16c -- the SAME "+0xac == g_CurrentTask" test FUN_8004e758 already makes, here
+    //      DAT_8008d16c -- the SAME "+0xac == g_CurrentTask" test DeliverPendingHitEvent already makes, here
     //      negated), OR this fighter's own +0x138 bit 0x80000 is set, OR this fighter's own state
     //      byte at +0x16b is 0x1c.
     //   3. Otherwise: +0x138 bit 0x8000 routes to FighterAction.FUN_8004b024; failing that, bit
@@ -1186,14 +1186,14 @@ internal static class FighterTask
         FighterCombat.FUN_80045814(fighter + 0xf8);
     }
 
-    // GHIDRA: FUN_8004e758 @ 0x8004E758 (VS.EXE)
+    // GHIDRA: DeliverPendingHitEvent @ 0x8004E758 (VS.EXE)
     // MOVED, NOT DELETED. Its real 1776-byte body now lives in VS_EXE/FighterCombat.cs, with the
     // rest of the combat-resolution family it belongs to. This file kept an EMPTY private stub for
     // the same address, and because C# resolves an unqualified call to the enclosing class first,
     // step 9.6's call below was binding to that no-op rather than to the real body -- one Ghidra
     // address with two declarations, which this port treats as a defect, and the more dangerous
     // kind: it compiles, it runs, and the work silently does not happen.
-    // The declaration is removed and the call site qualified. See FighterCombat.FUN_8004e758.
+    // The declaration is removed and the call site qualified. See FighterCombat.DeliverPendingHitEvent.
 
     // GHIDRA: SetFighterTint @ 0x80047740 (VS.EXE)
     // CERTAIN, full decompilation, 172 bytes. Step 9.8, first of the five behind the +0x138
